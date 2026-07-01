@@ -92,12 +92,3 @@ func (m Model) selected() (repo.Repo, bool) {
 	}
 	return v[m.cursor], true
 }
-
-// View renders the current state. This is a minimal placeholder: tea.Model
-// requires a View method to satisfy the interface, but real rendering is out
-// of scope for this task (Model + Update) and belongs to a dedicated
-// view-rendering task not yet briefed. Without this stub the package cannot
-// compile, since Update's signature returns tea.Model.
-func (m Model) View() string {
-	return ""
-}
