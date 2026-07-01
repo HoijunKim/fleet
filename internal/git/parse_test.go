@@ -63,3 +63,22 @@ func TestParseTodoCount(t *testing.T) {
 		t.Errorf("empty todo count=%d want 0", got)
 	}
 }
+
+func TestParseStatusRenameAndUnmerged(t *testing.T) {
+	s := "# branch.head main\n" +
+		"2 R. N... 100644 100644 100644 aaa bbb R100 new/path.ts\told/path.ts\n" +
+		"u UU N... 100644 100644 100644 100644 aaa bbb ccc conflicted.go\n"
+	r := parseStatus(s)
+	if r.Modified != 2 {
+		t.Fatalf("modified=%d want 2", r.Modified)
+	}
+	if len(r.Files) != 2 {
+		t.Fatalf("files=%v", r.Files)
+	}
+	if r.Files[0] != "new/path.ts" {
+		t.Errorf("rename path=%q want new/path.ts", r.Files[0])
+	}
+	if r.Files[1] != "conflicted.go" {
+		t.Errorf("unmerged path=%q want conflicted.go", r.Files[1])
+	}
+}

@@ -51,15 +51,29 @@ func parseStatus(out string) statusResult {
 	return r
 }
 
-// changedPath extracts the path from a porcelain v2 "1"/"2"/"u" entry. The path
-// is everything after the 8th space-separated field. For renames ("2") the new
-// path precedes a tab and the original path; we keep the new path.
+// changedPath extracts the path from a porcelain v2 changed entry. The number
+// of fixed fields before the path depends on the entry type:
+//   "1" (ordinary): 8 leading fields
+//   "2" (rename/copy): 9 leading fields; the path field is "<new>\t<orig>"
+//   "u" (unmerged): 10 leading fields
+// For rename entries we keep the new path (before the tab).
 func changedPath(line string) string {
-	fields := strings.SplitN(line, " ", 9)
-	if len(fields) < 9 {
+	var lead int
+	switch line[0] {
+	case '1':
+		lead = 8
+	case '2':
+		lead = 9
+	case 'u':
+		lead = 10
+	default:
 		return strings.TrimSpace(line)
 	}
-	p := fields[8]
+	fields := strings.SplitN(line, " ", lead+1)
+	if len(fields) <= lead {
+		return strings.TrimSpace(line)
+	}
+	p := fields[lead]
 	if i := strings.IndexByte(p, '\t'); i >= 0 {
 		p = p[:i]
 	}
