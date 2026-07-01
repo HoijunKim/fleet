@@ -2,7 +2,11 @@
   export let repos: any[] = [];
   export let selectedPath: string = "";
   export let scanned: boolean = false;
+  export let sortKey: string = "";
+  export let sortDir: "asc" | "desc" = "asc";
   export let onSelect: (r: any) => void;
+  export let onSort: (key: string) => void;
+  export let onContext: (r: any, e: MouseEvent) => void;
 
   // Returns null when the row should render a loading skeleton instead.
   function status(r: any): { cls: string; text: string } | null {
@@ -12,25 +16,40 @@
     if (r.dirty) return { cls: "dirty", text: `${r.modified} changed` };
     return { cls: "ok", text: "clean" };
   }
+
+  function arrow(key: string): string {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? "up" : "dn";
+  }
 </script>
 
 <div class="table-wrap">
   {#if scanned && repos.length === 0}
     <div class="empty-state">
       <div>No repositories found.</div>
-      <div class="hint">Edit your roots in the config.</div>
+      <div class="hint">Edit your roots in Settings.</div>
     </div>
   {:else}
     <table class="repo-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Branch</th>
-          <th>Status</th>
+          <th class="sortable" class:sorted={sortKey === "name"} on:click={() => onSort("name")}>
+            Name{#if arrow("name")}<span class="sort-arrow {arrow('name')}"></span>{/if}
+          </th>
+          <th class="sortable" class:sorted={sortKey === "branch"} on:click={() => onSort("branch")}>
+            Branch{#if arrow("branch")}<span class="sort-arrow {arrow('branch')}"></span>{/if}
+          </th>
+          <th class="sortable" class:sorted={sortKey === "status"} on:click={() => onSort("status")}>
+            Status{#if arrow("status")}<span class="sort-arrow {arrow('status')}"></span>{/if}
+          </th>
           <th>Up / Dn</th>
-          <th>Last</th>
+          <th class="sortable" class:sorted={sortKey === "last"} on:click={() => onSort("last")}>
+            Last{#if arrow("last")}<span class="sort-arrow {arrow('last')}"></span>{/if}
+          </th>
           <th>Lang</th>
-          <th class="right">TODO</th>
+          <th class="right sortable" class:sorted={sortKey === "todo"} on:click={() => onSort("todo")}>
+            TODO{#if arrow("todo")}<span class="sort-arrow {arrow('todo')}"></span>{/if}
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -40,6 +59,7 @@
             class:selected={r.path === selectedPath}
             class:nogit={!r.isGit && r.loaded}
             on:click={() => onSelect(r)}
+            on:contextmenu={(e) => onContext(r, e)}
           >
             <td class="cell-name">{r.name}</td>
             <td class="cell-branch">{r.branch || ""}</td>

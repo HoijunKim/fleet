@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Fetch, Pull, OpenEditor, OpenTerminal, RunCommand } from "../../wailsjs/go/main/App";
+  import { toastSuccess, toastError } from "./toasts";
   export let repo: any = null;
   export let onChanged: (path: string) => void;
 
@@ -17,10 +18,30 @@
           : "ok"
     : "nogit";
 
-  async function doFetch() { const e = await Fetch(repo.path); output = e || "Fetched."; onChanged(repo.path); }
-  async function doPull()  { const e = await Pull(repo.path);  output = e || "Pulled.";  onChanged(repo.path); }
-  async function doEdit()  { const e = await OpenEditor(repo.path);   if (e) output = e; }
-  async function doTerm()  { const e = await OpenTerminal(repo.path); if (e) output = e; }
+  async function doFetch() {
+    const e = await Fetch(repo.path);
+    output = e || "Fetched.";
+    if (e) toastError("Fetch " + repo.name + ": " + e);
+    else toastSuccess("Fetched " + repo.name);
+    onChanged(repo.path);
+  }
+  async function doPull() {
+    const e = await Pull(repo.path);
+    output = e || "Pulled.";
+    if (e) toastError("Pull " + repo.name + ": " + e);
+    else toastSuccess("Pulled " + repo.name);
+    onChanged(repo.path);
+  }
+  async function doEdit() {
+    const e = await OpenEditor(repo.path);
+    if (e) { output = e; toastError("Editor: " + e); }
+    else toastSuccess("Opened editor");
+  }
+  async function doTerm() {
+    const e = await OpenTerminal(repo.path);
+    if (e) { output = e; toastError("Terminal: " + e); }
+    else toastSuccess("Opened terminal");
+  }
   async function doRun() {
     if (!cmd) return;
     running = true;
