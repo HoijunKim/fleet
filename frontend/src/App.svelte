@@ -22,6 +22,7 @@
   let paletteOpen = false;
   let settingsOpen = false;
   let menu: { x: number; y: number; repo: any } | null = null;
+  let diffOpen = false;
 
   let filterInput: HTMLInputElement | undefined;
   let autoFetchTimer: ReturnType<typeof setInterval> | undefined;
@@ -199,7 +200,7 @@
       !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as any).isContentEditable);
 
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
-      if (settingsOpen || menu) return;
+      if (settingsOpen || menu || diffOpen) return;
       e.preventDefault();
       paletteOpen = !paletteOpen;
       return;
@@ -279,7 +280,7 @@
     {onSort}
     {onContext}
   />
-  <DetailPanel repo={selected} onChanged={refreshOne} />
+  <DetailPanel repo={selected} onChanged={refreshOne} bind:diffOpen />
 </div>
 
 <Toasts />

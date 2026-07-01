@@ -9,6 +9,9 @@
 
   export let repo: any = null;
   export let onChanged: (path: string) => void;
+  // Bindable flag so the parent (App.svelte) can tell whether the diff
+  // modal is currently open, e.g. to suppress overlapping overlays.
+  export let diffOpen = false;
 
   let cmd = "";
   let output = "";
@@ -17,6 +20,8 @@
   // Diff viewer state - the file whose diff is open (null = closed).
   let diffFile: string | null = null;
   let lastPath = "";
+
+  $: diffOpen = diffFile !== null;
 
   // Reset transient panel state when the selection changes.
   $: if (repo && repo.path !== lastPath) {

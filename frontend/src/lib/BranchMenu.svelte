@@ -27,16 +27,19 @@
   }
 
   async function load() {
+    const p = path;
     loading = true;
     try {
-      const info = await Branches(path);
+      const info = await Branches(p);
+      if (p !== path) return; // selection changed during await -> drop stale result
       current = info.current || "";
       all = (info.all || []).slice();
     } catch {
+      if (p !== path) return;
       current = "";
       all = [];
     } finally {
-      loading = false;
+      if (p === path) loading = false;
     }
   }
 

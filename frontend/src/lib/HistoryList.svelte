@@ -21,13 +21,17 @@
   }
 
   async function load() {
+    const p = path;
     loading = true;
     try {
-      commits = await Log(path, 15);
+      const res = await Log(p, 15);
+      if (p !== path) return; // selection changed during await -> drop stale result
+      commits = res;
     } catch {
+      if (p !== path) return;
       commits = [];
     } finally {
-      loading = false;
+      if (p === path) loading = false;
     }
   }
 </script>

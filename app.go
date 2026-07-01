@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"runtime"
+	"sync"
 
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/config"
@@ -17,6 +18,7 @@ import (
 // App is the Wails binding layer exposed to the front end.
 type App struct {
 	ctx    context.Context
+	mu     sync.RWMutex
 	cfg    config.Config
 	runner git.Runner
 }
@@ -25,6 +27,14 @@ type App struct {
 func NewApp() *App {
 	cfg, _, _ := config.Load()
 	return &App{cfg: cfg, runner: git.ExecRunner{}}
+}
+
+// cfgSnapshot returns a copy of the current config, safe to call from any
+// goroutine (each Wails-bound method call runs on its own goroutine).
+func (a *App) cfgSnapshot() config.Config {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.cfg
 }
 
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
@@ -73,7 +83,8 @@ func toView(r repo.Repo) RepoView {
 
 // ScanRepos discovers repos under the configured roots (skeleton views only).
 func (a *App) ScanRepos() []RepoView {
-	repos := scan.Discover(a.cfg.Roots, a.cfg.ScanDepth, a.cfg.ShowNonGit)
+	cfg := a.cfgSnapshot()
+	repos := scan.Discover(cfg.Roots, cfg.ScanDepth, cfg.ShowNonGit)
 	out := make([]RepoView, 0, len(repos))
 	for _, r := range repos {
 		out = append(out, toView(r))
@@ -92,10 +103,14 @@ func (a *App) LoadRepo(path string) RepoView {
 	return toView(r)
 }
 
-func (a *App) Fetch(path string) string        { return errMsg(git.Fetch(a.runner, path)) }
-func (a *App) Pull(path string) string         { return errMsg(git.Pull(a.runner, path)) }
-func (a *App) OpenEditor(path string) string   { return errMsg(action.EditorCmd(a.cfg.Editor, path).Start()) }
-func (a *App) OpenTerminal(path string) string { return errMsg(action.TerminalCmd(a.cfg.Terminal, path).Start()) }
+func (a *App) Fetch(path string) string { return errMsg(git.Fetch(a.runner, path)) }
+func (a *App) Pull(path string) string  { return errMsg(git.Pull(a.runner, path)) }
+func (a *App) OpenEditor(path string) string {
+	return errMsg(action.EditorCmd(a.cfgSnapshot().Editor, path).Start())
+}
+func (a *App) OpenTerminal(path string) string {
+	return errMsg(action.TerminalCmd(a.cfgSnapshot().Terminal, path).Start())
+}
 
 // RunCommand runs a command line in the repo and returns combined output (or the
 // error text if it failed).
@@ -107,7 +122,7 @@ func (a *App) RunCommand(path, line string) string {
 	return out
 }
 
-func (a *App) GetConfig() config.Config { return a.cfg }
+func (a *App) GetConfig() config.Config { return a.cfgSnapshot() }
 
 // SaveConfig persists the config and updates the in-memory copy.
 func (a *App) SaveConfig(c config.Config) string {
@@ -118,7 +133,9 @@ func (a *App) SaveConfig(c config.Config) string {
 	if err := c.Save(p); err != nil {
 		return err.Error()
 	}
+	a.mu.Lock()
 	a.cfg = c
+	a.mu.Unlock()
 	return ""
 }
 
@@ -154,9 +171,11 @@ func (a *App) Branches(path string) BranchInfo {
 	return BranchInfo{Current: c, All: all}
 }
 
-func (a *App) Checkout(path, branch string) string { return errMsg(git.Checkout(a.runner, path, branch)) }
-func (a *App) CommitAll(path, msg string) string   { return errMsg(git.CommitAll(a.runner, path, msg)) }
-func (a *App) Push(path string) string             { return errMsg(git.Push(a.runner, path)) }
+func (a *App) Checkout(path, branch string) string {
+	return errMsg(git.Checkout(a.runner, path, branch))
+}
+func (a *App) CommitAll(path, msg string) string { return errMsg(git.CommitAll(a.runner, path, msg)) }
+func (a *App) Push(path string) string           { return errMsg(git.Push(a.runner, path)) }
 
 func (a *App) DiffFile(path, file string) string {
 	out, err := git.DiffFile(a.runner, path, file)
