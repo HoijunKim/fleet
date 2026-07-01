@@ -20,7 +20,7 @@
 
 ---
 
-### Task F1: Backend git ops + app.go bindings + OS actions
+### Task 1: Backend git ops + app.go bindings + OS actions
 
 **Files:**
 - Create: `internal/git/ops.go`, `internal/git/ops_test.go`
@@ -348,7 +348,7 @@ git commit -m "feat: add branch/commit/push/diff/log/stash git ops and browser/r
 
 ---
 
-### Task F2: Front end - dashboard, settings, integrations, automation
+### Task 2: Front end - dashboard, settings, integrations, automation
 
 **Files:** rewrite/extend `frontend/src/App.svelte`; new components under `frontend/src/lib/`: `StatsHeader.svelte`, `CommandPalette.svelte`, `Toasts.svelte`, `SettingsModal.svelte`, `ContextMenu.svelte`. Extend `frontend/src/lib/Toolbar.svelte`, `RepoTable.svelte`, `app.css`.
 
@@ -369,7 +369,7 @@ git commit -m "feat: add branch/commit/push/diff/log/stash git ops and browser/r
 
 ---
 
-### Task F3: Front end - git actions UI (branch, commit, diff, history, stash)
+### Task 3: Front end - git actions UI (branch, commit, diff, history, stash)
 
 **Files:** extend `frontend/src/lib/DetailPanel.svelte`; new components: `BranchMenu.svelte`, `CommitBox.svelte`, `DiffModal.svelte`, `HistoryList.svelte`, `StashPanel.svelte`. Extend `app.css`.
 
