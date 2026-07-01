@@ -151,8 +151,8 @@ func (m Model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.mode = modeList
 	case "backspace":
-		if len(m.filter) > 0 {
-			m.filter = m.filter[:len(m.filter)-1]
+		if r := []rune(m.filter); len(r) > 0 {
+			m.filter = string(r[:len(r)-1])
 		}
 	default:
 		if len(msg.Runes) > 0 {
@@ -178,8 +178,8 @@ func (m Model) handleRunKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, runCmd(r.Path, line)
 		}
 	case "backspace":
-		if len(m.runInput) > 0 {
-			m.runInput = m.runInput[:len(m.runInput)-1]
+		if r := []rune(m.runInput); len(r) > 0 {
+			m.runInput = string(r[:len(r)-1])
 		}
 	default:
 		if len(msg.Runes) > 0 {

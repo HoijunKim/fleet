@@ -93,3 +93,18 @@ func TestQuitKey(t *testing.T) {
 		t.Errorf("expected QuitMsg, got %T", cmd())
 	}
 }
+
+func TestFilterBackspaceIsRuneSafe(t *testing.T) {
+	m := newTestModel()
+	m.mode = modeFilter
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("가")})
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = send(m, tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.filter != "가" {
+		t.Errorf("filter=%q want 가 (one rune removed, not one byte)", m.filter)
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.filter != "" {
+		t.Errorf("filter=%q want empty; must not leave an invalid UTF-8 tail", m.filter)
+	}
+}
