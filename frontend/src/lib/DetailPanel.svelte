@@ -5,41 +5,117 @@
 
   let cmd = "";
   let output = "";
+  let running = false;
 
-  async function doFetch() { const e = await Fetch(repo.path); output = e || "fetched"; onChanged(repo.path); }
-  async function doPull() { const e = await Pull(repo.path); output = e || "pulled"; onChanged(repo.path); }
-  async function doEdit() { const e = await OpenEditor(repo.path); if (e) output = e; }
-  async function doTerm() { const e = await OpenTerminal(repo.path); if (e) output = e; }
-  async function doRun() { if (cmd) output = await RunCommand(repo.path, cmd); }
+  $: dotClass = repo
+    ? repo.errMsg
+      ? "err"
+      : !repo.isGit
+        ? "nogit"
+        : repo.dirty
+          ? "dirty"
+          : "ok"
+    : "nogit";
+
+  async function doFetch() { const e = await Fetch(repo.path); output = e || "Fetched."; onChanged(repo.path); }
+  async function doPull()  { const e = await Pull(repo.path);  output = e || "Pulled.";  onChanged(repo.path); }
+  async function doEdit()  { const e = await OpenEditor(repo.path);   if (e) output = e; }
+  async function doTerm()  { const e = await OpenTerminal(repo.path); if (e) output = e; }
+  async function doRun() {
+    if (!cmd) return;
+    running = true;
+    try { output = await RunCommand(repo.path, cmd); }
+    finally { running = false; }
+  }
 </script>
 
 {#if repo}
-  <div class="detail">
-    <h3>{repo.name}</h3>
-    <div class="row"><span class="k">path</span> {repo.path}</div>
-    {#if repo.lastHash}
-      <div class="row"><span class="k">head</span> {repo.lastHash.slice(0, 7)} "{repo.lastMsg}" - {repo.lastAuthor}, {repo.lastWhen}</div>
-    {/if}
-    {#if repo.remote}<div class="row"><span class="k">remote</span> {repo.remote}</div>{/if}
-    {#if repo.errMsg}<div class="row"><span class="k">error</span> {repo.errMsg}</div>{/if}
-    {#if repo.dirtyFiles && repo.dirtyFiles.length}
-      <div class="row"><span class="k">dirty</span> {repo.dirtyFiles.join("  ")}</div>
-    {/if}
+  <aside class="detail">
+    <div class="detail-card">
+      <div class="detail-head">
+        <span class="dot {dotClass}"></span>
+        <h3 class="detail-title">{repo.name}</h3>
+      </div>
 
-    <div class="actions">
-      {#if repo.isGit}
-        <button on:click={doFetch}>Fetch</button>
-        <button on:click={doPull}>Pull</button>
-      {/if}
-      <button on:click={doEdit}>Editor</button>
-      <button on:click={doTerm}>Terminal</button>
+      <div class="detail-body">
+        <div class="dl">
+          <div class="dl-row">
+            <span class="dl-label">Path</span>
+            <span class="dl-value mono">{repo.path}</span>
+          </div>
+
+          {#if repo.lastHash}
+            <div class="dl-row">
+              <span class="dl-label">Head</span>
+              <span class="dl-value head-line">
+                <span class="head-hash">{repo.lastHash.slice(0, 7)}</span>
+                <span class="head-msg">{repo.lastMsg}</span>
+                <br />
+                <span class="head-meta">{repo.lastAuthor} - {repo.lastWhen}</span>
+              </span>
+            </div>
+          {/if}
+
+          {#if repo.remote}
+            <div class="dl-row">
+              <span class="dl-label">Remote</span>
+              <span class="dl-value mono">{repo.remote}</span>
+            </div>
+          {/if}
+
+          {#if repo.errMsg}
+            <div class="dl-row">
+              <span class="dl-label">Error</span>
+              <span class="dl-value err">{repo.errMsg}</span>
+            </div>
+          {/if}
+
+          {#if repo.dirtyFiles && repo.dirtyFiles.length}
+            <div class="dl-row">
+              <span class="dl-label">Changed ({repo.dirtyFiles.length})</span>
+              <div class="dirty-files">
+                {#each repo.dirtyFiles as f}
+                  <span class="df">{f}</span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <div class="detail-sep"></div>
+
+        <div class="detail-actions">
+          {#if repo.isGit}
+            <button class="btn btn-primary btn-sm" on:click={doFetch}>Fetch</button>
+            <button class="btn btn-primary btn-sm" on:click={doPull}>Pull</button>
+          {/if}
+          <button class="btn btn-secondary btn-sm" on:click={doEdit}>Editor</button>
+          <button class="btn btn-secondary btn-sm" on:click={doTerm}>Terminal</button>
+        </div>
+
+        <div class="detail-sep"></div>
+
+        <div class="section-label">Run command</div>
+        <div class="runner">
+          <input
+            class="input mono"
+            type="text"
+            placeholder="git status"
+            bind:value={cmd}
+            on:keydown={(e) => e.key === "Enter" && doRun()}
+            aria-label="Command to run"
+          />
+          <button class="btn btn-secondary btn-sm" on:click={doRun} disabled={running || !cmd}>
+            {running ? "..." : "Run"}
+          </button>
+        </div>
+
+        {#if output}<pre class="output">{output}</pre>{/if}
+      </div>
     </div>
-
-    <div class="actions">
-      <input placeholder="run command" bind:value={cmd} style="flex:1" on:keydown={(e) => e.key === 'Enter' && doRun()} />
-      <button on:click={doRun}>Run</button>
-    </div>
-
-    {#if output}<pre>{output}</pre>{/if}
-  </div>
+  </aside>
+{:else}
+  <aside class="detail-empty">
+    <span>Select a repository</span>
+  </aside>
 {/if}
