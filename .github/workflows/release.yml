@@ -26,9 +26,14 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: Install wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
       - name: Build
-        run: wails build -platform ${{ matrix.platform }}
+        run: wails build -tags webkit2_41 -platform ${{ matrix.platform }}
+      - name: Package macOS app
+        if: matrix.os == 'macos-latest'
+        run: |
+          ditto -c -k --keepParent build/bin/fleet.app build/bin/fleet-macos.zip
+          rm -rf build/bin/fleet.app
       - uses: softprops/action-gh-release@v2
         with:
           files: build/bin/*
