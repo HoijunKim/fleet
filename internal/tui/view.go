@@ -53,7 +53,7 @@ func (m Model) header() string {
 	if m.loading > 0 {
 		loading = " " + m.spinner.View() + fmt.Sprintf(" loading %d", m.loading)
 	}
-	return headerStyle.Render(fmt.Sprintf("fleet — roots %d · repos %d · dirty %d · behind %d",
+	return headerStyle.Render(fmt.Sprintf("fleet - roots %d | repos %d | dirty %d | behind %d",
 		len(m.cfg.Roots), len(m.repos), dirty, behind)) + loading
 }
 
@@ -90,7 +90,7 @@ func (m Model) detail() string {
 	b.WriteString(dimStyle.Render("detail: ") + r.Name + "\n")
 	b.WriteString(fmt.Sprintf("path   %s\n", r.Path))
 	if r.Last.Hash != "" {
-		b.WriteString(fmt.Sprintf("head   %s %q — %s, %s\n",
+		b.WriteString(fmt.Sprintf("head   %s %q - %s, %s\n",
 			short(r.Last.Hash), r.Last.Message, r.Last.Author, relTime(r.Last.When)))
 	}
 	if r.RemoteURL != "" {
@@ -103,7 +103,7 @@ func (m Model) detail() string {
 }
 
 func (m Model) outputPane() string {
-	return dimStyle.Render("── output (esc to close) ──") + "\n" + m.output
+	return dimStyle.Render("-- output (esc to close) --") + "\n" + m.output
 }
 
 func (m Model) bar() string {
@@ -152,13 +152,14 @@ func relTime(t time.Time) string {
 }
 
 func trunc(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
 	if n <= 1 {
-		return s[:n]
+		return string(r[:n])
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "..."
 }
 
 func short(hash string) string {

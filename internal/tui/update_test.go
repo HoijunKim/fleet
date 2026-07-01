@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,5 +107,34 @@ func TestFilterBackspaceIsRuneSafe(t *testing.T) {
 	m = send(m, tea.KeyMsg{Type: tea.KeyBackspace})
 	if m.filter != "" {
 		t.Errorf("filter=%q want empty; must not leave an invalid UTF-8 tail", m.filter)
+	}
+}
+
+func TestEditMissingBinarySetsFailStatus(t *testing.T) {
+	m := newTestModel()
+	m.cfg.Editor = "definitely-not-a-real-editor-xyz"
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	if !strings.Contains(m.status, "failed") {
+		t.Errorf("status=%q want 'editor failed'", m.status)
+	}
+}
+
+func TestFetchNonGitSetsStatus(t *testing.T) {
+	m := newTestModel()
+	m.repos[0].IsGit = false
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	if !strings.Contains(m.status, "not a git repo") {
+		t.Errorf("status=%q want 'not a git repo'", m.status)
+	}
+}
+
+func TestRefreshAllReloads(t *testing.T) {
+	m := newTestModel()
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("R")})
+	if cmd == nil {
+		t.Fatal("expected refresh-all command")
+	}
+	if next.(Model).loading != len(m.repos) {
+		t.Errorf("loading=%d want %d", next.(Model).loading, len(m.repos))
 	}
 }

@@ -58,7 +58,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) mergeLoaded(msg repoLoadedMsg) {
 	for i := range m.repos {
 		if m.repos[i].Path == msg.Path {
-			m.repos[i] = (repoFromLoaded(msg))
+			m.repos[i] = repoFromLoaded(msg)
 			if m.loading > 0 {
 				m.loading--
 			}
@@ -106,8 +106,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Fetch):
 		if r, ok := m.selected(); ok {
-			m.status = "fetching " + r.Name + "…"
-			return m, fetchCmd(m.runner, r.Path)
+			if r.IsGit {
+				m.status = "fetching " + r.Name + "..."
+				return m, fetchCmd(m.runner, r.Path)
+			}
+			m.status = r.Name + " is not a git repo"
 		}
 	case key.Matches(msg, m.keys.FetchAll):
 		var cmds []tea.Cmd
@@ -116,27 +119,44 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, fetchCmd(m.runner, r.Path))
 			}
 		}
-		m.status = "fetching all…"
+		m.status = "fetching all..."
 		return m, tea.Batch(cmds...)
 	case key.Matches(msg, m.keys.Pull):
 		if r, ok := m.selected(); ok {
-			m.status = "pulling " + r.Name + "…"
-			return m, pullCmd(m.runner, r.Path)
+			if r.IsGit {
+				m.status = "pulling " + r.Name + "..."
+				return m, pullCmd(m.runner, r.Path)
+			}
+			m.status = r.Name + " is not a git repo"
 		}
 	case key.Matches(msg, m.keys.Refresh):
 		if r, ok := m.selected(); ok {
 			return m, loadRepoCmd(m.runner, r)
 		}
+	case key.Matches(msg, m.keys.RefreshAll):
+		var cmds []tea.Cmd
+		for _, r := range m.repos {
+			cmds = append(cmds, loadRepoCmd(m.runner, r))
+		}
+		m.loading = len(m.repos)
+		m.status = "refreshing all..."
+		return m, tea.Batch(cmds...)
 	case key.Matches(msg, m.keys.Edit):
 		if r, ok := m.selected(); ok {
-			_ = action.EditorCmd(m.cfg.Editor, r.Path).Start()
-			m.status = "opened editor: " + r.Name
+			if err := action.EditorCmd(m.cfg.Editor, r.Path).Start(); err != nil {
+				m.status = "editor failed: " + err.Error()
+			} else {
+				m.status = "opened editor: " + r.Name
+			}
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Term):
 		if r, ok := m.selected(); ok {
-			_ = action.TerminalCmd(m.cfg.Terminal, r.Path).Start()
-			m.status = "opened terminal: " + r.Name
+			if err := action.TerminalCmd(m.cfg.Terminal, r.Path).Start(); err != nil {
+				m.status = "terminal failed: " + err.Error()
+			} else {
+				m.status = "opened terminal: " + r.Name
+			}
 		}
 		return m, nil
 	}

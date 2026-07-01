@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/hoijun/fleet/internal/repo"
 )
@@ -77,3 +78,23 @@ func TestViewRunPromptBar(t *testing.T) {
 }
 
 var _ = repo.Repo{}
+
+func TestTruncRuneSafe(t *testing.T) {
+	got := trunc("가나다라마", 3)
+	if !utf8.ValidString(got) {
+		t.Errorf("trunc produced invalid UTF-8: %q", got)
+	}
+}
+
+func TestViewHasNoSpecialTypographicChars(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	m.showDetail = true
+	m.repos[0].Path = "/repo/alpha"
+	out := m.View()
+	for _, bad := range []rune{'—', '–', '·', '…', '─'} {
+		if strings.ContainsRune(out, bad) {
+			t.Errorf("view contains disallowed char %q", bad)
+		}
+	}
+}
