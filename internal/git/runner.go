@@ -3,6 +3,8 @@ package git
 import (
 	"bytes"
 	"os/exec"
+
+	"github.com/hoijun/fleet/internal/winhide"
 )
 
 // Runner runs a git subcommand in dir and returns its stdout. It is the single
@@ -18,6 +20,7 @@ type ExecRunner struct{}
 func (ExecRunner) Run(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	winhide.Apply(cmd)
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf

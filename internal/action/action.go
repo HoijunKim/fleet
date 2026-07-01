@@ -6,6 +6,8 @@ package action
 import (
 	"os/exec"
 	"runtime"
+
+	"github.com/hoijun/fleet/internal/winhide"
 )
 
 // EditorCmd builds a command that opens path in the configured editor.
@@ -33,6 +35,7 @@ func RunInDir(dir, line string) (string, error) {
 		cmd = exec.Command("sh", "-c", line)
 	}
 	cmd.Dir = dir
+	winhide.Apply(cmd)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
