@@ -26,7 +26,7 @@
     try {
       const res = await Log(p, 15);
       if (p !== path) return; // selection changed during await -> drop stale result
-      commits = res;
+      commits = res || [];
     } catch {
       if (p !== path) return;
       commits = [];

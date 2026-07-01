@@ -21,7 +21,7 @@
     try {
       const res = await StashList(p);
       if (p !== path) return; // selection changed during await -> drop stale result
-      entries = res;
+      entries = res || [];
     } catch {
       if (p !== path) return;
       entries = [];

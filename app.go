@@ -203,7 +203,7 @@ func (a *App) Log(path string, n int) []CommitView {
 
 func (a *App) StashList(path string) []string {
 	l, err := git.StashList(a.runner, path)
-	if err != nil {
+	if err != nil || l == nil {
 		return []string{}
 	}
 	return l
