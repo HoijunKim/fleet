@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hoijun/fleet/internal/config"
@@ -48,6 +50,10 @@ type errStub struct{}
 func (errStub) Error() string { return "boom" }
 
 func TestLoadRepoUsesRunner(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	a := &App{
 		cfg: config.Default(),
 		runner: fakeRunner{out: map[string]string{
@@ -55,9 +61,27 @@ func TestLoadRepoUsesRunner(t *testing.T) {
 			"log":    "h\x1fme\x1f2026-07-01T10:00:00+09:00\x1fmsg",
 		}},
 	}
-	v := a.LoadRepo("/some/path")
+	v := a.LoadRepo(dir)
 	if v.Branch != "main" || !v.Loaded {
 		t.Errorf("LoadRepo did not load via runner: %+v", v)
+	}
+	if !v.IsGit {
+		t.Errorf("expected IsGit true for a dir containing .git")
+	}
+}
+
+func TestLoadRepoNonGitHasNoError(t *testing.T) {
+	dir := t.TempDir() // no .git subdir
+	a := &App{cfg: config.Default(), runner: fakeRunner{out: map[string]string{}}}
+	v := a.LoadRepo(dir)
+	if v.IsGit {
+		t.Errorf("expected IsGit false for a non-git dir")
+	}
+	if v.ErrMsg != "" {
+		t.Errorf("non-git dir must not produce an error, got %q", v.ErrMsg)
+	}
+	if !v.Loaded {
+		t.Errorf("non-git dir should still be marked Loaded")
 	}
 }
 

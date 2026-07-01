@@ -81,7 +81,9 @@ func (a *App) ScanRepos() []RepoView {
 // LoadRepo loads one repo's git + meta data and returns the full view.
 func (a *App) LoadRepo(path string) RepoView {
 	r := repo.Repo{Path: path, Name: baseName(path), IsGit: isGitDir(path)}
-	git.Load(a.runner, &r)
+	if r.IsGit {
+		git.Load(a.runner, &r)
+	}
 	r.Language, r.SizeBytes, r.HasReadme = meta.Detect(path)
 	r.Loaded = true
 	return toView(r)
