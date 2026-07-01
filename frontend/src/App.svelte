@@ -1,70 +1,45 @@
 <script lang="ts">
-  import logo from './assets/images/logo-universal.png'
+  import { onMount } from "svelte";
+  import { ScanRepos, LoadRepo } from "../wailsjs/go/main/App";
+  import Toolbar from "./lib/Toolbar.svelte";
+  import RepoTable from "./lib/RepoTable.svelte";
+  import DetailPanel from "./lib/DetailPanel.svelte";
 
-  // Placeholder shell from scaffolding; the real UI is built in a later task.
-  let resultText: string = "fleet"
+  let repos: any[] = [];
+  let filter = "";
+  let selectedPath = "";
+
+  $: visible = filter
+    ? repos.filter((r) => r.name.toLowerCase().includes(filter.toLowerCase()))
+    : repos;
+  $: selected = repos.find((r) => r.path === selectedPath) || null;
+
+  function upsert(v: any) {
+    const i = repos.findIndex((r) => r.path === v.path);
+    if (i >= 0) { repos[i] = v; repos = repos; } else { repos = [...repos, v]; }
+  }
+
+  async function loadAll() {
+    const skeletons = await ScanRepos();
+    repos = skeletons;
+    await Promise.all(skeletons.map((s: any) => LoadRepo(s.path).then(upsert)));
+  }
+
+  async function refreshOne(path: string) {
+    const v = await LoadRepo(path);
+    upsert(v);
+  }
+
+  onMount(loadAll);
 </script>
 
-<main>
-  <img alt="Wails logo" id="logo" src="{logo}">
-  <div class="result" id="result">{resultText}</div>
-</main>
+<Toolbar bind:filter {repos} onRefresh={loadAll} onFetchAll={async () => {
+  const { Fetch } = await import("../wailsjs/go/main/App");
+  await Promise.all(repos.filter((r) => r.isGit).map((r) => Fetch(r.path)));
+  await loadAll();
+}} />
 
-<style>
-
-  #logo {
-    display: block;
-    width: 50%;
-    height: 50%;
-    margin: auto;
-    padding: 10% 0 0;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-    background-origin: content-box;
-  }
-
-  .result {
-    height: 20px;
-    line-height: 20px;
-    margin: 1.5rem auto;
-  }
-
-  .input-box .btn {
-    width: 60px;
-    height: 30px;
-    line-height: 30px;
-    border-radius: 3px;
-    border: none;
-    margin: 0 0 0 20px;
-    padding: 0 8px;
-    cursor: pointer;
-  }
-
-  .input-box .btn:hover {
-    background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
-    color: #333333;
-  }
-
-  .input-box .input {
-    border: none;
-    border-radius: 3px;
-    outline: none;
-    height: 30px;
-    line-height: 30px;
-    padding: 0 10px;
-    background-color: rgba(240, 240, 240, 1);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .input-box .input:hover {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
-  }
-
-  .input-box .input:focus {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
-  }
-
-</style>
+<div class="main">
+  <RepoTable repos={visible} {selectedPath} onSelect={(r) => (selectedPath = r.path)} />
+  <DetailPanel repo={selected} onChanged={refreshOne} />
+</div>
