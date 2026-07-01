@@ -59,3 +59,8 @@ func runCmd(dir, line string) tea.Cmd {
 		return cmdOutputMsg{Title: line, Out: out, Err: err}
 	}
 }
+
+// repoFromLoaded converts a repoLoadedMsg back to a repo.Repo.
+func repoFromLoaded(msg repoLoadedMsg) repo.Repo {
+	return repo.Repo(msg)
+}
