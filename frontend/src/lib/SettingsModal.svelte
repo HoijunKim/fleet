@@ -17,9 +17,14 @@
   async function load() {
     loading = true;
     saveErr = "";
-    cfg = await GetConfig();
-    if (!cfg.Roots) cfg.Roots = [];
-    loading = false;
+    try {
+      cfg = await GetConfig();
+      if (!cfg.Roots) cfg.Roots = [];
+    } catch (e) {
+      toastError("Load failed: " + String(e));
+    } finally {
+      loading = false;
+    }
   }
 
   load();

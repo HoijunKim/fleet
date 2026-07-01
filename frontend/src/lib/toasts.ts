@@ -36,22 +36,3 @@ export function toastError(message: string): number {
 export function toastInfo(message: string): number {
   return pushToast(message, "info", 3000);
 }
-
-/**
- * Wrap a Wails binding that returns "" on success or an error string.
- * Surfaces the outcome as a toast and returns true on success.
- */
-export async function runAction(label: string, fn: () => Promise<string>): Promise<boolean> {
-  try {
-    const err = await fn();
-    if (err) {
-      toastError(label + ": " + err);
-      return false;
-    }
-    toastSuccess(label);
-    return true;
-  } catch (e) {
-    toastError(label + ": " + String(e));
-    return false;
-  }
-}

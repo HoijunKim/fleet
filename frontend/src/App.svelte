@@ -199,6 +199,7 @@
       !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as any).isContentEditable);
 
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+      if (settingsOpen || menu) return;
       e.preventDefault();
       paletteOpen = !paletteOpen;
       return;
@@ -285,7 +286,7 @@
 
 {#if paletteOpen}
   <CommandPalette
-    repos={visible}
+    {repos}
     actions={paletteActions}
     onClose={() => (paletteOpen = false)}
     {onJump}
