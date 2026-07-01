@@ -91,3 +91,39 @@ func TestFetchReturnsEmptyOnSuccess(t *testing.T) {
 		t.Errorf("Fetch returned %q, want empty on success", msg)
 	}
 }
+
+type errRunner struct{}
+
+func (errRunner) Run(dir string, args ...string) (string, error) { return "", errStub{} }
+
+func TestFetchAndPullReturnErrTextOnFailure(t *testing.T) {
+	a := &App{runner: errRunner{}}
+	if msg := a.Fetch("/x"); msg == "" {
+		t.Error("Fetch should return error text on failure")
+	}
+	if msg := a.Pull("/x"); msg == "" {
+		t.Error("Pull should return error text on failure")
+	}
+}
+
+func TestSaveConfigPersistsAndUpdatesCache(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("APPDATA", tmp)         // config.Path() on Windows
+	t.Setenv("XDG_CONFIG_HOME", tmp) // config.Path() elsewhere
+	a := &App{cfg: config.Default()}
+	c := config.Default()
+	c.Editor = "myeditor"
+	if msg := a.SaveConfig(c); msg != "" {
+		t.Fatalf("SaveConfig returned error: %s", msg)
+	}
+	if a.cfg.Editor != "myeditor" {
+		t.Errorf("in-memory cfg not updated: %q", a.cfg.Editor)
+	}
+	got, _, err := config.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.Editor != "myeditor" {
+		t.Errorf("persisted editor=%q want myeditor", got.Editor)
+	}
+}
