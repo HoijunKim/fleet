@@ -146,7 +146,10 @@ type CommitView struct {
 func (a *App) Branches(path string) BranchInfo {
 	c, all, err := git.Branches(a.runner, path)
 	if err != nil {
-		return BranchInfo{}
+		return BranchInfo{All: []string{}}
+	}
+	if all == nil {
+		all = []string{}
 	}
 	return BranchInfo{Current: c, All: all}
 }

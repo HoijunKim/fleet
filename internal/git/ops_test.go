@@ -34,6 +34,24 @@ func TestBranches(t *testing.T) {
 	}
 }
 
+func TestBranchesRealGitShape(t *testing.T) {
+	f := &opFake{out: map[string]string{
+		"branch --show-current": "main\n",
+		"for-each-ref": "a1 commit refs/heads/main\n" +
+			"b2 commit refs/heads/feature/x\n" +
+			"c3 commit refs/remotes/origin/main\n" +
+			"d4 tag refs/tags/v1.0\n" +
+			"e5 commit refs/stash\n",
+	}}
+	cur, all, err := Branches(f, "/x")
+	if err != nil || cur != "main" {
+		t.Fatalf("cur=%q err=%v", cur, err)
+	}
+	if len(all) != 2 || all[0] != "main" || all[1] != "feature/x" {
+		t.Errorf("expected only local branches [main feature/x], got %v", all)
+	}
+}
+
 func TestCommitAllStagesFirst(t *testing.T) {
 	f := &opFake{out: map[string]string{}}
 	if err := CommitAll(f, "/x", "msg"); err != nil {
