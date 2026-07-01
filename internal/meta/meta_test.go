@@ -55,3 +55,28 @@ func TestDetectUnknown(t *testing.T) {
 		t.Errorf("lang=%q want empty", lang)
 	}
 }
+
+func TestDetectSizeSkipsDerivedDirs(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "main.go", "package main\n") // counted (root file)
+	// A large file inside node_modules must NOT be counted toward size.
+	write(t, filepath.Join(dir, "node_modules", "pkg"), "big.js", string(make([]byte, 5000)))
+
+	_, size, _ := Detect(dir)
+	if size == 0 {
+		t.Errorf("size=%d should count root main.go", size)
+	}
+	if size >= 5000 {
+		t.Errorf("size=%d should exclude node_modules contents", size)
+	}
+}
+
+func TestDetectMarkerPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module x\n")
+	write(t, dir, "package.json", "{}")
+	lang, _, _ := Detect(dir)
+	if lang != "Go" {
+		t.Errorf("lang=%q want Go (first marker wins)", lang)
+	}
+}
