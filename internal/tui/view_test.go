@@ -54,4 +54,26 @@ func TestViewFilterPrompt(t *testing.T) {
 	}
 }
 
+func TestViewDetailPanel(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	m.showDetail = true
+	m.repos[0].Path = "/repo/alpha"
+	out := m.View()
+	if !strings.Contains(out, "detail:") || !strings.Contains(out, "/repo/alpha") {
+		t.Errorf("detail panel not shown: %s", out)
+	}
+}
+
+func TestViewRunPromptBar(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	m.mode = modeRunPrompt
+	m.runInput = "go build"
+	out := m.View()
+	if !strings.Contains(out, "run in") || !strings.Contains(out, "go build") {
+		t.Errorf("run prompt bar not shown: %s", out)
+	}
+}
+
 var _ = repo.Repo{}

@@ -74,7 +74,7 @@ func (m Model) table() string {
 		} else if r.Dirty {
 			b.WriteString(dirtyStyle.Render(row))
 		} else {
-			b.WriteString(row)
+			b.WriteString(cleanStyle.Render(row))
 		}
 		b.WriteString("\n")
 	}
@@ -111,8 +111,11 @@ func (m Model) bar() string {
 	case modeFilter:
 		return barStyle.Render("filter: ") + m.filter + dimStyle.Render("  (enter=apply, esc=clear)")
 	case modeRunPrompt:
-		r, _ := m.selected()
-		return barStyle.Render(fmt.Sprintf("run in %s: ", r.Name)) + m.runInput + dimStyle.Render("  (enter=run, esc=cancel)")
+		name := ""
+		if r, ok := m.selected(); ok {
+			name = r.Name
+		}
+		return barStyle.Render(fmt.Sprintf("run in %s: ", name)) + m.runInput + dimStyle.Render("  (enter=run, esc=cancel)")
 	default:
 		help := "[f]etch [F]all [p]ull [e]dit [t]erm [x]cmd [/]filter [enter]detail [q]uit"
 		if m.status != "" {
