@@ -106,6 +106,21 @@ func TestFetchAndPullReturnErrTextOnFailure(t *testing.T) {
 	}
 }
 
+func TestRemoteToHTTPS(t *testing.T) {
+	cases := map[string]string{
+		"git@github.com:o/r.git":       "https://github.com/o/r",
+		"https://github.com/o/r.git":   "https://github.com/o/r",
+		"ssh://git@github.com/o/r.git": "https://github.com/o/r",
+		"":                             "",
+		"weird":                        "",
+	}
+	for in, want := range cases {
+		if got := remoteToHTTPS(in); got != want {
+			t.Errorf("remoteToHTTPS(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
 func TestSaveConfigPersistsAndUpdatesCache(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("APPDATA", tmp)         // config.Path() on Windows

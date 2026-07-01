@@ -27,6 +27,38 @@ export namespace config {
 
 export namespace main {
 	
+	export class BranchInfo {
+	    current: string;
+	    all: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BranchInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.all = source["all"];
+	    }
+	}
+	export class CommitView {
+	    hash: string;
+	    message: string;
+	    author: string;
+	    when: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CommitView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hash = source["hash"];
+	        this.message = source["message"];
+	        this.author = source["author"];
+	        this.when = source["when"];
+	    }
+	}
 	export class RepoView {
 	    name: string;
 	    path: string;

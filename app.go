@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os/exec"
+	"runtime"
 
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/config"
@@ -9,6 +11,7 @@ import (
 	"github.com/hoijun/fleet/internal/meta"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/scan"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is the Wails binding layer exposed to the front end.
@@ -124,4 +127,88 @@ func errMsg(err error) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// BranchInfo is the current + all-local branches for a repo.
+type BranchInfo struct {
+	Current string   `json:"current"`
+	All     []string `json:"all"`
+}
+
+// CommitView is a JS-serializable commit.
+type CommitView struct {
+	Hash    string `json:"hash"`
+	Message string `json:"message"`
+	Author  string `json:"author"`
+	When    string `json:"when"`
+}
+
+func (a *App) Branches(path string) BranchInfo {
+	c, all, err := git.Branches(a.runner, path)
+	if err != nil {
+		return BranchInfo{}
+	}
+	return BranchInfo{Current: c, All: all}
+}
+
+func (a *App) Checkout(path, branch string) string { return errMsg(git.Checkout(a.runner, path, branch)) }
+func (a *App) CommitAll(path, msg string) string   { return errMsg(git.CommitAll(a.runner, path, msg)) }
+func (a *App) Push(path string) string             { return errMsg(git.Push(a.runner, path)) }
+
+func (a *App) DiffFile(path, file string) string {
+	out, err := git.DiffFile(a.runner, path, file)
+	if err != nil {
+		return out + "\n[error: " + err.Error() + "]"
+	}
+	return out
+}
+
+func (a *App) Log(path string, n int) []CommitView {
+	commits, err := git.Log(a.runner, path, n)
+	if err != nil {
+		return []CommitView{}
+	}
+	out := make([]CommitView, 0, len(commits))
+	for _, c := range commits {
+		w := ""
+		if !c.When.IsZero() {
+			w = c.When.Format("2006-01-02")
+		}
+		out = append(out, CommitView{Hash: c.Hash, Message: c.Message, Author: c.Author, When: w})
+	}
+	return out
+}
+
+func (a *App) StashList(path string) []string {
+	l, err := git.StashList(a.runner, path)
+	if err != nil {
+		return []string{}
+	}
+	return l
+}
+func (a *App) Stash(path string) string    { return errMsg(git.Stash(a.runner, path)) }
+func (a *App) StashPop(path string) string { return errMsg(git.StashPop(a.runner, path)) }
+
+// OpenInBrowser opens the repo's remote (converted to https) in the default browser.
+func (a *App) OpenInBrowser(remote string) string {
+	url := remoteToHTTPS(remote)
+	if url == "" {
+		return "no browsable url for remote"
+	}
+	wruntime.BrowserOpenURL(a.ctx, url)
+	return ""
+}
+
+// RevealInExplorer opens the OS file manager at path.
+func (a *App) RevealInExplorer(path string) string {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer", path)
+	case "darwin":
+		cmd = exec.Command("open", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	return errMsg(cmd.Start())
 }
