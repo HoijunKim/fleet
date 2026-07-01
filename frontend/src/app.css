@@ -510,7 +510,27 @@ body {
   max-height: 160px;
   overflow: auto;
 }
-.dirty-files .df { word-break: break-all; }
+.dirty-files .df {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--dirty);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 6px;
+  margin: 0;
+  cursor: pointer;
+  word-break: break-all;
+  transition: background var(--t), color var(--t);
+}
+.dirty-files .df:hover { background: var(--dirty-soft); }
+.dirty-files .df:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 /* Divider between sections */
 .detail-sep {
@@ -1154,3 +1174,254 @@ body {
 .ctx-item:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
 .ctx-item:disabled { color: var(--faint); cursor: default; opacity: 0.6; }
 .ctx-sep { height: 1px; background: var(--hairline); margin: 4px 6px; }
+
+/* =========================================================================
+   Git actions - branch switcher, commit box, diff, history, stash
+   ========================================================================= */
+
+/* ---- Branch switcher --------------------------------------------------- */
+.branch-menu { position: relative; }
+.branch-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color var(--t), background var(--t), color var(--t);
+}
+.branch-trigger:hover:not(:disabled) { border-color: #33394a; background: var(--raised); }
+.branch-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.branch-trigger:disabled { opacity: 0.6; cursor: default; }
+.branch-cur {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+.branch-caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--muted);
+}
+
+/* Backdrop shared by fixed-position popovers */
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+}
+.branch-pop {
+  position: fixed;
+  z-index: 171;
+  max-width: 320px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+}
+.branch-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-btn);
+  padding: 6px 9px;
+  cursor: pointer;
+  transition: background var(--t), color var(--t);
+}
+.branch-opt:hover { background: var(--accent-soft); color: var(--accent); }
+.branch-opt.current { color: var(--accent); }
+.branch-opt-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.branch-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  flex: 0 0 auto;
+  background: transparent;
+}
+.branch-opt.current .branch-dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(110, 168, 254, 0.6);
+}
+
+/* ---- Commit box -------------------------------------------------------- */
+.commit-box { display: flex; flex-direction: column; gap: 8px; }
+.commit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.commit-head .section-label { margin-bottom: 0; }
+.commit-count {
+  font-size: 12px;
+  color: var(--dirty);
+  font-weight: 500;
+}
+.commit-count.clean { color: var(--faint); font-family: var(--font-mono); }
+.commit-num { font-family: var(--font-mono); font-weight: 700; }
+.commit-msg {
+  width: 100%;
+  resize: vertical;
+  min-height: 52px;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+.commit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---- Diff modal -------------------------------------------------------- */
+.diff-modal { max-width: 860px; max-height: 82vh; }
+.diff-title { font-family: var(--font-mono); font-size: 13px; }
+.diff-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  background: var(--bg);
+}
+.diff-body .modal-loading { padding: 16px; }
+.diff-empty {
+  padding: 20px 16px;
+  color: var(--faint);
+  font-size: 13px;
+}
+.diff-code {
+  margin: 0;
+  padding: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: #c8ccd4;
+  white-space: pre;
+  min-width: 100%;
+}
+.diff-line {
+  display: block;
+  padding: 0 14px;
+  white-space: pre;
+}
+.diff-line.add  { color: var(--ok);   background: var(--ok-soft); }
+.diff-line.del  { color: var(--err);  background: var(--err-soft); }
+.diff-line.at   { color: var(--accent); background: var(--accent-soft); }
+.diff-line.meta { color: var(--muted); }
+
+/* ---- Collapsible section (history) ------------------------------------- */
+.collapse { display: flex; flex-direction: column; }
+.collapse-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.collapse-head .section-label { margin-bottom: 0; transition: color var(--t); }
+.collapse-head:hover .section-label { color: var(--text); }
+.collapse-caret {
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--muted);
+  transition: transform var(--t);
+}
+.collapse-caret.open { transform: rotate(90deg); }
+
+.hist-empty {
+  font-size: 12px;
+  color: var(--faint);
+  padding: 8px 2px 0;
+}
+.hist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+}
+.hist-row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r-btn);
+  transition: background var(--t);
+}
+.hist-row:hover { background: var(--raised); }
+.hist-hash {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  padding-top: 1px;
+}
+.hist-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hist-msg {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hist-meta { font-size: 11px; color: var(--muted); }
+
+/* ---- Stash panel ------------------------------------------------------- */
+.stash { display: flex; flex-direction: column; gap: 8px; }
+.stash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stash-head .section-label { margin-bottom: 0; }
+.stash-actions { display: flex; gap: 6px; }
+.stash-empty { font-size: 12px; color: var(--faint); }
+.stash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  max-height: 140px;
+  overflow: auto;
+}
+.stash-entry {
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  word-break: break-all;
+}

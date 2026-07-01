@@ -1,12 +1,29 @@
 <script lang="ts">
   import { Fetch, Pull, OpenEditor, OpenTerminal, RunCommand } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
+  import BranchMenu from "./BranchMenu.svelte";
+  import CommitBox from "./CommitBox.svelte";
+  import DiffModal from "./DiffModal.svelte";
+  import HistoryList from "./HistoryList.svelte";
+  import StashPanel from "./StashPanel.svelte";
+
   export let repo: any = null;
   export let onChanged: (path: string) => void;
 
   let cmd = "";
   let output = "";
   let running = false;
+
+  // Diff viewer state - the file whose diff is open (null = closed).
+  let diffFile: string | null = null;
+  let lastPath = "";
+
+  // Reset transient panel state when the selection changes.
+  $: if (repo && repo.path !== lastPath) {
+    lastPath = repo.path;
+    diffFile = null;
+    output = "";
+  }
 
   $: dotClass = repo
     ? repo.errMsg
@@ -17,6 +34,13 @@
           ? "dirty"
           : "ok"
     : "nogit";
+
+  function openDiff(f: string) {
+    diffFile = f;
+  }
+  function closeDiff() {
+    diffFile = null;
+  }
 
   async function doFetch() {
     const e = await Fetch(repo.path);
@@ -65,6 +89,13 @@
             <span class="dl-value mono">{repo.path}</span>
           </div>
 
+          {#if repo.isGit}
+            <div class="dl-row">
+              <span class="dl-label">Branch</span>
+              <BranchMenu path={repo.path} name={repo.name} {onChanged} />
+            </div>
+          {/if}
+
           {#if repo.lastHash}
             <div class="dl-row">
               <span class="dl-label">Head</span>
@@ -96,12 +127,17 @@
               <span class="dl-label">Changed ({repo.dirtyFiles.length})</span>
               <div class="dirty-files">
                 {#each repo.dirtyFiles as f}
-                  <span class="df">{f}</span>
+                  <button class="df" on:click={() => openDiff(f)} title="View diff">{f}</button>
                 {/each}
               </div>
             </div>
           {/if}
         </div>
+
+        {#if repo.isGit}
+          <div class="detail-sep"></div>
+          <CommitBox path={repo.path} name={repo.name} dirtyFiles={repo.dirtyFiles} {onChanged} />
+        {/if}
 
         <div class="detail-sep"></div>
 
@@ -132,9 +168,21 @@
         </div>
 
         {#if output}<pre class="output">{output}</pre>{/if}
+
+        {#if repo.isGit}
+          <div class="detail-sep"></div>
+          <StashPanel path={repo.path} name={repo.name} {onChanged} />
+
+          <div class="detail-sep"></div>
+          <HistoryList path={repo.path} />
+        {/if}
       </div>
     </div>
   </aside>
+
+  {#if diffFile !== null}
+    <DiffModal path={repo.path} file={diffFile} onClose={closeDiff} />
+  {/if}
 {:else}
   <aside class="detail-empty">
     <span>Select a repository</span>
