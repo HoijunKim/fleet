@@ -3,6 +3,7 @@
   import { AddTask, ToggleTask, DeleteTask, UpdateProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { ddayLabel } from "./pm";
+  import TagChips from "./TagChips.svelte";
 
   export let project: any;
   // Refresh this project's PM fields after a mutation.
@@ -122,6 +123,10 @@
 </script>
 
 <div class="pm">
+  <TagChips {project} {onChanged} />
+
+  <div class="detail-sep"></div>
+
   <div class="pm-tasks-head">
     <span class="section-label">Tasks</span>
     <span class="pm-progress">{doneCount}/{tasks.length}</span>

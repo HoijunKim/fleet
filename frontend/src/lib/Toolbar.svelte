@@ -7,10 +7,12 @@
   export let statusFilter: "all" | "dirty" | "behind" = "all";
   export let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   export let highPriorityOnly: boolean = false;
+  export let tagFilter: string = "all";
   export let filterInput: HTMLInputElement | undefined = undefined;
   export let onStatus: (s: "all" | "dirty" | "behind") => void;
   export let onPmStatus: (s: "all" | "active" | "paused" | "done") => void;
   export let onHighPriorityToggle: () => void;
+  export let onTagFilter: (t: string) => void;
   export let onFetchAll: () => void;
   export let onPullAll: () => void;
   export let onPushAll: () => void;
@@ -21,6 +23,8 @@
 
   $: dirty = repos.filter((r) => r.dirty).length;
   $: behind = repos.filter((r) => r.behind > 0).length;
+  // Distinct tags across all projects, for the tag filter select.
+  $: allTags = Array.from(new Set(repos.flatMap((r) => r.tags || []))).sort();
 </script>
 
 <header class="toolbar">
@@ -83,6 +87,20 @@
       >
         High priority
       </button>
+
+      {#if allTags.length > 0}
+        <select
+          class="input toolbar-select"
+          aria-label="Filter by tag"
+          bind:value={tagFilter}
+          on:change={() => onTagFilter(tagFilter)}
+        >
+          <option value="all">All tags</option>
+          {#each allTags as t}
+            <option value={t}>{t}</option>
+          {/each}
+        </select>
+      {/if}
     </div>
   {/if}
 

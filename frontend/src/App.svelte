@@ -20,6 +20,7 @@
   let statusFilter: "all" | "dirty" | "behind" = "all";
   let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   let highPriorityOnly = false;
+  let tagFilter = "all";
   let sortKey = "";
   let sortDir: "asc" | "desc" = "asc";
   let selectedId = "";
@@ -83,6 +84,7 @@
       out = out.filter((p) => (p.status || "active") === pmStatusFilter);
     }
     if (highPriorityOnly) out = out.filter((p) => (p.priority || 0) >= 2);
+    if (tagFilter !== "all") out = out.filter((p) => (p.tags || []).includes(tagFilter));
     return out;
   })();
 
@@ -582,9 +584,11 @@
   {statusFilter}
   {pmStatusFilter}
   {highPriorityOnly}
+  {tagFilter}
   onStatus={(s) => (statusFilter = s)}
   onPmStatus={(s) => (pmStatusFilter = s)}
   onHighPriorityToggle={() => (highPriorityOnly = !highPriorityOnly)}
+  onTagFilter={(t) => (tagFilter = t)}
   onRefresh={manualRefresh}
   onFetchAll={fetchAll}
   onPullAll={pullAll}

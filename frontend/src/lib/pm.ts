@@ -29,3 +29,15 @@ export function deadlineSort(deadline: string): number {
   const n = daysUntil(deadline);
   return n === null ? Number.POSITIVE_INFINITY : n;
 }
+
+// Deterministic color for a tag: hash the (ASCII) characters to a hue in
+// [0, 360) so the same tag string always renders the same color, both in the
+// tag chips and (later) the project graph. Pure function, no state.
+export function tagColor(tag: string): string {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = (hash * 31 + tag.charCodeAt(i)) | 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return "hsl(" + hue + ", 55%, 55%)";
+}
