@@ -2,6 +2,11 @@
   export let filter: string = "";
   export let repos: any[] = [];
   export let loadingCount: number = 0;
+  // Count of code projects with unfetched upstream commits (behind > 0).
+  // Computed once in App.svelte as stats.behind - not recomputed here so the
+  // toolbar never triggers its own GitHubInfo/git calls.
+  export let remoteChanges: number = 0;
+  export let onRemoteChanges: (() => void) | undefined = undefined;
   export let view: "overview" | "projects" | "graph" = "overview";
   export let onView: (v: "overview" | "projects" | "graph") => void;
   export let statusFilter: "all" | "dirty" | "behind" = "all";
@@ -111,6 +116,17 @@
   <div class="toolbar-spacer"></div>
 
   <div class="toolbar-right">
+    {#if remoteChanges > 0}
+      <button
+        class="remote-changes-btn"
+        on:click={() => onRemoteChanges && onRemoteChanges()}
+        title="{remoteChanges} repo(s) have unfetched upstream commits"
+      >
+        <span class="remote-changes-dot"></span>
+        remote changes: {remoteChanges}
+      </button>
+    {/if}
+
     {#if loadingCount > 0}
       <span class="loading-note">
         <span class="spinner"></span>

@@ -245,6 +245,33 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Remote-changes indicator (toolbar): count of code projects with unfetched
+   upstream commits (project.behind > 0), driven by App.svelte's stats.behind. */
+.remote-changes-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--behind);
+  background: var(--err-soft);
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.remote-changes-btn:hover { background: rgba(248, 81, 73, 0.2); }
+.remote-changes-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--behind);
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.5);
+  flex: 0 0 auto;
+}
+
 /* -------------------------------------------------------------------------
    Spinner
    ------------------------------------------------------------------------- */
@@ -1550,6 +1577,46 @@ body {
 }
 .dday.soon { color: var(--dirty); border-color: rgba(210, 153, 34, 0.35); background: var(--dirty-soft); }
 .dday.over { color: var(--err);   border-color: rgba(248, 81, 73, 0.35); background: var(--err-soft); }
+
+/* GitHub status badge (Git tab): CI pill + PR/issue chips */
+.gh-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.gh-ci {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--raised);
+  white-space: nowrap;
+}
+.gh-ci.ok      { color: var(--ok);    border-color: rgba(63, 185, 80, 0.35);  background: var(--ok-soft); }
+.gh-ci.err     { color: var(--err);   border-color: rgba(248, 81, 73, 0.35); background: var(--err-soft); }
+.gh-ci.neutral { color: var(--dirty); border-color: rgba(210, 153, 34, 0.35); background: var(--dirty-soft); }
+.gh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.gh-chip-n { color: var(--text); }
 
 /* PM status chip */
 .status-chip {
