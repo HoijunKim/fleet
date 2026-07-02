@@ -9,10 +9,10 @@
   import SettingsModal from "./lib/SettingsModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import AddProjectModal from "./lib/AddProjectModal.svelte";
-  import TodayView from "./lib/TodayView.svelte";
+  import Overview from "./lib/Overview.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
-  import { STATUS_ORDER, deadlineSort } from "./lib/pm";
+  import { STATUS_ORDER, deadlineSort, daysUntil } from "./lib/pm";
 
   // Each row is a ProjectView with (for code projects) live git fields merged in.
   let projects: any[] = [];
@@ -24,8 +24,8 @@
   let sortDir: "asc" | "desc" = "asc";
   let selectedId = "";
   let scanned = false;
-  // Top-level view: the project list or the Today/Focus summary.
-  let view: "projects" | "today" = "projects";
+  // Top-level view: the fleet-wide Overview (default) or the project list.
+  let view: "overview" | "projects" = "overview";
 
   let paletteOpen = false;
   let settingsOpen = false;
@@ -97,6 +97,24 @@
 
   $: selected = projects.find((p) => p.id === selectedId) || null;
   $: loadingCount = projects.filter((p) => p.type === "code" && !p.loaded && !p.errMsg).length;
+
+  // Fleet-wide counts, computed once here and passed to both the Overview
+  // tiles and the slim Projects-view StatsHeader (no duplicate counting).
+  $: stats = (() => {
+    const total = projects.length;
+    const active = projects.filter((p) => (p.status || "active") === "active").length;
+    const clean = projects.filter(
+      (p) => p.isGit && p.loaded && !p.dirty && !p.errMsg && !(p.behind > 0)
+    ).length;
+    const dirty = projects.filter((p) => p.dirty).length;
+    const behind = projects.filter((p) => p.behind > 0).length;
+    const unpushed = projects.filter((p) => p.ahead > 0).length;
+    const overdue = projects.filter((p) => {
+      const n = daysUntil(p.deadline);
+      return n !== null && n < 0;
+    }).length;
+    return { total, active, clean, dirty, behind, unpushed, overdue };
+  })();
 
   // ---- data flow (live-load contract) ------------------------------------
   const GIT_FIELDS = [
@@ -360,8 +378,8 @@
     });
   }
 
-  // From the Today view: select a project and return to the Projects view.
-  function openFromToday(id: string) {
+  // From the Overview: select a project and switch to the Projects view.
+  function openFromOverview(id: string) {
     selectedId = id;
     view = "projects";
     requestAnimationFrame(() => {
@@ -488,7 +506,7 @@
 />
 
 {#if view === "projects"}
-  <StatsHeader repos={projects} />
+  <StatsHeader {stats} />
 
   <div class="main">
     <ProjectTable
@@ -510,7 +528,7 @@
     />
   </div>
 {:else}
-  <TodayView {projects} onOpen={openFromToday} />
+  <Overview {projects} {stats} {runPool} onOpen={openFromOverview} />
 {/if}
 
 <Toasts />
