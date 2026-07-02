@@ -102,6 +102,9 @@
   // tiles and the slim Projects-view StatsHeader (no duplicate counting).
   $: stats = (() => {
     const total = projects.length;
+    // "repos" is a distinct count from "total": only actual git repos
+    // (type === "code"), not manual (non-git) projects.
+    const repos = projects.filter((p) => p.type === "code").length;
     const active = projects.filter((p) => (p.status || "active") === "active").length;
     const clean = projects.filter(
       (p) => p.isGit && p.loaded && !p.dirty && !p.errMsg && !(p.behind > 0)
@@ -113,7 +116,7 @@
       const n = daysUntil(p.deadline);
       return n !== null && n < 0;
     }).length;
-    return { total, active, clean, dirty, behind, unpushed, overdue };
+    return { total, repos, active, clean, dirty, behind, unpushed, overdue };
   })();
 
   // ---- data flow (live-load contract) ------------------------------------

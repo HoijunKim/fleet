@@ -9,12 +9,13 @@
   // Fleet-wide counts, computed once in App.svelte and passed down.
   export let stats: {
     total: number;
+    repos: number;
     active: number;
     dirty: number;
     behind: number;
     unpushed: number;
     overdue: number;
-  } = { total: 0, active: 0, dirty: 0, behind: 0, unpushed: 0, overdue: 0 };
+  } = { total: 0, repos: 0, active: 0, dirty: 0, behind: 0, unpushed: 0, overdue: 0 };
   // Select a project and switch to the Projects view (opens its detail).
   export let onOpen: (id: string) => void;
   // Bounded concurrency pool from App.svelte. Aggregate heatmap fan-out goes
@@ -31,7 +32,7 @@
   // Stat tiles: label + value + accent class (accent only lights up when the
   // count is non-zero, so a healthy fleet reads calm).
   $: tiles = [
-    { key: "total", label: "repos", value: stats.total, tone: "accent", hot: false },
+    { key: "repos", label: "repos", value: stats.repos, tone: "accent", hot: false },
     { key: "active", label: "active", value: stats.active, tone: "ok", hot: false },
     { key: "dirty", label: "dirty", value: stats.dirty, tone: "dirty", hot: stats.dirty > 0 },
     { key: "behind", label: "behind", value: stats.behind, tone: "err", hot: stats.behind > 0 },
@@ -40,9 +41,15 @@
   ];
 
   // ---- needs-attention queue ----------------------------------------------
-  // One ranked list. A code project earns a spot if it is dirty, behind,
-  // unpushed (ahead), has an overdue deadline, or is stale. Each reason adds a
-  // tag and a score weight; overdue/behind/unpushed outrank stale.
+  // One ranked list over ALL projects (code + manual), so it never disagrees
+  // with the fleet-wide "overdue" tile. A project earns a spot if it is
+  // dirty, behind, unpushed (ahead), has an overdue deadline, or is stale.
+  // The git-based reasons (dirty/behind/ahead/stale) only ever fire for code
+  // projects: manual rows never carry those git fields, so p.dirty/p.behind/
+  // p.ahead/p.lastWhen are undefined and each check below is a no-op for
+  // them. Manual rows can therefore only qualify via the overdue-deadline
+  // reason, which is exactly the intended behavior. Each reason adds a tag
+  // and a score weight; overdue/behind/unpushed outrank stale.
   type Reason = { text: string; cls: string };
 
   function evalAttention(p: any): { reasons: Reason[]; score: number } {
@@ -77,7 +84,6 @@
   }
 
   $: attention = projects
-    .filter((p) => p.type === "code")
     .map((p) => ({ p, ...evalAttention(p) }))
     .filter((x) => x.reasons.length > 0)
     .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name));

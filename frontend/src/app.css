@@ -1626,7 +1626,7 @@ body {
 .add-modal { max-width: 420px; }
 
 /* =========================================================================
-   View tabs (Projects / Today) in the toolbar
+   View tabs (Overview / Projects) in the toolbar
    ========================================================================= */
 .view-tabs {
   display: flex;
