@@ -253,6 +253,26 @@ export namespace main {
 	        this.loaded = source["loaded"];
 	    }
 	}
+	export class SearchHit {
+	    repo: string;
+	    repoPath: string;
+	    file: string;
+	    line: number;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchHit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repo = source["repo"];
+	        this.repoPath = source["repoPath"];
+	        this.file = source["file"];
+	        this.line = source["line"];
+	        this.text = source["text"];
+	    }
+	}
 
 }
 

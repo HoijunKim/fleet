@@ -35,6 +35,8 @@ export function Log(arg1:string,arg2:number):Promise<Array<main.CommitView>>;
 
 export function OpenEditor(arg1:string):Promise<string>;
 
+export function OpenEditorAt(arg1:string,arg2:string):Promise<string>;
+
 export function OpenInBrowser(arg1:string):Promise<string>;
 
 export function OpenTerminal(arg1:string):Promise<string>;
@@ -52,6 +54,8 @@ export function RunCommand(arg1:string,arg2:string):Promise<string>;
 export function SaveConfig(arg1:config.Config):Promise<string>;
 
 export function ScanRepos():Promise<Array<main.RepoView>>;
+
+export function SearchAll(arg1:string):Promise<Array<main.SearchHit>>;
 
 export function SetTags(arg1:string,arg2:Array<string>):Promise<string>;
 

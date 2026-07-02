@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -429,6 +430,40 @@ func (a *App) RepoGraph() GraphView {
 		edges = append(edges, GraphEdge{From: e.From, To: e.To})
 	}
 	return GraphView{Nodes: nodes, Edges: edges}
+}
+
+// SearchHit is one cross-repo search result.
+type SearchHit struct {
+	Repo     string `json:"repo"`
+	RepoPath string `json:"repoPath"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Text     string `json:"text"`
+}
+
+// SearchAll runs git grep across all discovered git repos and returns the hits
+// (capped to keep the UI responsive). A blank query returns no hits.
+func (a *App) SearchAll(query string) []SearchHit {
+	out := []SearchHit{}
+	if strings.TrimSpace(query) == "" {
+		return out
+	}
+	cfg := a.cfgSnapshot()
+	for _, r := range scan.Discover(cfg.Roots, cfg.ScanDepth, false) {
+		hits, _ := git.Grep(a.runner, r.Path, query)
+		for _, h := range hits {
+			out = append(out, SearchHit{Repo: r.Name, RepoPath: r.Path, File: h.File, Line: h.Line, Text: h.Text})
+			if len(out) >= 500 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// OpenEditorAt opens a specific file (repo-relative) in the configured editor.
+func (a *App) OpenEditorAt(repoPath, file string) string {
+	return errMsg(action.EditorCmd(a.cfgSnapshot().Editor, filepath.Join(repoPath, file)).Start())
 }
 
 // CommitActivity returns per-day commit counts for the heatmap.

@@ -66,6 +66,10 @@ export function OpenEditor(arg1) {
   return window['go']['main']['App']['OpenEditor'](arg1);
 }
 
+export function OpenEditorAt(arg1, arg2) {
+  return window['go']['main']['App']['OpenEditorAt'](arg1, arg2);
+}
+
 export function OpenInBrowser(arg1) {
   return window['go']['main']['App']['OpenInBrowser'](arg1);
 }
@@ -100,6 +104,10 @@ export function SaveConfig(arg1) {
 
 export function ScanRepos() {
   return window['go']['main']['App']['ScanRepos']();
+}
+
+export function SearchAll(arg1) {
+  return window['go']['main']['App']['SearchAll'](arg1);
 }
 
 export function SetTags(arg1, arg2) {

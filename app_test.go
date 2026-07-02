@@ -287,3 +287,39 @@ func (a *App) projectByID(t *testing.T, id string) ProjectView {
 	t.Fatalf("project %q not found", id)
 	return ProjectView{}
 }
+
+func newTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	s, err := store.Open(filepath.Join(t.TempDir(), "projects.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestSearchAllEmptyQuery(t *testing.T) {
+	a := newTestApp(t)
+	if got := a.SearchAll("   "); got == nil || len(got) != 0 {
+		t.Errorf("blank query must return empty non-nil, got %v", got)
+	}
+}
+
+func TestSearchAllAssembles(t *testing.T) {
+	// A real git repo in a temp root so scan.Discover finds it; the fake runner
+	// returns canned grep output for the "grep" subcommand.
+	root := t.TempDir()
+	repo := filepath.Join(root, "myrepo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	a := &App{cfg: cfg, runner: fakeRunner{out: map[string]string{"grep": "main.go:1:package main\n"}}, store: newTestStore(t)}
+	hits := a.SearchAll("package")
+	if len(hits) != 1 {
+		t.Fatalf("hits=%v", hits)
+	}
+	if hits[0].Repo != "myrepo" || hits[0].File != "main.go" || hits[0].Line != 1 {
+		t.Errorf("hit=%+v", hits[0])
+	}
+}
