@@ -55,8 +55,23 @@ func CommitAll(r Runner, dir, msg string) error {
 // Push runs git push.
 func Push(r Runner, dir string) error { _, err := r.Run(dir, "push"); return err }
 
-// DiffFile returns the working-tree diff for a single file.
-func DiffFile(r Runner, dir, file string) (string, error) { return r.Run(dir, "diff", "--", file) }
+// DiffFile returns a diff for a single file. It diffs against HEAD so both
+// staged and unstaged changes to tracked files show up; for an untracked (new)
+// file - which has no HEAD diff - it falls back to showing the file's full
+// content as an all-added diff via --no-index against /dev/null.
+func DiffFile(r Runner, dir, file string) (string, error) {
+	out, err := r.Run(dir, "diff", "HEAD", "--", file)
+	if err == nil && strings.TrimSpace(out) != "" {
+		return out, nil
+	}
+	// Untracked file, or a repo with no commits (unborn HEAD): show the whole
+	// file as added. --no-index exits non-zero when the files differ, which is
+	// the normal case here, so the error is ignored in favor of the output.
+	if alt, _ := r.Run(dir, "diff", "--no-index", "/dev/null", file); strings.TrimSpace(alt) != "" {
+		return alt, nil
+	}
+	return out, err
+}
 
 // Log returns the last n commits.
 func Log(r Runner, dir string, n int) ([]repo.Commit, error) {
