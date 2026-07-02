@@ -209,6 +209,38 @@ func TestUpdateProjectPersistsFields(t *testing.T) {
 	}
 }
 
+func TestGetProjectManual(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("thesis")
+	p := a.GetProject(id)
+	if p.ID != id || p.Name != "thesis" || p.Type != "manual" {
+		t.Errorf("GetProject manual wrong: %+v", p)
+	}
+}
+
+func TestMutationsPersistViaUpdate(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	if msg := a.AddTask(id, "do X", ""); msg != "" {
+		t.Fatalf("AddTask: %s", msg)
+	}
+	tid := a.GetProject(id).Tasks[0].ID
+	if msg := a.ToggleTask(id, tid); msg != "" {
+		t.Fatalf("ToggleTask: %s", msg)
+	}
+	p := a.GetProject(id)
+	if len(p.Tasks) != 1 || !p.Tasks[0].Done {
+		t.Errorf("task not toggled via GetProject: %+v", p.Tasks)
+	}
+	if msg := a.UpdateProject(id, "paused", 3, "2026-08-29", "n"); msg != "" {
+		t.Fatalf("UpdateProject: %s", msg)
+	}
+	p = a.GetProject(id)
+	if p.Status != "paused" || p.Priority != 3 || p.Deadline != "2026-08-29" {
+		t.Errorf("update not applied: %+v", p)
+	}
+}
+
 // helpers
 func (a *App) addTaskReturnID(t *testing.T, projectID, title string) string {
 	t.Helper()

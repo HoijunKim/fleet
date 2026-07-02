@@ -310,10 +310,25 @@ func (a *App) ListProjects() []ProjectView {
 	return out
 }
 
+// GetProject returns the current view for one project id (targeted refresh after
+// a mutation, avoiding a full rescan). Code projects (id == repo path) carry only
+// their project-management fields here; the front end keeps the live git fields.
+func (a *App) GetProject(id string) ProjectView {
+	rec, _ := a.store.Get(id)
+	if rec.Manual {
+		return recordToView(id, rec.Name, "manual", "", rec)
+	}
+	return recordToView(id, filepath.Base(id), "code", id, rec)
+}
+
 // AddProject creates a manual project and returns its id, or "" on failure.
 func (a *App) AddProject(name string) string {
 	id := "m-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	if err := a.store.Put(id, store.Record{Manual: true, Name: name, Status: "active"}); err != nil {
+	if err := a.store.Update(id, func(r *store.Record) {
+		r.Manual = true
+		r.Name = name
+		r.Status = "active"
+	}); err != nil {
 		return ""
 	}
 	return id
@@ -321,12 +336,12 @@ func (a *App) AddProject(name string) string {
 
 // UpdateProject sets a project's status/priority/deadline/notes.
 func (a *App) UpdateProject(id, status string, priority int, deadline, notes string) string {
-	rec, _ := a.store.Get(id)
-	rec.Status = status
-	rec.Priority = priority
-	rec.Deadline = deadline
-	rec.Notes = notes
-	return errMsg(a.store.Put(id, rec))
+	return errMsg(a.store.Update(id, func(r *store.Record) {
+		r.Status = status
+		r.Priority = priority
+		r.Deadline = deadline
+		r.Notes = notes
+	}))
 }
 
 // DeleteProject removes a project's stored data (manual project disappears; a
@@ -335,34 +350,34 @@ func (a *App) DeleteProject(id string) string { return errMsg(a.store.Delete(id)
 
 // AddTask appends a task to a project.
 func (a *App) AddTask(projectID, title, due string) string {
-	rec, _ := a.store.Get(projectID)
 	tid := "t-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	rec.Tasks = append(rec.Tasks, store.Task{ID: tid, Title: title, Due: due})
-	return errMsg(a.store.Put(projectID, rec))
+	return errMsg(a.store.Update(projectID, func(r *store.Record) {
+		r.Tasks = append(r.Tasks, store.Task{ID: tid, Title: title, Due: due})
+	}))
 }
 
 // ToggleTask flips a task's done state.
 func (a *App) ToggleTask(projectID, taskID string) string {
-	rec, _ := a.store.Get(projectID)
-	for i := range rec.Tasks {
-		if rec.Tasks[i].ID == taskID {
-			rec.Tasks[i].Done = !rec.Tasks[i].Done
+	return errMsg(a.store.Update(projectID, func(r *store.Record) {
+		for i := range r.Tasks {
+			if r.Tasks[i].ID == taskID {
+				r.Tasks[i].Done = !r.Tasks[i].Done
+			}
 		}
-	}
-	return errMsg(a.store.Put(projectID, rec))
+	}))
 }
 
 // DeleteTask removes a task from a project.
 func (a *App) DeleteTask(projectID, taskID string) string {
-	rec, _ := a.store.Get(projectID)
-	kept := rec.Tasks[:0]
-	for _, t := range rec.Tasks {
-		if t.ID != taskID {
-			kept = append(kept, t)
+	return errMsg(a.store.Update(projectID, func(r *store.Record) {
+		kept := r.Tasks[:0]
+		for _, t := range r.Tasks {
+			if t.ID != taskID {
+				kept = append(kept, t)
+			}
 		}
-	}
-	rec.Tasks = kept
-	return errMsg(a.store.Put(projectID, rec))
+		r.Tasks = kept
+	}))
 }
 
 // CommitActivity returns per-day commit counts for the heatmap.

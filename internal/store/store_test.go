@@ -103,6 +103,37 @@ func TestConcurrentPutNoError(t *testing.T) {
 	}
 }
 
+func TestUpdateAtomicNoLostUpdate(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "projects.json")
+	s, _ := Open(p)
+	_ = s.Put("a", Record{Manual: true, Name: "a"})
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = s.Update("a", func(r *Record) {
+				r.Tasks = append(r.Tasks, Task{ID: "t"})
+			})
+		}()
+	}
+	wg.Wait()
+	got, _ := s.Get("a")
+	if len(got.Tasks) != 100 {
+		t.Errorf("lost updates: want 100 tasks, got %d", len(got.Tasks))
+	}
+}
+
+func TestUpdateOnMissingIdCreates(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "projects.json")
+	s, _ := Open(p)
+	_ = s.Update("new", func(r *Record) { r.Manual = true; r.Name = "n" })
+	got, ok := s.Get("new")
+	if !ok || !got.Manual || got.Name != "n" {
+		t.Errorf("Update should create a record for a missing id: %+v", got)
+	}
+}
+
 func TestGetReturnsIndependentSlices(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "projects.json")
 	s, _ := Open(p)

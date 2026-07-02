@@ -25,6 +25,8 @@ export function Fetch(arg1:string):Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
 
+export function GetProject(arg1:string):Promise<main.ProjectView>;
+
 export function ListProjects():Promise<Array<main.ProjectView>>;
 
 export function LoadRepo(arg1:string):Promise<main.RepoView>;

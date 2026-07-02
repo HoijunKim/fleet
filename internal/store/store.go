@@ -102,6 +102,19 @@ func (s *Store) Put(id string, r Record) error {
 	return s.saveLocked()
 }
 
+// Update atomically reads the record for id, applies fn to a copy of it, and
+// saves - all under the write lock - so overlapping updates cannot lose each
+// other's changes. fn receives a pointer to the current record (a zero Record
+// if id is new).
+func (s *Store) Update(id string, fn func(*Record)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := cloneRecord(s.records[id])
+	fn(&rec)
+	s.records[id] = rec
+	return s.saveLocked()
+}
+
 // Delete removes id and saves atomically (under the write lock).
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
