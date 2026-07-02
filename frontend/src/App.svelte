@@ -6,6 +6,7 @@
   import ProjectTable from "./lib/ProjectTable.svelte";
   import DetailPanel from "./lib/DetailPanel.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
+  import SearchOverlay from "./lib/SearchOverlay.svelte";
   import SettingsModal from "./lib/SettingsModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import AddProjectModal from "./lib/AddProjectModal.svelte";
@@ -34,6 +35,7 @@
   let view: "overview" | "projects" | "graph" = "overview";
 
   let paletteOpen = false;
+  let searchOpen = false;
   let settingsOpen = false;
   let addOpen = false;
   let menu: { x: number; y: number; project: any } | null = null;
@@ -523,14 +525,27 @@
       !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as any).isContentEditable);
 
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
-      if (settingsOpen || addOpen || menu || diffOpen) return;
+      if (settingsOpen || addOpen || menu || diffOpen || searchOpen) return;
       e.preventDefault();
       paletteOpen = !paletteOpen;
       return;
     }
 
+    // Ctrl+Shift+F (Cmd+Shift+F on mac): cross-repo search. Modifier-only
+    // combos like this never insert a character into a focused input, so -
+    // same as Ctrl+K above - it is checked ahead of the typing guard. It
+    // still respects the other overlay guards, including the palette, so
+    // only one overlay is ever open at a time.
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "F" || e.key === "f")) {
+      if (settingsOpen || addOpen || menu || diffOpen || paletteOpen) return;
+      e.preventDefault();
+      searchOpen = !searchOpen;
+      return;
+    }
+
     if (e.key === "Escape") {
       if (menu) { menu = null; return; }
+      if (searchOpen) { searchOpen = false; return; }
       if (paletteOpen) { paletteOpen = false; return; }
       if (addOpen) { addOpen = false; return; }
       if (settingsOpen) { settingsOpen = false; return; }
@@ -538,7 +553,7 @@
     }
 
     if (typing) return;
-    if (paletteOpen || settingsOpen || addOpen || menu) return;
+    if (paletteOpen || searchOpen || settingsOpen || addOpen || menu) return;
     // List navigation / repo actions (j/k/r/f, "/") only apply to the Projects
     // view - never to the Overview or Graph views. Ctrl+K and Escape above are
     // handled before this gate, so they still work everywhere.
@@ -604,6 +619,7 @@
   onAddProject={addProject}
   onOpenSettings={() => (settingsOpen = true)}
   onOpenPalette={() => (paletteOpen = true)}
+  onOpenSearch={() => (searchOpen = true)}
 />
 
 {#if view === "projects"}
@@ -659,6 +675,10 @@
     onClose={() => (paletteOpen = false)}
     {onJump}
   />
+{/if}
+
+{#if searchOpen}
+  <SearchOverlay onClose={() => (searchOpen = false)} />
 {/if}
 
 {#if settingsOpen}

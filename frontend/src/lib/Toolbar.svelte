@@ -19,6 +19,7 @@
   export let onRefresh: () => void;
   export let onOpenSettings: () => void;
   export let onOpenPalette: () => void;
+  export let onOpenSearch: () => void;
   export let onAddProject: () => void;
 
   $: dirty = repos.filter((r) => r.dirty).length;
@@ -118,8 +119,13 @@
     {/if}
 
     <button class="palette-btn" on:click={onOpenPalette} title="Command palette">
-      <span class="palette-label">Search</span>
+      <span class="palette-label">Jump</span>
       <span class="palette-kbd">Ctrl K</span>
+    </button>
+
+    <button class="palette-btn" on:click={onOpenSearch} title="Search across repos">
+      <span class="palette-label">Search</span>
+      <span class="palette-kbd">Ctrl Shift F</span>
     </button>
 
     <button class="icon-btn" on:click={onOpenSettings} title="Settings" aria-label="Settings">
