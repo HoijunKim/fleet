@@ -153,7 +153,7 @@
               {:else}
                 <div class="dl-row">
                   <span class="dl-label">Git</span>
-                  <span class="dl-value">{project.errMsg ? project.errMsg : "not a repository"}</span>
+                  <span class="dl-value">{project.errMsg ? project.errMsg : project.loaded ? "not a repository" : "loading"}</span>
                 </div>
               {/if}
 

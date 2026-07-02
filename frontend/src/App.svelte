@@ -457,6 +457,7 @@
 
   function onJump(p: any) {
     selectedId = p.id;
+    view = "projects";
     paletteOpen = false;
     requestAnimationFrame(() => {
       const el = document.querySelector(".repo-row.selected");
