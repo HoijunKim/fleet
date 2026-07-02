@@ -2,6 +2,8 @@
   export let filter: string = "";
   export let repos: any[] = [];
   export let loadingCount: number = 0;
+  export let view: "projects" | "today" = "projects";
+  export let onView: (v: "projects" | "today") => void;
   export let statusFilter: "all" | "dirty" | "behind" = "all";
   export let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   export let highPriorityOnly: boolean = false;
@@ -25,6 +27,15 @@
     <span class="brand-name">fleet</span>
   </div>
 
+  <div class="view-tabs">
+    <button class="view-tab" class:active={view === "projects"} on:click={() => onView("projects")}>
+      Projects
+    </button>
+    <button class="view-tab" class:active={view === "today"} on:click={() => onView("today")}>
+      Today
+    </button>
+  </div>
+
   <div class="toolbar-search">
     <input
       class="input"
@@ -36,40 +47,42 @@
     />
   </div>
 
-  <div class="filter-chips">
-    <button class="fchip" class:active={statusFilter === "all"} on:click={() => onStatus("all")}>
-      All
-    </button>
-    <button class="fchip" class:active={statusFilter === "dirty"} on:click={() => onStatus("dirty")}>
-      Dirty <span class="fchip-n">{dirty}</span>
-    </button>
-    <button class="fchip" class:active={statusFilter === "behind"} on:click={() => onStatus("behind")}>
-      Behind <span class="fchip-n">{behind}</span>
-    </button>
-  </div>
+  {#if view === "projects"}
+    <div class="filter-chips">
+      <button class="fchip" class:active={statusFilter === "all"} on:click={() => onStatus("all")}>
+        All
+      </button>
+      <button class="fchip" class:active={statusFilter === "dirty"} on:click={() => onStatus("dirty")}>
+        Dirty <span class="fchip-n">{dirty}</span>
+      </button>
+      <button class="fchip" class:active={statusFilter === "behind"} on:click={() => onStatus("behind")}>
+        Behind <span class="fchip-n">{behind}</span>
+      </button>
+    </div>
 
-  <div class="pm-filters">
-    <select
-      class="input toolbar-select"
-      aria-label="Filter by project status"
-      bind:value={pmStatusFilter}
-      on:change={() => onPmStatus(pmStatusFilter)}
-    >
-      <option value="all">All statuses</option>
-      <option value="active">Active</option>
-      <option value="paused">Paused</option>
-      <option value="done">Done</option>
-    </select>
+    <div class="pm-filters">
+      <select
+        class="input toolbar-select"
+        aria-label="Filter by project status"
+        bind:value={pmStatusFilter}
+        on:change={() => onPmStatus(pmStatusFilter)}
+      >
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="paused">Paused</option>
+        <option value="done">Done</option>
+      </select>
 
-    <button
-      class="fchip"
-      class:active={highPriorityOnly}
-      on:click={onHighPriorityToggle}
-      aria-pressed={highPriorityOnly}
-    >
-      High priority
-    </button>
-  </div>
+      <button
+        class="fchip"
+        class:active={highPriorityOnly}
+        on:click={onHighPriorityToggle}
+        aria-pressed={highPriorityOnly}
+      >
+        High priority
+      </button>
+    </div>
+  {/if}
 
   <div class="toolbar-spacer"></div>
 

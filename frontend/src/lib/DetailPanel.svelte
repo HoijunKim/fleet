@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Fetch, Pull, OpenEditor, OpenTerminal, RunCommand } from "../../wailsjs/go/main/App";
+  import { Fetch, Pull, OpenEditor, OpenTerminal, RunCommand, CommitActivity } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import BranchMenu from "./BranchMenu.svelte";
   import CommitBox from "./CommitBox.svelte";
@@ -7,6 +7,7 @@
   import HistoryList from "./HistoryList.svelte";
   import StashPanel from "./StashPanel.svelte";
   import PMSection from "./PMSection.svelte";
+  import Heatmap from "./Heatmap.svelte";
 
   export let project: any = null;
   // Reload git fields for a code project (called with its repo path).
@@ -27,8 +28,36 @@
   let diffFile: string | null = null;
   let lastId = "";
 
+  // Commit-activity heatmap (code projects only), loaded lazily by path.
+  let activity: Array<{ date: string; count: number }> = [];
+  let activityPath = "";
+
   $: diffOpen = diffFile !== null;
   $: isCode = !!project && project.type === "code";
+
+  // Lazily fetch commit activity when a code project is selected; capture the
+  // path and drop stale results if the selection changes mid-flight.
+  $: if (isCode && project && project.path) {
+    if (project.path !== activityPath) {
+      activityPath = project.path;
+      loadActivity(project.path);
+    }
+  } else if (activityPath !== "") {
+    activityPath = "";
+    activity = [];
+  }
+
+  async function loadActivity(p: string) {
+    activity = [];
+    try {
+      const res = await CommitActivity(p, 16);
+      if (p !== activityPath) return; // selection changed -> drop stale result
+      activity = res || [];
+    } catch {
+      if (p !== activityPath) return;
+      activity = [];
+    }
+  }
 
   // Reset transient panel state when the selection changes.
   $: if (project && project.id !== lastId) {
@@ -160,6 +189,10 @@
           </div>
 
           {#if project.isGit}
+            <div class="detail-sep"></div>
+            <div class="section-label">Commit activity</div>
+            <Heatmap days={activity} />
+
             <div class="detail-sep"></div>
             <CommitBox path={project.path} name={project.name} dirtyFiles={project.dirtyFiles} onChanged={onRepoChanged} />
           {/if}

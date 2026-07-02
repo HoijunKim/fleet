@@ -9,6 +9,7 @@
   import SettingsModal from "./lib/SettingsModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import AddProjectModal from "./lib/AddProjectModal.svelte";
+  import TodayView from "./lib/TodayView.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
   import { STATUS_ORDER, deadlineSort } from "./lib/pm";
@@ -23,6 +24,8 @@
   let sortDir: "asc" | "desc" = "asc";
   let selectedId = "";
   let scanned = false;
+  // Top-level view: the project list or the Today/Focus summary.
+  let view: "projects" | "today" = "projects";
 
   let paletteOpen = false;
   let settingsOpen = false;
@@ -299,6 +302,16 @@
     });
   }
 
+  // From the Today view: select a project and return to the Projects view.
+  function openFromToday(id: string) {
+    selectedId = id;
+    view = "projects";
+    requestAnimationFrame(() => {
+      const el = document.querySelector(".repo-row.selected");
+      if (el) (el as HTMLElement).scrollIntoView({ block: "nearest" });
+    });
+  }
+
   // ---- settings + auto-fetch ---------------------------------------------
   function setupAutoFetch(minutes: number) {
     if (autoFetchTimer) { clearInterval(autoFetchTimer); autoFetchTimer = undefined; }
@@ -350,6 +363,8 @@
 
     if (typing) return;
     if (paletteOpen || settingsOpen || addOpen || menu) return;
+    // List navigation / repo actions only apply to the Projects view.
+    if (view !== "projects") return;
 
     switch (e.key) {
       case "/":
@@ -394,6 +409,8 @@
   bind:filterInput
   repos={projects}
   {loadingCount}
+  {view}
+  onView={(v) => (view = v)}
   {statusFilter}
   {pmStatusFilter}
   {highPriorityOnly}
@@ -407,27 +424,31 @@
   onOpenPalette={() => (paletteOpen = true)}
 />
 
-<StatsHeader repos={projects} />
+{#if view === "projects"}
+  <StatsHeader repos={projects} />
 
-<div class="main">
-  <ProjectTable
-    projects={visible}
-    {selectedId}
-    {scanned}
-    {sortKey}
-    {sortDir}
-    onSelect={(p) => (selectedId = p.id)}
-    {onSort}
-    {onContext}
-  />
-  <DetailPanel
-    project={selected}
-    onRepoChanged={refreshRepo}
-    onProjectChanged={refreshProject}
-    onDeleteProject={deleteProject}
-    bind:diffOpen
-  />
-</div>
+  <div class="main">
+    <ProjectTable
+      projects={visible}
+      {selectedId}
+      {scanned}
+      {sortKey}
+      {sortDir}
+      onSelect={(p) => (selectedId = p.id)}
+      {onSort}
+      {onContext}
+    />
+    <DetailPanel
+      project={selected}
+      onRepoChanged={refreshRepo}
+      onProjectChanged={refreshProject}
+      onDeleteProject={deleteProject}
+      bind:diffOpen
+    />
+  </div>
+{:else}
+  <TodayView {projects} onOpen={openFromToday} />
+{/if}
 
 <Toasts />
 
