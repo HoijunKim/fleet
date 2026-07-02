@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { AddTask, ToggleTask, DeleteTask, UpdateProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { ddayLabel } from "./pm";
@@ -11,6 +12,7 @@
 
   // Local editable copies so typing does not fight the reactive project prop.
   let lastId = "";
+  let lastName = "";
   let status = "active";
   let priority = 0;
   let deadline = "";
@@ -24,7 +26,16 @@
 
   // Re-sync locals whenever the selected project changes.
   $: if (project && project.id !== lastId) {
+    if (notesTimer) {
+      // A debounced notes save was still pending for the OUTGOING project.
+      // Flush it against that project's id/fields (captured before we
+      // overwrite the locals below) so the edit is not silently dropped.
+      clearTimeout(notesTimer);
+      notesTimer = undefined;
+      saveProjectMeta(lastId, status, priority, deadline, notes, lastName);
+    }
     lastId = project.id;
+    lastName = project.name;
     status = project.status || "active";
     priority = project.priority || 0;
     deadline = project.deadline || "";
@@ -32,16 +43,36 @@
     confirming = false;
     newTitle = "";
     newDue = "";
-    if (notesTimer) { clearTimeout(notesTimer); notesTimer = undefined; }
   }
 
   $: tasks = project && project.tasks ? project.tasks : [];
   $: doneCount = tasks.filter((t: any) => t.done).length;
 
-  async function saveMeta() {
-    const err = await UpdateProject(project.id, status, Number(priority), deadline, notes);
+  onDestroy(() => clearTimeout(notesTimer));
+
+  // Persist an explicit id/fields combination. Used both for the normal
+  // "save the currently selected project" path and for flushing a pending
+  // save against a project we're navigating away from.
+  async function saveProjectMeta(
+    id: string,
+    s: string,
+    p: number,
+    d: string,
+    n: string,
+    label?: string
+  ) {
+    if (!id) return;
+    const err = await UpdateProject(id, s, Number(p), d, n);
     if (err) toastError("Update: " + err);
-    else { toastSuccess("Saved " + project.name); onChanged(project.id); }
+    else {
+      toastSuccess("Saved" + (label ? " " + label : ""));
+      onChanged(id);
+    }
+  }
+
+  async function saveMeta() {
+    if (!project) return;
+    await saveProjectMeta(project.id, status, priority, deadline, notes, project.name);
   }
 
   function onStatusChange(e: Event) {

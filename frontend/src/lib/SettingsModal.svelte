@@ -1,6 +1,6 @@
 <script lang="ts">
   import { GetConfig, SaveConfig } from "../../wailsjs/go/main/App";
-  import { config } from "../../wailsjs/go/models";
+  import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
 
   export let onClose: () => void;
