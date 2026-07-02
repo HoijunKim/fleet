@@ -602,6 +602,8 @@
   bind:filterInput
   repos={projects}
   {loadingCount}
+  remoteChanges={stats.behind}
+  onRemoteChanges={() => (view = "overview")}
   {view}
   onView={(v) => (view = v)}
   {statusFilter}

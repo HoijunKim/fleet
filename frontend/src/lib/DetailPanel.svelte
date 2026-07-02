@@ -8,6 +8,7 @@
   import HistoryList from "./HistoryList.svelte";
   import StashPanel from "./StashPanel.svelte";
   import PMSection from "./PMSection.svelte";
+  import GitHubBadge from "./GitHubBadge.svelte";
 
   export let project: any = null;
   // Reload git fields for a code project (called with its repo path).
@@ -208,6 +209,7 @@
                     <span class="dl-value mono">{project.remote}</span>
                   </div>
                 {/if}
+                <GitHubBadge remote={project.remote || ""} path={project.path} />
                 {#if project.dirtyFiles && project.dirtyFiles.length}
                   <div class="dl-row">
                     <span class="dl-label">Changed ({project.dirtyFiles.length})</span>

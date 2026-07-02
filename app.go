@@ -13,6 +13,7 @@ import (
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/deps"
+	"github.com/hoijun/fleet/internal/gh"
 	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/meta"
 	"github.com/hoijun/fleet/internal/repo"
@@ -23,11 +24,14 @@ import (
 
 // App is the Wails binding layer exposed to the front end.
 type App struct {
-	ctx    context.Context
-	mu     sync.RWMutex
-	cfg    config.Config
-	runner git.Runner
-	store  *store.Store
+	ctx      context.Context
+	mu       sync.RWMutex
+	cfg      config.Config
+	runner   git.Runner
+	store    *store.Store
+	ghRunner gh.Runner
+	ghCache  map[string]GitHubView
+	ghMu     sync.RWMutex
 }
 
 // NewApp builds the App with the real git runner and loaded config.
@@ -35,7 +39,7 @@ func NewApp() *App {
 	cfg, cfgPath, _ := config.Load()
 	storePath := filepath.Join(filepath.Dir(cfgPath), "projects.json")
 	st, _ := store.Open(storePath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st}
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -477,4 +481,41 @@ func (a *App) CommitActivity(path string, weeks int) []DayCountView {
 		out = append(out, DayCountView{Date: d.Date, Count: d.Count})
 	}
 	return out
+}
+
+// GitHubView is a repo's GitHub status for the front end.
+type GitHubView struct {
+	CI        string `json:"ci"`
+	PRs       int    `json:"prs"`
+	Issues    int    `json:"issues"`
+	Available bool   `json:"available"`
+}
+
+// GitHubInfo returns a repo's GitHub status (cached per owner/repo). Returns
+// Available=false when the remote is not a parseable GitHub URL or gh fails.
+func (a *App) GitHubInfo(remote string) GitHubView {
+	owner, repo, ok := gh.OwnerRepo(remote)
+	if !ok {
+		return GitHubView{Available: false}
+	}
+	key := owner + "/" + repo
+	a.ghMu.RLock()
+	if v, hit := a.ghCache[key]; hit {
+		a.ghMu.RUnlock()
+		return v
+	}
+	a.ghMu.RUnlock()
+
+	info, err := gh.Fetch(a.ghRunner, owner, repo)
+	if err != nil {
+		return GitHubView{Available: false} // do not cache failures - retry next time
+	}
+	v := GitHubView{CI: info.CI, PRs: info.PRs, Issues: info.Issues, Available: info.Available}
+	a.ghMu.Lock()
+	if a.ghCache == nil {
+		a.ghCache = map[string]GitHubView{}
+	}
+	a.ghCache[key] = v
+	a.ghMu.Unlock()
+	return v
 }

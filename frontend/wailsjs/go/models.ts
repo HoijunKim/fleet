@@ -73,6 +73,24 @@ export namespace main {
 	        this.count = source["count"];
 	    }
 	}
+	export class GitHubView {
+	    ci: string;
+	    prs: number;
+	    issues: number;
+	    available: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GitHubView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ci = source["ci"];
+	        this.prs = source["prs"];
+	        this.issues = source["issues"];
+	        this.available = source["available"];
+	    }
+	}
 	export class GraphEdge {
 	    from: string;
 	    to: string;
