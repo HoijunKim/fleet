@@ -315,6 +315,26 @@ export namespace main {
 	        this.text = source["text"];
 	    }
 	}
+	export class SymbolsView {
+	    goMainPkgs: string[];
+	    goExported: string[];
+	    npmScripts: string[];
+	    npmBin: string[];
+	    truncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SymbolsView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.goMainPkgs = source["goMainPkgs"];
+	        this.goExported = source["goExported"];
+	        this.npmScripts = source["npmScripts"];
+	        this.npmBin = source["npmBin"];
+	        this.truncated = source["truncated"];
+	    }
+	}
 
 }
 

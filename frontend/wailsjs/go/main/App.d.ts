@@ -55,6 +55,8 @@ export function RemoveEdge(arg1:string):Promise<string>;
 
 export function RepoGraph():Promise<main.GraphView>;
 
+export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
+
 export function RevealInExplorer(arg1:string):Promise<string>;
 
 export function RunCommand(arg1:string,arg2:string):Promise<string>;

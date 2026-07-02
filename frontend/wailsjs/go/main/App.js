@@ -106,6 +106,10 @@ export function RepoGraph() {
   return window['go']['main']['App']['RepoGraph']();
 }
 
+export function RepoSymbols(arg1) {
+  return window['go']['main']['App']['RepoSymbols'](arg1);
+}
+
 export function RevealInExplorer(arg1) {
   return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
