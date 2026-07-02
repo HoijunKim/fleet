@@ -43,6 +43,8 @@ export function Pull(arg1:string):Promise<string>;
 
 export function Push(arg1:string):Promise<string>;
 
+export function RepoGraph():Promise<main.GraphView>;
+
 export function RevealInExplorer(arg1:string):Promise<string>;
 
 export function RunCommand(arg1:string,arg2:string):Promise<string>;
@@ -50,6 +52,8 @@ export function RunCommand(arg1:string,arg2:string):Promise<string>;
 export function SaveConfig(arg1:config.Config):Promise<string>;
 
 export function ScanRepos():Promise<Array<main.RepoView>>;
+
+export function SetTags(arg1:string,arg2:Array<string>):Promise<string>;
 
 export function Stash(arg1:string):Promise<string>;
 

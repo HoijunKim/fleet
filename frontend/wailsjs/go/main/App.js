@@ -82,6 +82,10 @@ export function Push(arg1) {
   return window['go']['main']['App']['Push'](arg1);
 }
 
+export function RepoGraph() {
+  return window['go']['main']['App']['RepoGraph']();
+}
+
 export function RevealInExplorer(arg1) {
   return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
@@ -96,6 +100,10 @@ export function SaveConfig(arg1) {
 
 export function ScanRepos() {
   return window['go']['main']['App']['ScanRepos']();
+}
+
+export function SetTags(arg1, arg2) {
+  return window['go']['main']['App']['SetTags'](arg1, arg2);
 }
 
 export function Stash(arg1) {

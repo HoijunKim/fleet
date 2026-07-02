@@ -73,6 +73,70 @@ export namespace main {
 	        this.count = source["count"];
 	    }
 	}
+	export class GraphEdge {
+	    from: string;
+	    to: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GraphEdge(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.from = source["from"];
+	        this.to = source["to"];
+	    }
+	}
+	export class GraphNode {
+	    id: string;
+	    name: string;
+	    tags: string[];
+	    isGit: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GraphNode(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.tags = source["tags"];
+	        this.isGit = source["isGit"];
+	    }
+	}
+	export class GraphView {
+	    nodes: GraphNode[];
+	    edges: GraphEdge[];
+	
+	    static createFrom(source: any = {}) {
+	        return new GraphView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodes = this.convertValues(source["nodes"], GraphNode);
+	        this.edges = this.convertValues(source["edges"], GraphEdge);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TaskView {
 	    id: string;
 	    title: string;

@@ -11,6 +11,7 @@ import (
 
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/config"
+	"github.com/hoijun/fleet/internal/deps"
 	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/meta"
 	"github.com/hoijun/fleet/internal/repo"
@@ -378,6 +379,56 @@ func (a *App) DeleteTask(projectID, taskID string) string {
 		}
 		r.Tasks = kept
 	}))
+}
+
+// SetTags sets a project's tags.
+func (a *App) SetTags(id string, tags []string) string {
+	if tags == nil {
+		tags = []string{}
+	}
+	return errMsg(a.store.Update(id, func(r *store.Record) { r.Tags = tags }))
+}
+
+// GraphNode/GraphEdge/GraphView are the JS-facing dependency graph.
+type GraphNode struct {
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Tags  []string `json:"tags"`
+	IsGit bool     `json:"isGit"`
+}
+type GraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+type GraphView struct {
+	Nodes []GraphNode `json:"nodes"`
+	Edges []GraphEdge `json:"edges"`
+}
+
+// RepoGraph builds the dependency graph over discovered git repos (nodes) and
+// their go.mod/package.json cross-dependencies (edges). Tags come from the store.
+func (a *App) RepoGraph() GraphView {
+	cfg := a.cfgSnapshot()
+	repos := scan.Discover(cfg.Roots, cfg.ScanDepth, false) // git repos only
+	refs := make([]deps.RepoRef, 0, len(repos))
+	for _, r := range repos {
+		refs = append(refs, deps.RepoRef{ID: r.Path, Path: r.Path, Name: r.Name})
+	}
+	g := deps.BuildGraph(refs)
+	snap := a.store.Snapshot()
+	nodes := make([]GraphNode, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		tags := snap[n.ID].Tags
+		if tags == nil {
+			tags = []string{}
+		}
+		nodes = append(nodes, GraphNode{ID: n.ID, Name: n.Name, Tags: tags, IsGit: true})
+	}
+	edges := make([]GraphEdge, 0, len(g.Edges))
+	for _, e := range g.Edges {
+		edges = append(edges, GraphEdge{From: e.From, To: e.To})
+	}
+	return GraphView{Nodes: nodes, Edges: edges}
 }
 
 // CommitActivity returns per-day commit counts for the heatmap.

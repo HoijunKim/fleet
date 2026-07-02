@@ -241,6 +241,29 @@ func TestMutationsPersistViaUpdate(t *testing.T) {
 	}
 }
 
+func TestSetTagsRoundTrip(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	if msg := a.SetTags(id, []string{"work", "urgent"}); msg != "" {
+		t.Fatalf("SetTags: %s", msg)
+	}
+	tags := a.GetProject(id).Tags
+	if len(tags) != 2 || tags[0] != "work" {
+		t.Errorf("tags not persisted: %v", tags)
+	}
+}
+
+func TestSetTagsNilCoerced(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	if msg := a.SetTags(id, nil); msg != "" {
+		t.Fatalf("SetTags nil: %s", msg)
+	}
+	if a.GetProject(id).Tags == nil {
+		t.Error("Tags should never be nil in the view")
+	}
+}
+
 // helpers
 func (a *App) addTaskReturnID(t *testing.T, projectID, title string) string {
 	t.Helper()
