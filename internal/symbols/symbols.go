@@ -60,16 +60,18 @@ func Extract(dir string) SymbolSet {
 			return nil
 		}
 
+		// Cap on non-test .go files VISITED (not just successfully parsed) so a
+		// tree full of unparseable .go files still stops the walk at the bound.
 		if parsedCount >= maxGoFiles {
 			truncated = true
 			return filepath.SkipAll
 		}
+		parsedCount++
 
 		file, perr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 		if perr != nil {
 			return nil
 		}
-		parsedCount++
 
 		if file.Name.Name == "main" {
 			rel, rerr := filepath.Rel(dir, filepath.Dir(path))

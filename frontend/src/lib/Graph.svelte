@@ -136,11 +136,15 @@
     }
 
     // Manual edges (from RepoGraph) don't carry their own id, so match them
-    // back to ListEdges() by "from to kind" to find the id used for delete.
+    // back to ListEdges() by from/to/kind to find the id used for delete. The
+    // key is a JSON tuple so a repo path containing spaces (common on Windows)
+    // can never make two distinct edges collide into one key.
+    const edgeKey = (from: string, to: string, kind: string) =>
+      JSON.stringify([from, to, kind]);
     const idMap = new Map<string, string>();
     for (const me of rawManual) {
       if (!me || !me.from || !me.to) continue;
-      idMap.set(me.from + " " + me.to + " " + (me.kind || ""), me.id || "");
+      idMap.set(edgeKey(me.from, me.to, me.kind || ""), me.id || "");
     }
 
     const es: SimEdge[] = [];
@@ -150,7 +154,7 @@
       if (!ids.has(e.from) || !ids.has(e.to)) continue;
       const manual = !!e.manual;
       const kind = e.kind || "";
-      const id = manual ? (idMap.get(e.from + " " + e.to + " " + kind) || "") : "";
+      const id = manual ? (idMap.get(edgeKey(e.from, e.to, kind)) || "") : "";
       es.push({ from: e.from, to: e.to, manual, kind, id });
     }
 
