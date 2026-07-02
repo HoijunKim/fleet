@@ -88,6 +88,10 @@
     return out;
   })();
 
+  // If the selected tag filter no longer exists on any project (e.g. its last
+  // instance was removed), reset it so the list can't get stuck empty.
+  $: if (tagFilter !== "all" && !projects.some((p) => (p.tags || []).includes(tagFilter))) tagFilter = "all";
+
   $: visible = (() => {
     if (!sortKey) return filtered;
     const dir = sortDir === "asc" ? 1 : -1;
