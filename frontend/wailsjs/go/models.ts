@@ -73,6 +73,26 @@ export namespace main {
 	        this.count = source["count"];
 	    }
 	}
+	export class EdgeView {
+	    id: string;
+	    from: string;
+	    to: string;
+	    kind: string;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EdgeView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.kind = source["kind"];
+	        this.note = source["note"];
+	    }
+	}
 	export class GitHubView {
 	    ci: string;
 	    prs: number;
@@ -94,6 +114,8 @@ export namespace main {
 	export class GraphEdge {
 	    from: string;
 	    to: string;
+	    manual: boolean;
+	    kind: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new GraphEdge(source);
@@ -103,6 +125,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.from = source["from"];
 	        this.to = source["to"];
+	        this.manual = source["manual"];
+	        this.kind = source["kind"];
 	    }
 	}
 	export class GraphNode {
@@ -289,6 +313,26 @@ export namespace main {
 	        this.file = source["file"];
 	        this.line = source["line"];
 	        this.text = source["text"];
+	    }
+	}
+	export class SymbolsView {
+	    goMainPkgs: string[];
+	    goExported: string[];
+	    npmScripts: string[];
+	    npmBin: string[];
+	    truncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SymbolsView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.goMainPkgs = source["goMainPkgs"];
+	        this.goExported = source["goExported"];
+	        this.npmScripts = source["npmScripts"];
+	        this.npmBin = source["npmBin"];
+	        this.truncated = source["truncated"];
 	    }
 	}
 

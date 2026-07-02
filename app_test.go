@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hoijun/fleet/internal/config"
+	"github.com/hoijun/fleet/internal/edges"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/store"
 )
@@ -151,9 +152,13 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ed, err := edges.Open(filepath.Join(t.TempDir(), "edges.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
 	cfg.Roots = []string{t.TempDir()} // hermetic: scan an empty temp dir, not the real ~/Projects
-	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st}
+	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, edges: ed}
 }
 
 func TestAddAndListManualProject(t *testing.T) {
@@ -409,4 +414,94 @@ func TestGitHubInfoDoesNotCacheFailure(t *testing.T) {
 	if calls <= first {
 		t.Errorf("failed fetch must not be cached; second call should retry (calls %d -> %d)", first, calls)
 	}
+}
+
+func TestEdgeBindingsRoundTrip(t *testing.T) {
+	a := newTestApp(t)
+	if msg := a.AddEdge("/a", "/b", "http", "n"); msg != "" {
+		t.Fatalf("AddEdge: %s", msg)
+	}
+	list := a.ListEdges()
+	if len(list) != 1 || list[0].From != "/a" || list[0].Kind != "http" {
+		t.Fatalf("list=%+v", list)
+	}
+	if msg := a.AddEdge("/a", "/a", "http", ""); msg == "" {
+		t.Error("self-edge must be rejected")
+	}
+	if msg := a.RemoveEdge(list[0].ID); msg != "" {
+		t.Fatalf("RemoveEdge: %s", msg)
+	}
+	if len(a.ListEdges()) != 0 {
+		t.Error("edge not removed")
+	}
+}
+
+func TestListEdgesNonNil(t *testing.T) {
+	a := newTestApp(t)
+	if a.ListEdges() == nil {
+		t.Error("ListEdges must be non-nil")
+	}
+}
+
+func TestEdgeBindingsNilStoreDoesNotPanic(t *testing.T) {
+	a := &App{cfg: config.Default(), runner: fakeRunner{out: map[string]string{}}}
+	if got := a.ListEdges(); got == nil || len(got) != 0 {
+		t.Errorf("ListEdges with nil store must be non-nil empty, got %v", got)
+	}
+	if msg := a.AddEdge("/a", "/b", "http", ""); msg == "" {
+		t.Error("AddEdge with nil store must return an error message")
+	}
+	if msg := a.RemoveEdge("x"); msg == "" {
+		t.Error("RemoveEdge with nil store must return an error message")
+	}
+}
+
+func TestRepoGraphFiltersDanglingManualEdge(t *testing.T) {
+	// newTestApp's config root is an empty temp dir, so RepoGraph discovers
+	// zero repos/nodes. A manual edge between two non-existent node ids must
+	// therefore be filtered out of the merged graph.
+	a := newTestApp(t)
+	if msg := a.AddEdge("/x", "/y", "http", ""); msg != "" {
+		t.Fatalf("AddEdge: %s", msg)
+	}
+	g := a.RepoGraph()
+	for _, e := range g.Edges {
+		if e.Manual {
+			t.Errorf("dangling manual edge must be filtered, got %+v", e)
+		}
+	}
+}
+
+func TestRepoSymbolsCaches(t *testing.T) {
+	dir := t.TempDir()
+	goFile := filepath.Join(dir, "foo.go")
+	if err := os.WriteFile(goFile, []byte("package foo\n\nfunc Exported() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newTestApp(t)
+	v1 := a.RepoSymbols(dir)
+	if !containsString(v1.GoExported, "Exported") {
+		t.Fatalf("v1.GoExported = %v, want it to contain Exported", v1.GoExported)
+	}
+
+	// Overwrite the source so a fresh extract would no longer find Exported.
+	// (Overwrite rather than os.Remove to avoid flaky Windows file-lock removes.)
+	if err := os.WriteFile(goFile, []byte("package foo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := a.RepoSymbols(dir)
+	if !containsString(v2.GoExported, "Exported") {
+		t.Fatalf("v2.GoExported = %v, want it to still contain Exported (served from cache)", v2.GoExported)
+	}
+}
+
+func containsString(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }

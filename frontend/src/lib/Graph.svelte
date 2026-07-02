@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { RepoGraph } from "../../wailsjs/go/main/App";
+  import { RepoGraph, AddEdge, RemoveEdge, ListEdges } from "../../wailsjs/go/main/App";
   import { tagColor } from "./pm";
   import { toastError } from "./toasts";
 
@@ -27,13 +27,38 @@
     fy: number; // force accumulator (y)
     pinned: boolean; // held still while dragged
   };
-  type SimEdge = { from: string; to: string };
-  type Seg = { x1: number; y1: number; x2: number; y2: number; from: string; to: string };
+  type SimEdge = { from: string; to: string; manual: boolean; kind: string; id: string };
+  type Seg = {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    from: string;
+    to: string;
+    manual: boolean;
+    kind: string;
+    id: string;
+  };
 
   let nodes: SimNode[] = [];
   let edges: SimEdge[] = [];
   let byId = new Map<string, SimNode>();
   let loading = true;
+
+  // Fixed colors for manual-edge kinds (falls back to var(--border) for an
+  // unrecognized/blank kind).
+  const KIND_COLORS: Record<string, string> = {
+    http: "#6ea8fe",
+    db: "#f5a623",
+    "deploy-after": "#7ee787",
+    related: "#d2a8ff",
+  };
+  const EDGE_KINDS = ["http", "db", "deploy-after", "related"];
+
+  // ---- connect mode (draw/delete manual edges) ------------------------------
+  let connectMode = false;
+  let pendingFrom: string | null = null;
+  let pendingTarget: string | null = null;
 
   // ---- force-simulation tuning ---------------------------------------------
   // O(n^2) pairwise repulsion is fine for the tens-to-low-hundreds of repos
@@ -81,10 +106,13 @@
   }
 
   // Build the simulation model from a GraphView. Crash-safe on missing/empty
-  // fields and drops edges that reference an unknown node.
-  function build(view: any) {
+  // fields and drops edges that reference an unknown node. `edgeList` (from
+  // ListEdges()) is used only to resolve manual edges back to their id, since
+  // RepoGraph()'s edges carry manual/kind but not id.
+  function build(view: any, edgeList?: any[]) {
     const rawNodes: any[] = (view && Array.isArray(view.nodes)) ? view.nodes : [];
     const rawEdges: any[] = (view && Array.isArray(view.edges)) ? view.edges : [];
+    const rawManual: any[] = Array.isArray(edgeList) ? edgeList : [];
 
     const ids = new Set<string>();
     const tmp: SimNode[] = [];
@@ -107,12 +135,27 @@
       });
     }
 
+    // Manual edges (from RepoGraph) don't carry their own id, so match them
+    // back to ListEdges() by from/to/kind to find the id used for delete. The
+    // key is a JSON tuple so a repo path containing spaces (common on Windows)
+    // can never make two distinct edges collide into one key.
+    const edgeKey = (from: string, to: string, kind: string) =>
+      JSON.stringify([from, to, kind]);
+    const idMap = new Map<string, string>();
+    for (const me of rawManual) {
+      if (!me || !me.from || !me.to) continue;
+      idMap.set(edgeKey(me.from, me.to, me.kind || ""), me.id || "");
+    }
+
     const es: SimEdge[] = [];
     for (const e of rawEdges) {
       if (!e || !e.from || !e.to) continue;
       if (e.from === e.to) continue; // no self-loops
       if (!ids.has(e.from) || !ids.has(e.to)) continue;
-      es.push({ from: e.from, to: e.to });
+      const manual = !!e.manual;
+      const kind = e.kind || "";
+      const id = manual ? (idMap.get(edgeKey(e.from, e.to, kind)) || "") : "";
+      es.push({ from: e.from, to: e.to, manual, kind, id });
     }
 
     // Radius scales with in-degree (how many repos depend on this one), so
@@ -125,10 +168,22 @@
     }
 
     // Seed positions deterministically on a circle (index-based angle, never
-    // Math.random). A single node sits at the origin.
+    // Math.random). A single node sits at the origin. On a reload (add/remove
+    // edge) keep the already-settled/dragged position of any node that still
+    // exists, so the layout doesn't snap back to the circle on every action;
+    // only genuinely-new node ids get the circle seed.
+    const prev = byId;
     const count = tmp.length;
     const spread = 60 + count * 12;
     tmp.forEach((n, i) => {
+      const old = prev.get(n.id);
+      if (old) {
+        n.x = old.x;
+        n.y = old.y;
+        n.vx = old.vx;
+        n.vy = old.vy;
+        return;
+      }
       if (count === 1) {
         n.x = 0;
         n.y = 0;
@@ -334,7 +389,13 @@
   function onUp(e: PointerEvent) {
     if (mode === "drag" && dragNode) {
       dragNode.pinned = false;
-      if (!moved) onOpen(dragNode.id); // a click (no drag) opens the repo
+      if (!moved) {
+        if (!connectMode) {
+          onOpen(dragNode.id); // a click (no drag) opens the repo
+        } else {
+          onNodeClickConnect(dragNode.id);
+        }
+      }
     }
     mode = "";
     dragNode = null;
@@ -344,6 +405,70 @@
       } catch (_) {
         /* pointer already released */
       }
+    }
+  }
+
+  // ---- connect mode ----------------------------------------------------
+  // Node click routing while connectMode is on: first click picks the source
+  // (highlighted), second click on a different node opens the kind picker,
+  // clicking the source again cancels.
+  function onNodeClickConnect(id: string) {
+    if (pendingFrom === null) {
+      pendingFrom = id;
+      pendingTarget = null;
+    } else if (id === pendingFrom) {
+      pendingFrom = null;
+      pendingTarget = null;
+    } else {
+      pendingTarget = id;
+    }
+  }
+
+  function toggleConnect() {
+    connectMode = !connectMode;
+    if (!connectMode) {
+      pendingFrom = null;
+      pendingTarget = null;
+    }
+  }
+
+  function cancelPending() {
+    pendingFrom = null;
+    pendingTarget = null;
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === "Escape" && (pendingFrom !== null || pendingTarget !== null)) {
+      cancelPending();
+    }
+  }
+
+  async function chooseKind(kind: string) {
+    const from = pendingFrom;
+    const to = pendingTarget;
+    try {
+      if (from && to) {
+        const msg = await AddEdge(from, to, kind, "");
+        if (msg) toastError(msg);
+        else await reload();
+      }
+    } catch (err) {
+      toastError("Add edge: " + (err && (err as any).message ? (err as any).message : String(err)));
+    } finally {
+      pendingFrom = null;
+      pendingTarget = null;
+    }
+  }
+
+  async function onEdgeClick(s: Seg) {
+    if (!connectMode || !s.manual || !s.id) return;
+    if (!confirm("Remove this manual edge?")) return;
+    try {
+      const msg = await RemoveEdge(s.id);
+      if (msg) toastError(msg);
+      else await reload();
+    } catch (err) {
+      toastError("Remove edge: " + (err && (err as any).message ? (err as any).message : String(err)));
     }
   }
 
@@ -370,6 +495,9 @@
         y2: b.y - uy * (b.r + 5),
         from: e.from,
         to: e.to,
+        manual: e.manual,
+        kind: e.kind,
+        id: e.id,
       });
     }
     return out;
@@ -378,23 +506,41 @@
   $: segments = computeSegments(nodes, edges);
 
   // -------------------------------------------------------------------------
-  onMount(async () => {
+  // (Re)loads the graph + manual-edge id map and restarts the settle. Used
+  // for the initial mount and after every successful AddEdge/RemoveEdge, so
+  // it never touches the pan/zoom transform (only onMount centers the view).
+  async function reload() {
+    let view: any = null;
     try {
-      const view = await RepoGraph();
-      build(view);
+      view = await RepoGraph();
     } catch (err) {
-      build(null);
       toastError("Load graph: " + (err && (err as any).message ? (err as any).message : String(err)));
     }
+    let el: any[] = [];
+    try {
+      el = (await ListEdges()) || [];
+    } catch (_) {
+      el = [];
+    }
+    build(view, el);
+    // Restart the settle (mirrors onMount's post-build sim start) so
+    // new/removed edges pull the layout without a full remount.
+    iter = 0;
+    alpha = 1;
+    if (!destroyed && nodes.length > 0 && !rafId) {
+      rafId = requestAnimationFrame(frame);
+    }
+  }
+
+  onMount(async () => {
+    await reload();
     loading = false;
-    // Center the origin, then let the simulation settle and auto-fit.
+    // Center the origin on first load; the simulation (already started by
+    // reload()) settles and auto-fits itself.
     const { w, h } = viewSize();
     tx = w / 2;
     ty = h / 2;
     scale = 1;
-    if (nodes.length > 0) {
-      rafId = requestAnimationFrame(frame);
-    }
   });
 
   onDestroy(() => {
@@ -403,6 +549,8 @@
     rafId = 0;
   });
 </script>
+
+<svelte:window on:keydown={onKeyDown} />
 
 <div class="graph" bind:this={containerEl}>
   {#if loading}
@@ -418,6 +566,7 @@
   {:else}
     <svg
       class="graph-svg"
+      class:connect={connectMode}
       bind:this={svgEl}
       on:pointerdown={onBgDown}
       on:pointermove={onMove}
@@ -444,17 +593,32 @@
         {#each segments as s}
           <line
             class="edge"
+            class:manual={s.manual}
             class:hot={s.from === hoveredId || s.to === hoveredId}
             x1={s.x1}
             y1={s.y1}
             x2={s.x2}
             y2={s.y2}
             marker-end="url(#graph-arrow)"
+            style={s.manual ? `stroke: ${KIND_COLORS[s.kind] || "var(--border)"}` : undefined}
           />
+          {#if connectMode && s.manual && s.id}
+            <line
+              class="edge-hit"
+              x1={s.x1}
+              y1={s.y1}
+              x2={s.x2}
+              y2={s.y2}
+              stroke="transparent"
+              stroke-width="12"
+              style="cursor:pointer"
+              on:click={() => onEdgeClick(s)}
+            />
+          {/if}
         {/each}
 
         {#each nodes as nd (nd.id)}
-          <g class="node" class:hot={nd.id === hoveredId}>
+          <g class="node" class:hot={nd.id === hoveredId} class:pending={nd.id === pendingFrom}>
             <circle
               class="node-dot"
               cx={nd.x}
@@ -479,12 +643,37 @@
       <div class="graph-legend">
         <span class="graph-count">{nodes.length} repos</span>
         <span class="graph-sep"></span>
-        <span class="graph-hint-text">arrows point to dependencies</span>
+        <span class="graph-hint-text">
+          {#if connectMode}
+            {#if pendingFrom}
+              pick a target repo (Escape to cancel)
+            {:else}
+              click a repo to start a connection
+            {/if}
+          {:else}
+            arrows point to dependencies
+          {/if}
+        </span>
       </div>
       <div class="graph-controls">
+        <button class="btn btn-secondary btn-sm" class:active={connectMode} on:click={toggleConnect}>Connect</button>
         <button class="btn btn-secondary btn-sm" on:click={fitView}>Fit</button>
       </div>
     </div>
+
+    {#if connectMode && pendingFrom && pendingTarget}
+      <div class="graph-kindpick">
+        <span class="graph-kindpick-text">
+          connect {byId.get(pendingFrom)?.name || pendingFrom} -> {byId.get(pendingTarget)?.name || pendingTarget}
+        </span>
+        <div class="graph-kindpick-btns">
+          {#each EDGE_KINDS as k}
+            <button class="btn btn-secondary btn-sm" on:click={() => chooseKind(k)}>{k}</button>
+          {/each}
+          <button class="btn btn-secondary btn-sm" on:click={cancelPending}>Cancel</button>
+        </div>
+      </div>
+    {/if}
 
     {#if edges.length === 0}
       <div class="graph-note">No dependencies detected between repos</div>
@@ -513,8 +702,12 @@
   .graph-svg:active {
     cursor: grabbing;
   }
+  .graph-svg.connect .node-dot {
+    cursor: crosshair;
+  }
 
-  /* Edges: subtle by default, brighten when touching the hovered node. */
+  /* Edges: subtle by default, brighten when touching the hovered node. Manual
+     edges are dashed and colored by kind (see KIND_COLORS / inline style). */
   .edge {
     stroke: var(--border);
     stroke-width: 1.4;
@@ -525,6 +718,17 @@
   .edge.hot {
     stroke: var(--accent);
     opacity: 1;
+  }
+  .edge.manual {
+    stroke-width: 1.8;
+    stroke-dasharray: 6 4;
+    opacity: 0.9;
+  }
+  .edge.manual.hot {
+    opacity: 1;
+  }
+  .edge-hit {
+    pointer-events: auto;
   }
 
   :global(#graph-arrow path) {
@@ -540,6 +744,13 @@
   .node.hot .node-dot {
     stroke: var(--accent);
     stroke-width: 3;
+  }
+  .node.pending .node-dot {
+    stroke: #e3b341;
+    stroke-width: 4;
+  }
+  .node.pending .node-label {
+    fill: #e3b341;
   }
 
   .node-label {
@@ -624,6 +835,11 @@
     gap: 8px;
     pointer-events: auto;
   }
+  .graph-controls .btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(110, 168, 254, 0.35);
+  }
 
   .graph-note {
     position: absolute;
@@ -639,5 +855,32 @@
     box-shadow: var(--shadow);
     pointer-events: none;
     white-space: nowrap;
+  }
+
+  /* Kind picker: shown once a connect-mode source and target are both picked. */
+  .graph-kindpick {
+    position: absolute;
+    top: 58px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+    z-index: 5;
+  }
+  .graph-kindpick-text {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .graph-kindpick-btns {
+    display: inline-flex;
+    gap: 6px;
   }
 </style>

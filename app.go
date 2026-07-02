@@ -13,12 +13,14 @@ import (
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/deps"
+	"github.com/hoijun/fleet/internal/edges"
 	"github.com/hoijun/fleet/internal/gh"
 	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/meta"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/scan"
 	"github.com/hoijun/fleet/internal/store"
+	"github.com/hoijun/fleet/internal/symbols"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -32,6 +34,9 @@ type App struct {
 	ghRunner gh.Runner
 	ghCache  map[string]GitHubView
 	ghMu     sync.RWMutex
+	edges    *edges.Store
+	symCache map[string]SymbolsView
+	symMu    sync.RWMutex
 }
 
 // NewApp builds the App with the real git runner and loaded config.
@@ -39,7 +44,9 @@ func NewApp() *App {
 	cfg, cfgPath, _ := config.Load()
 	storePath := filepath.Join(filepath.Dir(cfgPath), "projects.json")
 	st, _ := store.Open(storePath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}}
+	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
+	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -402,8 +409,10 @@ type GraphNode struct {
 	IsGit bool     `json:"isGit"`
 }
 type GraphEdge struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Manual bool   `json:"manual"`
+	Kind   string `json:"kind"`
 }
 type GraphView struct {
 	Nodes []GraphNode `json:"nodes"`
@@ -429,11 +438,22 @@ func (a *App) RepoGraph() GraphView {
 		}
 		nodes = append(nodes, GraphNode{ID: n.ID, Name: n.Name, Tags: tags, IsGit: true})
 	}
-	edges := make([]GraphEdge, 0, len(g.Edges))
+	graphEdges := make([]GraphEdge, 0, len(g.Edges))
 	for _, e := range g.Edges {
-		edges = append(edges, GraphEdge{From: e.From, To: e.To})
+		graphEdges = append(graphEdges, GraphEdge{From: e.From, To: e.To, Manual: false, Kind: ""})
 	}
-	return GraphView{Nodes: nodes, Edges: edges}
+	if a.edges != nil {
+		nodeIDs := make(map[string]bool, len(nodes))
+		for _, n := range nodes {
+			nodeIDs[n.ID] = true
+		}
+		for _, me := range a.edges.List() {
+			if nodeIDs[me.From] && nodeIDs[me.To] {
+				graphEdges = append(graphEdges, GraphEdge{From: me.From, To: me.To, Manual: true, Kind: me.Kind})
+			}
+		}
+	}
+	return GraphView{Nodes: nodes, Edges: graphEdges}
 }
 
 // SearchHit is one cross-repo search result.
@@ -518,4 +538,81 @@ func (a *App) GitHubInfo(remote string) GitHubView {
 	a.ghCache[key] = v
 	a.ghMu.Unlock()
 	return v
+}
+
+// SymbolsView is a repo's symbol summary for the front end.
+type SymbolsView struct {
+	GoMainPkgs []string `json:"goMainPkgs"`
+	GoExported []string `json:"goExported"`
+	NpmScripts []string `json:"npmScripts"`
+	NpmBin     []string `json:"npmBin"`
+	Truncated  bool     `json:"truncated"`
+}
+
+// RepoSymbols returns a repo's symbol summary (cached per path). The first
+// call for a given path extracts and caches; subsequent calls for the same
+// path are served from the cache without touching disk again.
+func (a *App) RepoSymbols(path string) SymbolsView {
+	a.symMu.RLock()
+	if v, hit := a.symCache[path]; hit {
+		a.symMu.RUnlock()
+		return v
+	}
+	a.symMu.RUnlock()
+
+	set := symbols.Extract(path)
+	v := SymbolsView{
+		GoMainPkgs: set.GoMainPkgs,
+		GoExported: set.GoExported,
+		NpmScripts: set.NpmScripts,
+		NpmBin:     set.NpmBin,
+		Truncated:  set.Truncated,
+	}
+	a.symMu.Lock()
+	if a.symCache == nil {
+		a.symCache = map[string]SymbolsView{}
+	}
+	a.symCache[path] = v
+	a.symMu.Unlock()
+	return v
+}
+
+// EdgeView is the JS-facing manual repo graph edge.
+type EdgeView struct {
+	ID   string `json:"id"`
+	From string `json:"from"`
+	To   string `json:"to"`
+	Kind string `json:"kind"`
+	Note string `json:"note"`
+}
+
+// ListEdges returns all manual edges (non-nil, even when the edge store
+// failed to open).
+func (a *App) ListEdges() []EdgeView {
+	out := []EdgeView{}
+	if a.edges == nil {
+		return out
+	}
+	for _, e := range a.edges.List() {
+		out = append(out, EdgeView{ID: e.ID, From: e.From, To: e.To, Kind: e.Kind, Note: e.Note})
+	}
+	return out
+}
+
+// AddEdge creates a manual edge between two repos and returns "" on success,
+// or the error text on failure (including when the edge store is unavailable).
+func (a *App) AddEdge(from, to, kind, note string) string {
+	if a.edges == nil {
+		return "edges unavailable"
+	}
+	_, err := a.edges.Add(from, to, kind, note)
+	return errMsg(err)
+}
+
+// RemoveEdge deletes a manual edge by id.
+func (a *App) RemoveEdge(id string) string {
+	if a.edges == nil {
+		return "edges unavailable"
+	}
+	return errMsg(a.edges.Remove(id))
 }

@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {config} from '../models';
 
+export function AddEdge(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function AddProject(arg1:string):Promise<string>;
 
 export function AddTask(arg1:string,arg2:string,arg3:string):Promise<string>;
@@ -29,6 +31,8 @@ export function GetProject(arg1:string):Promise<main.ProjectView>;
 
 export function GitHubInfo(arg1:string):Promise<main.GitHubView>;
 
+export function ListEdges():Promise<Array<main.EdgeView>>;
+
 export function ListProjects():Promise<Array<main.ProjectView>>;
 
 export function LoadRepo(arg1:string):Promise<main.RepoView>;
@@ -47,7 +51,11 @@ export function Pull(arg1:string):Promise<string>;
 
 export function Push(arg1:string):Promise<string>;
 
+export function RemoveEdge(arg1:string):Promise<string>;
+
 export function RepoGraph():Promise<main.GraphView>;
+
+export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
 
 export function RevealInExplorer(arg1:string):Promise<string>;
 
