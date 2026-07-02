@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hoijun/fleet/internal/config"
@@ -321,5 +322,37 @@ func TestSearchAllAssembles(t *testing.T) {
 	}
 	if hits[0].Repo != "myrepo" || hits[0].File != "main.go" || hits[0].Line != 1 {
 		t.Errorf("hit=%+v", hits[0])
+	}
+}
+
+type ghFakeApp struct{}
+
+func (ghFakeApp) Run(args ...string) (string, error) {
+	j := strings.Join(args, " ")
+	switch {
+	case strings.Contains(j, "actions/runs"):
+		return "failure\n", nil
+	case strings.Contains(j, "type:pr"):
+		return "1\n", nil
+	case strings.Contains(j, "type:issue"):
+		return "3\n", nil
+	}
+	return "", nil
+}
+
+func TestGitHubInfoParsesAndCaches(t *testing.T) {
+	a := newTestApp(t)
+	a.ghRunner = ghFakeApp{}
+	v := a.GitHubInfo("git@github.com:hoijun/fleet.git")
+	if !v.Available || v.CI != "failure" || v.PRs != 1 || v.Issues != 3 {
+		t.Errorf("view=%+v", v)
+	}
+}
+
+func TestGitHubInfoNoRemote(t *testing.T) {
+	a := newTestApp(t)
+	a.ghRunner = ghFakeApp{}
+	if v := a.GitHubInfo(""); v.Available {
+		t.Error("empty remote must be Available=false")
 	}
 }

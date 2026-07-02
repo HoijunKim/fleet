@@ -27,6 +27,8 @@ export function GetConfig():Promise<config.Config>;
 
 export function GetProject(arg1:string):Promise<main.ProjectView>;
 
+export function GitHubInfo(arg1:string):Promise<main.GitHubView>;
+
 export function ListProjects():Promise<Array<main.ProjectView>>;
 
 export function LoadRepo(arg1:string):Promise<main.RepoView>;

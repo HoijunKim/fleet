@@ -50,6 +50,10 @@ export function GetProject(arg1) {
   return window['go']['main']['App']['GetProject'](arg1);
 }
 
+export function GitHubInfo(arg1) {
+  return window['go']['main']['App']['GitHubInfo'](arg1);
+}
+
 export function ListProjects() {
   return window['go']['main']['App']['ListProjects']();
 }
