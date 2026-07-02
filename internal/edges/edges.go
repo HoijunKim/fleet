@@ -93,8 +93,10 @@ func (s *Store) Add(from, to, kind, note string) (Edge, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	prev := s.edges
 	s.edges = append(s.edges, e)
 	if err := s.persistLocked(); err != nil {
+		s.edges = prev // roll back so memory matches the un-written disk state
 		return Edge{}, err
 	}
 
@@ -118,8 +120,18 @@ func (s *Store) Remove(id string) error {
 		return nil
 	}
 
-	s.edges = append(s.edges[:idx], s.edges[idx+1:]...)
-	return s.persistLocked()
+	// Build the result in a fresh slice so a persist failure leaves the
+	// original backing array (and s.edges) untouched.
+	prev := s.edges
+	next := make([]Edge, 0, len(prev)-1)
+	next = append(next, prev[:idx]...)
+	next = append(next, prev[idx+1:]...)
+	s.edges = next
+	if err := s.persistLocked(); err != nil {
+		s.edges = prev // roll back
+		return err
+	}
+	return nil
 }
 
 // AllowedKind reports whether kind is one of the recognized edge kinds.
