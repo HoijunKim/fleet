@@ -356,3 +356,57 @@ func TestGitHubInfoNoRemote(t *testing.T) {
 		t.Error("empty remote must be Available=false")
 	}
 }
+
+type ghCountFake struct{ calls *int }
+
+func (f ghCountFake) Run(args ...string) (string, error) {
+	*f.calls++
+	j := strings.Join(args, " ")
+	switch {
+	case strings.Contains(j, "actions/runs"):
+		return "success\n", nil
+	case strings.Contains(j, "type:pr"):
+		return "1\n", nil
+	case strings.Contains(j, "type:issue"):
+		return "2\n", nil
+	}
+	return "", nil
+}
+
+func TestGitHubInfoCachesSuccess(t *testing.T) {
+	calls := 0
+	a := newTestApp(t)
+	a.ghRunner = ghCountFake{calls: &calls}
+	a.GitHubInfo("git@github.com:o/r.git")
+	first := calls
+	if first == 0 {
+		t.Fatal("first call should have invoked the runner")
+	}
+	a.GitHubInfo("git@github.com:o/r.git") // must hit cache
+	if calls != first {
+		t.Errorf("second call should hit cache; runner calls went %d -> %d", first, calls)
+	}
+}
+
+type ghErrCountFake struct{ calls *int }
+
+func (f ghErrCountFake) Run(args ...string) (string, error) {
+	*f.calls++
+	return "", ghTestErr{}
+}
+
+type ghTestErr struct{}
+
+func (ghTestErr) Error() string { return "gh unavailable" }
+
+func TestGitHubInfoDoesNotCacheFailure(t *testing.T) {
+	calls := 0
+	a := newTestApp(t)
+	a.ghRunner = ghErrCountFake{calls: &calls}
+	a.GitHubInfo("git@github.com:o/r.git")
+	first := calls
+	a.GitHubInfo("git@github.com:o/r.git") // must retry (failure not cached)
+	if calls <= first {
+		t.Errorf("failed fetch must not be cached; second call should retry (calls %d -> %d)", first, calls)
+	}
+}

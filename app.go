@@ -507,12 +507,10 @@ func (a *App) GitHubInfo(remote string) GitHubView {
 	a.ghMu.RUnlock()
 
 	info, err := gh.Fetch(a.ghRunner, owner, repo)
-	v := GitHubView{Available: err == nil && info.Available}
-	if err == nil {
-		v.CI = info.CI
-		v.PRs = info.PRs
-		v.Issues = info.Issues
+	if err != nil {
+		return GitHubView{Available: false} // do not cache failures - retry next time
 	}
+	v := GitHubView{CI: info.CI, PRs: info.PRs, Issues: info.Issues, Available: info.Available}
 	a.ghMu.Lock()
 	if a.ghCache == nil {
 		a.ghCache = map[string]GitHubView{}

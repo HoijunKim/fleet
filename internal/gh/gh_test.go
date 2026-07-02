@@ -10,7 +10,7 @@ func TestOwnerRepo(t *testing.T) {
 		"git@github.com:hoijun/fleet.git":       {"hoijun", "fleet"},
 		"https://github.com/hoijun/fleet.git":   {"hoijun", "fleet"},
 		"https://github.com/hoijun/fleet":       {"hoijun", "fleet"},
-		"ssh://git@github.com/hoijun/fleet.git":  {"hoijun", "fleet"},
+		"ssh://git@github.com/hoijun/fleet.git": {"hoijun", "fleet"},
 	}
 	for remote, want := range cases {
 		o, r, ok := OwnerRepo(remote)
