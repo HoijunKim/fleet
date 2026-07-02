@@ -2,8 +2,8 @@
   export let filter: string = "";
   export let repos: any[] = [];
   export let loadingCount: number = 0;
-  export let view: "overview" | "projects" = "overview";
-  export let onView: (v: "overview" | "projects") => void;
+  export let view: "overview" | "projects" | "graph" = "overview";
+  export let onView: (v: "overview" | "projects" | "graph") => void;
   export let statusFilter: "all" | "dirty" | "behind" = "all";
   export let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   export let highPriorityOnly: boolean = false;
@@ -39,6 +39,9 @@
     </button>
     <button class="view-tab" class:active={view === "projects"} on:click={() => onView("projects")}>
       Projects
+    </button>
+    <button class="view-tab" class:active={view === "graph"} on:click={() => onView("graph")}>
+      Graph
     </button>
   </div>
 

@@ -10,6 +10,7 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import AddProjectModal from "./lib/AddProjectModal.svelte";
   import Overview from "./lib/Overview.svelte";
+  import Graph from "./lib/Graph.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
   import { STATUS_ORDER, deadlineSort, daysUntil } from "./lib/pm";
@@ -28,8 +29,9 @@
   // that were removed) are simply ignored by everything that reads this.
   let selectedIds: Set<string> = new Set();
   let scanned = false;
-  // Top-level view: the fleet-wide Overview (default) or the project list.
-  let view: "overview" | "projects" = "overview";
+  // Top-level view: the fleet-wide Overview (default), the project list, or the
+  // interactive dependency Graph.
+  let view: "overview" | "projects" | "graph" = "overview";
 
   let paletteOpen = false;
   let settingsOpen = false;
@@ -537,7 +539,9 @@
 
     if (typing) return;
     if (paletteOpen || settingsOpen || addOpen || menu) return;
-    // List navigation / repo actions only apply to the Projects view.
+    // List navigation / repo actions (j/k/r/f, "/") only apply to the Projects
+    // view - never to the Overview or Graph views. Ctrl+K and Escape above are
+    // handled before this gate, so they still work everywhere.
     if (view !== "projects") return;
 
     switch (e.key) {
@@ -640,6 +644,8 @@
       bind:diffOpen
     />
   </div>
+{:else if view === "graph"}
+  <Graph onOpen={openFromOverview} />
 {:else}
   <Overview {projects} {stats} {runPool} onOpen={openFromOverview} />
 {/if}
