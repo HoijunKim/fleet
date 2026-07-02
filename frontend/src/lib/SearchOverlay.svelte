@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { SearchAll, OpenEditorAt } from "../../wailsjs/go/main/App";
   import { toastError } from "./toasts";
 
@@ -13,11 +13,11 @@
 
   let query = "";
   let hits: Hit[] = [];
-  // The query string that produced the current `hits` (or "" if none has run
-  // yet). Used to tell "type to search" apart from a real "no results", and
-  // to decide whether Enter should submit a fresh search or open the
-  // highlighted hit.
-  let lastQuery: string | null = null;
+  // The query string that produced the current `hits` (or null if none has
+  // run yet). Set ONLY when a response lands and `hits` is assigned, so the
+  // count/label and Enter's "is this current?" check always match what's
+  // actually shown (never the in-flight query while a search is pending).
+  let resultsQuery: string | null = null;
   let loading = false;
   let selIndex = 0;
   let inputEl: HTMLInputElement;
@@ -60,7 +60,6 @@
 
   async function runSearch(q: string) {
     const term = q.trim();
-    lastQuery = term;
     if (!term) {
       hits = [];
       loading = false;
@@ -72,6 +71,7 @@
       const res = await SearchAll(term);
       if (gen !== reqGen) return;
       hits = res || [];
+      resultsQuery = term;
       selIndex = 0;
     } catch (err) {
       if (gen !== reqGen) return;
@@ -90,7 +90,7 @@
       // cannot land afterward and repopulate `hits` behind the empty state.
       ++reqGen;
       hits = [];
-      lastQuery = null;
+      resultsQuery = null;
       loading = false;
       return;
     }
@@ -98,9 +98,18 @@
     debounceTimer = setTimeout(() => runSearch(q), 250);
   }
 
+  // Cancel any pending debounced search before closing, so a stray
+  // `SearchAll` (and toast) can't fire after the overlay is gone.
+  function close() {
+    if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
+    onClose();
+  }
+
+  onDestroy(() => clearTimeout(debounceTimer));
+
   async function openHit(h: Hit | undefined) {
     if (!h) return;
-    onClose();
+    close();
     const err = await OpenEditorAt(h.repoPath, h.file);
     if (err) toastError("Open editor: " + err);
   }
@@ -117,21 +126,21 @@
     } else if (e.key === "Enter") {
       e.preventDefault();
       const term = query.trim();
-      if (term && term !== lastQuery) {
+      if (!loading && term === resultsQuery) {
+        openHit(hits[selIndex]);
+      } else if (term) {
         if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
         runSearch(query);
-      } else {
-        openHit(hits[selIndex]);
       }
     } else if (e.key === "Escape") {
       e.preventDefault();
-      onClose();
+      close();
     }
   }
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-<div class="overlay" on:click={onClose}>
+<div class="overlay" on:click={close}>
   <div class="cmd-panel search-panel" on:click|stopPropagation>
     <div class="cmd-search">
       <span class="cmd-prompt">&gt;</span>
@@ -150,13 +159,13 @@
     </div>
 
     <div class="search-count">
-      {#if lastQuery}
-        {hits.length} result{hits.length === 1 ? "" : "s"} for "{lastQuery}"
+      {#if resultsQuery}
+        {hits.length} result{hits.length === 1 ? "" : "s"} for "{resultsQuery}"
       {/if}
     </div>
 
     <div class="cmd-list search-list" bind:this={listEl}>
-      {#if lastQuery === null}
+      {#if resultsQuery === null}
         <div class="cmd-empty">Type to search across repos</div>
       {:else if hits.length === 0}
         <div class="cmd-empty">No results</div>
