@@ -9,15 +9,24 @@
   export let path: string = "";
 
   let loadedPath = "";
+  let requestedRemote = "";
   let info: { ci: string; prs: number; issues: number; available: boolean } | null = null;
 
-  // Lazily (re)load GitHub status whenever the selected repo changes. Guarded
-  // by path (not remote), since path is what uniquely identifies the current
-  // selection.
+  // Reset state whenever the selected repo (path) changes. Kept separate from
+  // the load trigger below so a late-arriving remote still fires a load.
   $: if (path !== loadedPath) {
     loadedPath = path;
+    requestedRemote = "";
     info = null;
-    if (remote) load();
+  }
+
+  // Fire the load once a non-empty remote is known for the current selection.
+  // remote is populated asynchronously (LoadRepo / mergeGit via the concurrent
+  // pool), so it may be "" at first mount and arrive after the path guard has
+  // already run - keying on remote here ensures we still load when it does.
+  $: if (remote && remote !== requestedRemote) {
+    requestedRemote = remote;
+    load();
   }
 
   async function load() {
