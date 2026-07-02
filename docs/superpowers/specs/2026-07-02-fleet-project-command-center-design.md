@@ -24,6 +24,9 @@ center for every project, with git as one facet of the code-backed ones.
   task progress, deadline countdown, status, priority.
 - A "Today / Focus" view aggregating across projects: upcoming deadlines, open
   high-priority tasks, and git attention -> what to work on now.
+- A commit-activity heatmap (GitHub contribution-graph style: colored day squares)
+  from local git history - per code project, plus an aggregate heatmap across all
+  code projects in the dashboard. Purely from `git log` dates; no GitHub API.
 
 **Deferred (later phases, explicitly out of v1):**
 - Notion integration (the second axis of the hybrid model).
@@ -74,8 +77,13 @@ Task { id string; title string; done bool; due string /* YYYY-MM-DD or "" */ }
   projects (the store records where `manual == true`).
 - **Bindings (app.go):** `ListProjects() []ProjectView`; `AddProject(name) ...`;
   `UpdateProject(...)` (status/priority/deadline/notes/tags); task ops
-  `AddTask/ToggleTask/DeleteTask`; existing git bindings unchanged. Reads/writes go
-  through `internal/store`; store access is synchronized (RWMutex) like `app.cfg`.
+  `AddTask/ToggleTask/DeleteTask`; `CommitActivity(path, weeks) []DayCount` (for the
+  heatmap); existing git bindings unchanged. Reads/writes go through `internal/store`;
+  store access is synchronized (RWMutex) like `app.cfg`.
+- **Commit activity:** a new git op in `internal/git` runs
+  `git log --since=<weeks> --date=short --pretty=format:%cd` and tallies commits per
+  day, returning `[]DayCount{date, count}`; the front end colors squares by count and
+  sums per-date across code projects for the aggregate heatmap.
 - The existing repo-scan/git/meta pipeline is reused for the git facet of code
   projects.
 
@@ -89,8 +97,12 @@ Task { id string; title string; done bool; due string /* YYYY-MM-DD or "" */ }
   work on now."
 - **Detail panel - project-management section:** task checklist (add / toggle /
   delete), deadline picker, notes, status and priority controls. For code projects
-  this sits alongside the existing git actions (branch/commit/diff/history/stash);
-  manual projects show only the project-management section.
+  this sits alongside the existing git actions (branch/commit/diff/history/stash) and
+  a commit-activity heatmap; manual projects show only the project-management section.
+- **Commit-activity heatmap:** a GitHub-style contribution grid (weeks x 7 days,
+  squares shaded by that day's commit count, with a small legend). Shown per code
+  project in its detail panel, and as an aggregate (summed across all code projects)
+  in the dashboard / Today view.
 - Keep the established premium visual language and ASCII-only text.
 
 ## Error handling
@@ -106,6 +118,8 @@ Task { id string; title string; done bool; due string /* YYYY-MM-DD or "" */ }
 
 - `internal/store`: TDD - load/save round-trip, atomic write, default-on-missing,
   merge of stored project-management data with a discovered repo, task operations.
+- Commit-activity git op: TDD - parse sample `git log` date output into per-day counts
+  (via the `Runner` fake).
 - Bindings: unit-tested against a temp store dir (as `SaveConfig` is), no real Notion
   or network.
 - Front end: build-verified (`wails build`); visual behavior is a manual check.
