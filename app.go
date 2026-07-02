@@ -20,6 +20,7 @@ import (
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/scan"
 	"github.com/hoijun/fleet/internal/store"
+	"github.com/hoijun/fleet/internal/symbols"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -34,6 +35,8 @@ type App struct {
 	ghCache  map[string]GitHubView
 	ghMu     sync.RWMutex
 	edges    *edges.Store
+	symCache map[string]SymbolsView
+	symMu    sync.RWMutex
 }
 
 // NewApp builds the App with the real git runner and loaded config.
@@ -43,7 +46,7 @@ func NewApp() *App {
 	st, _ := store.Open(storePath) // empty store on error; UI still works
 	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
 	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed}
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -534,6 +537,43 @@ func (a *App) GitHubInfo(remote string) GitHubView {
 	}
 	a.ghCache[key] = v
 	a.ghMu.Unlock()
+	return v
+}
+
+// SymbolsView is a repo's symbol summary for the front end.
+type SymbolsView struct {
+	GoMainPkgs []string `json:"goMainPkgs"`
+	GoExported []string `json:"goExported"`
+	NpmScripts []string `json:"npmScripts"`
+	NpmBin     []string `json:"npmBin"`
+	Truncated  bool     `json:"truncated"`
+}
+
+// RepoSymbols returns a repo's symbol summary (cached per path). The first
+// call for a given path extracts and caches; subsequent calls for the same
+// path are served from the cache without touching disk again.
+func (a *App) RepoSymbols(path string) SymbolsView {
+	a.symMu.RLock()
+	if v, hit := a.symCache[path]; hit {
+		a.symMu.RUnlock()
+		return v
+	}
+	a.symMu.RUnlock()
+
+	set := symbols.Extract(path)
+	v := SymbolsView{
+		GoMainPkgs: set.GoMainPkgs,
+		GoExported: set.GoExported,
+		NpmScripts: set.NpmScripts,
+		NpmBin:     set.NpmBin,
+		Truncated:  set.Truncated,
+	}
+	a.symMu.Lock()
+	if a.symCache == nil {
+		a.symCache = map[string]SymbolsView{}
+	}
+	a.symCache[path] = v
+	a.symMu.Unlock()
 	return v
 }
 

@@ -471,3 +471,37 @@ func TestRepoGraphFiltersDanglingManualEdge(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoSymbolsCaches(t *testing.T) {
+	dir := t.TempDir()
+	goFile := filepath.Join(dir, "foo.go")
+	if err := os.WriteFile(goFile, []byte("package foo\n\nfunc Exported() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := newTestApp(t)
+	v1 := a.RepoSymbols(dir)
+	if !containsString(v1.GoExported, "Exported") {
+		t.Fatalf("v1.GoExported = %v, want it to contain Exported", v1.GoExported)
+	}
+
+	// Overwrite the source so a fresh extract would no longer find Exported.
+	// (Overwrite rather than os.Remove to avoid flaky Windows file-lock removes.)
+	if err := os.WriteFile(goFile, []byte("package foo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v2 := a.RepoSymbols(dir)
+	if !containsString(v2.GoExported, "Exported") {
+		t.Fatalf("v2.GoExported = %v, want it to still contain Exported (served from cache)", v2.GoExported)
+	}
+}
+
+func containsString(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
