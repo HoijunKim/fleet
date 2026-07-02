@@ -25,7 +25,7 @@ Both reads are lazy per selected repo. No auto call graph, no manual function gr
 
 ---
 
-### Task A-T1: internal/edges store
+### Task 1: (A-T1) internal/edges store
 
 **Files:**
 - Create: `internal/edges/edges.go`
@@ -177,7 +177,7 @@ func writeFile(path, s string) error { return osWriteFile(path, s) }
 
 ---
 
-### Task A-T2: edge bindings + RepoGraph merge
+### Task 2: (A-T2) edge bindings + RepoGraph merge
 
 **Files:**
 - Modify: `app.go` (add `edges` field + `NewApp` wiring + `newTestApp` wiring in test; bindings; `GraphEdge` fields; `RepoGraph` merge)
@@ -257,7 +257,7 @@ binding round-trip test plus manual verification; do not fabricate a vacuous ass
 
 ---
 
-### Task A-T3: Graph connect mode + manual-edge render/delete
+### Task 3: (A-T3) Graph connect mode + manual-edge render/delete
 
 **Files:**
 - Modify: `frontend/src/lib/Graph.svelte`
@@ -296,7 +296,7 @@ binding round-trip test plus manual verification; do not fabricate a vacuous ass
 
 ---
 
-### Task B-T1: internal/symbols Extract
+### Task 4: (B-T1) internal/symbols Extract
 
 **Files:**
 - Create: `internal/symbols/symbols.go`
@@ -352,7 +352,7 @@ binding round-trip test plus manual verification; do not fabricate a vacuous ass
 
 ---
 
-### Task B-T2: RepoSymbols binding + cache
+### Task 5: (B-T2) RepoSymbols binding + cache
 
 **Files:**
 - Modify: `app.go` (add `symCache` + `symMu`; `SymbolsView`; `RepoSymbols`)
@@ -392,7 +392,7 @@ binding round-trip test plus manual verification; do not fabricate a vacuous ass
 
 ---
 
-### Task B-T3: detail-panel Symbols tab
+### Task 6: (B-T3) detail-panel Symbols tab
 
 **Files:**
 - Modify: `frontend/src/lib/DetailPanel.svelte`
