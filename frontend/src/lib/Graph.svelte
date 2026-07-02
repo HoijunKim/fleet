@@ -164,10 +164,22 @@
     }
 
     // Seed positions deterministically on a circle (index-based angle, never
-    // Math.random). A single node sits at the origin.
+    // Math.random). A single node sits at the origin. On a reload (add/remove
+    // edge) keep the already-settled/dragged position of any node that still
+    // exists, so the layout doesn't snap back to the circle on every action;
+    // only genuinely-new node ids get the circle seed.
+    const prev = byId;
     const count = tmp.length;
     const spread = 60 + count * 12;
     tmp.forEach((n, i) => {
+      const old = prev.get(n.id);
+      if (old) {
+        n.x = old.x;
+        n.y = old.y;
+        n.vx = old.vx;
+        n.vy = old.vy;
+        return;
+      }
       if (count === 1) {
         n.x = 0;
         n.y = 0;
