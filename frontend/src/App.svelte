@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ListProjects, LoadRepo, Fetch, DeleteProject, GetConfig } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, DeleteProject, GetConfig, GetProject } from "../wailsjs/go/main/App";
   import Toolbar from "./lib/Toolbar.svelte";
   import StatsHeader from "./lib/StatsHeader.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
@@ -115,6 +115,25 @@
     projects = projects;
   }
 
+  // Extract a readable message from a rejected IPC call (string | Error | unknown).
+  function errText(err: any): string {
+    if (!err) return "load failed";
+    if (typeof err === "string") return err;
+    if (err.message) return String(err.message);
+    return String(err);
+  }
+
+  // Reset a project's row to a non-loading, errored state after a rejected
+  // LoadRepo call. Keeps whatever fields were already merged; only flips the
+  // loading/error markers so loadingCount can settle and nothing is left
+  // spinning forever on an unhandled rejection.
+  function markLoadError(id: string, err: any) {
+    const i = projects.findIndex((p) => p.id === id);
+    if (i < 0) return;
+    projects[i] = { ...projects[i], loaded: true, errMsg: errText(err) };
+    projects = projects;
+  }
+
   // Build a fresh row from a ProjectView (before git fields are loaded).
   function skeleton(pv: any): any {
     return {
@@ -126,6 +145,34 @@
     };
   }
 
+  // Run `worker` over `items` with at most `limit` concurrent in flight (a
+  // tiny inline concurrency pool - no new dependency). Each worker is
+  // expected to handle its own errors; runPool never rejects.
+  async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+    let idx = 0;
+    async function lane(): Promise<void> {
+      while (idx < items.length) {
+        const item = items[idx++];
+        await worker(item);
+      }
+    }
+    const lanes = Array.from({ length: Math.min(limit, items.length) }, () => lane());
+    await Promise.all(lanes);
+  }
+
+  // Load (or reload) git fields for one project and merge the result. On a
+  // rejected LoadRepo call, marks the row errored instead of leaving it
+  // stuck in a loading state. Guarded by reqGen so a slow call from an
+  // earlier generation cannot clobber newer state.
+  async function loadGitField(p: any, gen: number): Promise<void> {
+    try {
+      const v = await LoadRepo(p.path);
+      if (gen === reqGen) mergeGit(p.id, v);
+    } catch (err) {
+      if (gen === reqGen) markLoadError(p.id, err);
+    }
+  }
+
   async function loadAll() {
     const gen = ++reqGen;
     const list = await ListProjects();
@@ -133,13 +180,7 @@
     projects = list.map(skeleton);
     scanned = true;
     const code = projects.filter((p) => p.type === "code");
-    await Promise.all(
-      code.map((p) =>
-        LoadRepo(p.repoPath).then((v) => {
-          if (gen === reqGen) mergeGit(p.id, v);
-        })
-      )
-    );
+    await runPool(code, 6, (p) => loadGitField(p, gen));
   }
 
   // Reconciling refresh: keep already-merged git fields, pull fresh PM fields,
@@ -164,42 +205,49 @@
     projects = next;
     if (selectedId && !projects.some((p) => p.id === selectedId)) selectedId = "";
     const toLoad = next.filter((p) => p.type === "code" && !p.loaded);
-    await Promise.all(
-      toLoad.map((p) =>
-        LoadRepo(p.repoPath).then((v) => {
-          if (gen === reqGen) mergeGit(p.id, v);
-        })
-      )
-    );
+    await runPool(toLoad, 6, (p) => loadGitField(p, gen));
   }
 
   // Targeted PM refresh for one project (keeps its git fields). Used after a
-  // task/metadata mutation from the detail panel.
+  // task/metadata mutation from the detail panel. Uses GetProject(id) - a
+  // single-record lookup - instead of ListProjects(), which would trigger a
+  // full filesystem rescan of all roots. Guarded by checking the row still
+  // exists locally (rather than reqGen, since this is not part of a
+  // list-rebuilding fan-out): if the project was removed from the local list
+  // in the meantime (e.g. a concurrent delete + reconcile), the stale patch
+  // is simply dropped.
   async function refreshProject(id: string) {
-    const list = await ListProjects();
-    const fresh = list.find((p: any) => p.id === id);
-    const i = projects.findIndex((p) => p.id === id);
-    if (!fresh) {
-      if (i >= 0) { projects = projects.filter((p) => p.id !== id); }
-      if (selectedId === id) selectedId = "";
-      return;
+    try {
+      const fresh = await GetProject(id);
+      const i = projects.findIndex((p) => p.id === id);
+      if (i < 0) return;
+      projects[i] = {
+        ...projects[i],
+        id: fresh.id, name: fresh.name, type: fresh.type, repoPath: fresh.repoPath,
+        status: fresh.status, priority: fresh.priority, deadline: fresh.deadline,
+        notes: fresh.notes, tags: fresh.tags, tasks: fresh.tasks,
+      };
+      projects = projects;
+    } catch (err) {
+      toastError("Refresh project: " + errText(err));
     }
-    if (i < 0) return;
-    projects[i] = {
-      ...projects[i],
-      name: fresh.name, type: fresh.type, repoPath: fresh.repoPath,
-      status: fresh.status, priority: fresh.priority, deadline: fresh.deadline,
-      notes: fresh.notes, tags: fresh.tags, tasks: fresh.tasks,
-    };
-    projects = projects;
   }
 
   // Reload git fields for a single code project (called by git actions).
+  // Bumps reqGen so a slower, already in-flight aggregate load (loadAll /
+  // reconcile / fetchAll / auto-fetch) cannot overwrite this fresher result,
+  // and vice versa - whichever generation is current when a call resolves
+  // wins.
   async function refreshRepo(path: string) {
     const proj = projects.find((p) => p.repoPath === path);
     if (!proj) return;
-    const v = await LoadRepo(path);
-    mergeGit(proj.id, v);
+    const gen = ++reqGen;
+    try {
+      const v = await LoadRepo(path);
+      if (gen === reqGen) mergeGit(proj.id, v);
+    } catch (err) {
+      if (gen === reqGen) markLoadError(proj.id, err);
+    }
   }
 
   function codeProjects(): any[] {
@@ -214,9 +262,19 @@
   async function fetchAll() {
     const git = codeProjects();
     if (git.length === 0) { toastInfo("No git repositories to fetch"); return; }
-    const results = await Promise.all(git.map((p) => Fetch(p.path)));
-    const failed = results.filter((e) => !!e).length;
-    await Promise.all(git.map((p) => LoadRepo(p.path).then((v) => mergeGit(p.id, v))));
+    const gen = ++reqGen;
+    let failed = 0;
+    await runPool(git, 6, async (p) => {
+      try {
+        const err = await Fetch(p.path);
+        if (err) failed++;
+      } catch {
+        failed++;
+      }
+    });
+    if (gen !== reqGen) return;
+    await runPool(git, 6, (p) => loadGitField(p, gen));
+    if (gen !== reqGen) return;
     if (failed > 0) toastError("Fetched " + git.length + " repos, " + failed + " failed");
     else toastSuccess("Fetched " + git.length + " repos");
   }
@@ -319,8 +377,13 @@
       autoFetchTimer = setInterval(async () => {
         const git = codeProjects();
         if (git.length === 0) return;
-        await Promise.all(git.map((p) => Fetch(p.path)));
-        await Promise.all(git.map((p) => LoadRepo(p.path).then((v) => mergeGit(p.id, v))));
+        const gen = ++reqGen;
+        await runPool(git, 6, async (p) => {
+          try { await Fetch(p.path); } catch { /* surfaced via next LoadRepo */ }
+        });
+        if (gen !== reqGen) return;
+        await runPool(git, 6, (p) => loadGitField(p, gen));
+        if (gen !== reqGen) return;
         toastInfo("Auto-fetched " + git.length + " repos");
       }, minutes * 60 * 1000);
     }
