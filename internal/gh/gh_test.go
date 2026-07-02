@@ -18,8 +18,15 @@ func TestOwnerRepo(t *testing.T) {
 			t.Errorf("OwnerRepo(%q)=%q,%q,%v want %q,%q", remote, o, r, ok, want[0], want[1])
 		}
 	}
-	if _, _, ok := OwnerRepo("git@gitlab.com:x/y.git"); ok {
-		// non-github still parses owner/repo; ok true is acceptable. Only assert empty/garbage fails:
+	// Non-GitHub hosts must be rejected so they are never queried against GitHub.
+	for _, remote := range []string{
+		"git@gitlab.com:x/y.git",
+		"https://bitbucket.org/o/r.git",
+		"ssh://git@gitlab.example.com/o/r.git",
+	} {
+		if _, _, ok := OwnerRepo(remote); ok {
+			t.Errorf("non-GitHub remote %q must not parse as GitHub", remote)
+		}
 	}
 	if _, _, ok := OwnerRepo(""); ok {
 		t.Error("empty remote must not parse")
@@ -61,6 +68,27 @@ func TestFetchErrorWhenGhUnavailable(t *testing.T) {
 	_, err := Fetch(ghFake{err: &stubErr{"gh: not found"}}, "o", "r")
 	if err == nil {
 		t.Error("expected error when the gh CI call fails")
+	}
+}
+
+// ciOnlyFake succeeds on the CI call but fails every PR/issue search, so Fetch
+// must still report Available with the counts left at 0 (tolerated failure).
+type ciOnlyFake struct{}
+
+func (ciOnlyFake) Run(args ...string) (string, error) {
+	if strings.Contains(strings.Join(args, " "), "actions/runs") {
+		return "success\n", nil
+	}
+	return "", &stubErr{"search unavailable"}
+}
+
+func TestFetchToleratesPRIssueFailure(t *testing.T) {
+	info, err := Fetch(ciOnlyFake{}, "o", "r")
+	if err != nil {
+		t.Fatalf("CI succeeded, Fetch must not error: %v", err)
+	}
+	if !info.Available || info.CI != "success" || info.PRs != 0 || info.Issues != 0 {
+		t.Errorf("info=%+v want Available,CI=success,PRs=0,Issues=0", info)
 	}
 }
 

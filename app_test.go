@@ -340,7 +340,7 @@ func (ghFakeApp) Run(args ...string) (string, error) {
 	return "", nil
 }
 
-func TestGitHubInfoParsesAndCaches(t *testing.T) {
+func TestGitHubInfoParses(t *testing.T) {
 	a := newTestApp(t)
 	a.ghRunner = ghFakeApp{}
 	v := a.GitHubInfo("git@github.com:hoijun/fleet.git")

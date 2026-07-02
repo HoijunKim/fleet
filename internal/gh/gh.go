@@ -29,15 +29,19 @@ func (ExecRunner) Run(args ...string) (string, error) {
 	return out.String(), err
 }
 
-// OwnerRepo parses a GitHub remote URL into owner and repo. Returns ok=false
+// OwnerRepo parses a GitHub remote URL into owner and repo. Only github.com
+// remotes are accepted; non-GitHub hosts (gitlab, bitbucket, self-hosted, etc.)
+// return ok=false so they are never queried against GitHub. Returns ok=false
 // for empty/unparseable remotes.
 func OwnerRepo(remote string) (owner, repo string, ok bool) {
 	remote = strings.TrimSpace(remote)
 	remote = strings.TrimSuffix(remote, ".git")
+	var host string
 	switch {
 	case strings.HasPrefix(remote, "git@"):
 		// git@host:owner/repo
 		if i := strings.Index(remote, ":"); i >= 0 {
+			host = remote[len("git@"):i]
 			remote = remote[i+1:]
 		} else {
 			return "", "", false
@@ -45,6 +49,7 @@ func OwnerRepo(remote string) (owner, repo string, ok bool) {
 	case strings.HasPrefix(remote, "https://"), strings.HasPrefix(remote, "http://"):
 		remote = remote[strings.Index(remote, "://")+3:]
 		if i := strings.IndexByte(remote, '/'); i >= 0 {
+			host = remote[:i]
 			remote = remote[i+1:] // strip host
 		} else {
 			return "", "", false
@@ -52,11 +57,19 @@ func OwnerRepo(remote string) (owner, repo string, ok bool) {
 	case strings.HasPrefix(remote, "ssh://git@"):
 		remote = strings.TrimPrefix(remote, "ssh://git@")
 		if i := strings.IndexByte(remote, '/'); i >= 0 {
+			host = remote[:i]
 			remote = remote[i+1:]
 		} else {
 			return "", "", false
 		}
 	default:
+		return "", "", false
+	}
+	// A host may carry an explicit port (github.com:22); strip it before compare.
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	if !strings.EqualFold(host, "github.com") {
 		return "", "", false
 	}
 	parts := strings.Split(strings.Trim(remote, "/"), "/")
