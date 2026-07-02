@@ -7,6 +7,7 @@ import (
 
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/repo"
+	"github.com/hoijun/fleet/internal/store"
 )
 
 type fakeRunner struct{ out map[string]string }
@@ -141,4 +142,91 @@ func TestSaveConfigPersistsAndUpdatesCache(t *testing.T) {
 	if got.Editor != "myeditor" {
 		t.Errorf("persisted editor=%q want myeditor", got.Editor)
 	}
+}
+
+func newTestApp(t *testing.T) *App {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "projects.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &App{cfg: config.Default(), runner: fakeRunner{out: map[string]string{}}, store: st}
+}
+
+func TestAddAndListManualProject(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("thesis")
+	if id == "" {
+		t.Fatal("AddProject returned empty id")
+	}
+	var found *ProjectView
+	for i, p := range a.ListProjects() {
+		if p.ID == id {
+			found = &a.ListProjects()[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("manual project %q not in ListProjects", id)
+	}
+	if found.Name != "thesis" || found.Type != "manual" {
+		t.Errorf("bad manual project: %+v", found)
+	}
+}
+
+func TestTaskLifecycle(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	tid := a.addTaskReturnID(t, id, "do X")
+	// toggle
+	if msg := a.ToggleTask(id, tid); msg != "" {
+		t.Fatalf("ToggleTask: %s", msg)
+	}
+	p := a.projectByID(t, id)
+	if len(p.Tasks) != 1 || !p.Tasks[0].Done {
+		t.Errorf("task not toggled done: %+v", p.Tasks)
+	}
+	// delete
+	if msg := a.DeleteTask(id, tid); msg != "" {
+		t.Fatalf("DeleteTask: %s", msg)
+	}
+	if len(a.projectByID(t, id).Tasks) != 0 {
+		t.Error("task not deleted")
+	}
+}
+
+func TestUpdateProjectPersistsFields(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	if msg := a.UpdateProject(id, "paused", 3, "2026-08-29", "defense prep"); msg != "" {
+		t.Fatalf("UpdateProject: %s", msg)
+	}
+	p := a.projectByID(t, id)
+	if p.Status != "paused" || p.Priority != 3 || p.Deadline != "2026-08-29" || p.Notes != "defense prep" {
+		t.Errorf("update not applied: %+v", p)
+	}
+}
+
+// helpers
+func (a *App) addTaskReturnID(t *testing.T, projectID, title string) string {
+	t.Helper()
+	if msg := a.AddTask(projectID, title, ""); msg != "" {
+		t.Fatalf("AddTask: %s", msg)
+	}
+	tasks := a.projectByID(t, projectID).Tasks
+	if len(tasks) == 0 {
+		t.Fatal("no task after AddTask")
+	}
+	return tasks[len(tasks)-1].ID
+}
+
+func (a *App) projectByID(t *testing.T, id string) ProjectView {
+	t.Helper()
+	for _, p := range a.ListProjects() {
+		if p.ID == id {
+			return p
+		}
+	}
+	t.Fatalf("project %q not found", id)
+	return ProjectView{}
 }

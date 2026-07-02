@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/config"
@@ -12,6 +15,7 @@ import (
 	"github.com/hoijun/fleet/internal/meta"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/scan"
+	"github.com/hoijun/fleet/internal/store"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -21,12 +25,15 @@ type App struct {
 	mu     sync.RWMutex
 	cfg    config.Config
 	runner git.Runner
+	store  *store.Store
 }
 
 // NewApp builds the App with the real git runner and loaded config.
 func NewApp() *App {
-	cfg, _, _ := config.Load()
-	return &App{cfg: cfg, runner: git.ExecRunner{}}
+	cfg, cfgPath, _ := config.Load()
+	storePath := filepath.Join(filepath.Dir(cfgPath), "projects.json")
+	st, _ := store.Open(storePath) // empty store on error; UI still works
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -233,4 +240,138 @@ func (a *App) RevealInExplorer(path string) string {
 		cmd = exec.Command("xdg-open", path)
 	}
 	return errMsg(cmd.Start())
+}
+
+// TaskView is the JS-facing task.
+type TaskView struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Done  bool   `json:"done"`
+	Due   string `json:"due"`
+}
+
+// ProjectView is the JS-facing unified project (project-management fields only;
+// live git status is merged in by the front end via LoadRepo for code projects).
+type ProjectView struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Type     string     `json:"type"` // "code" | "manual"
+	RepoPath string     `json:"repoPath"`
+	Status   string     `json:"status"`
+	Priority int        `json:"priority"`
+	Deadline string     `json:"deadline"`
+	Notes    string     `json:"notes"`
+	Tags     []string   `json:"tags"`
+	Tasks    []TaskView `json:"tasks"`
+}
+
+// DayCountView is the JS-facing per-day commit count.
+type DayCountView struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+func toTaskViews(ts []store.Task) []TaskView {
+	out := make([]TaskView, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, TaskView{ID: t.ID, Title: t.Title, Done: t.Done, Due: t.Due})
+	}
+	return out
+}
+
+func recordToView(id, name, typ, repoPath string, r store.Record) ProjectView {
+	tags := r.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	return ProjectView{
+		ID: id, Name: name, Type: typ, RepoPath: repoPath,
+		Status: r.Status, Priority: r.Priority, Deadline: r.Deadline,
+		Notes: r.Notes, Tags: tags, Tasks: toTaskViews(r.Tasks),
+	}
+}
+
+// ListProjects assembles discovered repos (code) plus manual store records.
+func (a *App) ListProjects() []ProjectView {
+	cfg := a.cfgSnapshot()
+	snap := a.store.Snapshot()
+	out := []ProjectView{}
+	// code projects from the scan
+	for _, r := range scan.Discover(cfg.Roots, cfg.ScanDepth, cfg.ShowNonGit) {
+		rec := snap[r.Path] // zero Record if none
+		out = append(out, recordToView(r.Path, r.Name, "code", r.Path, rec))
+	}
+	// manual projects from the store
+	for id, rec := range snap {
+		if rec.Manual {
+			out = append(out, recordToView(id, rec.Name, "manual", "", rec))
+		}
+	}
+	return out
+}
+
+// AddProject creates a manual project and returns its id.
+func (a *App) AddProject(name string) string {
+	id := "m-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	_ = a.store.Put(id, store.Record{Manual: true, Name: name, Status: "active"})
+	return id
+}
+
+// UpdateProject sets a project's status/priority/deadline/notes.
+func (a *App) UpdateProject(id, status string, priority int, deadline, notes string) string {
+	rec, _ := a.store.Get(id)
+	rec.Status = status
+	rec.Priority = priority
+	rec.Deadline = deadline
+	rec.Notes = notes
+	return errMsg(a.store.Put(id, rec))
+}
+
+// DeleteProject removes a project's stored data (manual project disappears; a
+// code project loses its project-management data but is still discovered).
+func (a *App) DeleteProject(id string) string { return errMsg(a.store.Delete(id)) }
+
+// AddTask appends a task to a project.
+func (a *App) AddTask(projectID, title, due string) string {
+	rec, _ := a.store.Get(projectID)
+	tid := "t-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	rec.Tasks = append(rec.Tasks, store.Task{ID: tid, Title: title, Due: due})
+	return errMsg(a.store.Put(projectID, rec))
+}
+
+// ToggleTask flips a task's done state.
+func (a *App) ToggleTask(projectID, taskID string) string {
+	rec, _ := a.store.Get(projectID)
+	for i := range rec.Tasks {
+		if rec.Tasks[i].ID == taskID {
+			rec.Tasks[i].Done = !rec.Tasks[i].Done
+		}
+	}
+	return errMsg(a.store.Put(projectID, rec))
+}
+
+// DeleteTask removes a task from a project.
+func (a *App) DeleteTask(projectID, taskID string) string {
+	rec, _ := a.store.Get(projectID)
+	kept := rec.Tasks[:0]
+	for _, t := range rec.Tasks {
+		if t.ID != taskID {
+			kept = append(kept, t)
+		}
+	}
+	rec.Tasks = kept
+	return errMsg(a.store.Put(projectID, rec))
+}
+
+// CommitActivity returns per-day commit counts for the heatmap.
+func (a *App) CommitActivity(path string, weeks int) []DayCountView {
+	days, err := git.CommitActivity(a.runner, path, weeks)
+	if err != nil {
+		return []DayCountView{}
+	}
+	out := make([]DayCountView, 0, len(days))
+	for _, d := range days {
+		out = append(out, DayCountView{Date: d.Date, Count: d.Count})
+	}
+	return out
 }

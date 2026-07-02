@@ -3,17 +3,29 @@
 import {main} from '../models';
 import {config} from '../models';
 
+export function AddProject(arg1:string):Promise<string>;
+
+export function AddTask(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
 export function Checkout(arg1:string,arg2:string):Promise<string>;
 
+export function CommitActivity(arg1:string,arg2:number):Promise<Array<main.DayCountView>>;
+
 export function CommitAll(arg1:string,arg2:string):Promise<string>;
+
+export function DeleteProject(arg1:string):Promise<string>;
+
+export function DeleteTask(arg1:string,arg2:string):Promise<string>;
 
 export function DiffFile(arg1:string,arg2:string):Promise<string>;
 
 export function Fetch(arg1:string):Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
+
+export function ListProjects():Promise<Array<main.ProjectView>>;
 
 export function LoadRepo(arg1:string):Promise<main.RepoView>;
 
@@ -42,3 +54,7 @@ export function Stash(arg1:string):Promise<string>;
 export function StashList(arg1:string):Promise<Array<string>>;
 
 export function StashPop(arg1:string):Promise<string>;
+
+export function ToggleTask(arg1:string,arg2:string):Promise<string>;
+
+export function UpdateProject(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<string>;
