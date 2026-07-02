@@ -310,10 +310,12 @@ func (a *App) ListProjects() []ProjectView {
 	return out
 }
 
-// AddProject creates a manual project and returns its id.
+// AddProject creates a manual project and returns its id, or "" on failure.
 func (a *App) AddProject(name string) string {
 	id := "m-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	_ = a.store.Put(id, store.Record{Manual: true, Name: name, Status: "active"})
+	if err := a.store.Put(id, store.Record{Manual: true, Name: name, Status: "active"}); err != nil {
+		return ""
+	}
 	return id
 }
 

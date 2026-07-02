@@ -150,7 +150,9 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{cfg: config.Default(), runner: fakeRunner{out: map[string]string{}}, store: st}
+	cfg := config.Default()
+	cfg.Roots = []string{t.TempDir()} // hermetic: scan an empty temp dir, not the real ~/Projects
+	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st}
 }
 
 func TestAddAndListManualProject(t *testing.T) {
