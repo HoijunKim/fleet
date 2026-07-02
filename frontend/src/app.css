@@ -615,6 +615,19 @@ body {
 }
 .fchip.active .fchip-n { color: var(--accent); }
 
+/* Project-management filters (status select + high-priority toggle) */
+.pm-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toolbar-select {
+  padding: 5px 9px;
+  font-size: 12px;
+  width: auto;
+  cursor: pointer;
+}
+
 .palette-btn {
   display: inline-flex;
   align-items: center;

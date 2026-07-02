@@ -17,6 +17,8 @@
   let projects: any[] = [];
   let filter = "";
   let statusFilter: "all" | "dirty" | "behind" = "all";
+  let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
+  let highPriorityOnly = false;
   let sortKey = "";
   let sortDir: "asc" | "desc" = "asc";
   let selectedId = "";
@@ -71,6 +73,10 @@
     }
     if (statusFilter === "dirty") out = out.filter((p) => p.dirty);
     else if (statusFilter === "behind") out = out.filter((p) => p.behind > 0);
+    if (pmStatusFilter !== "all") {
+      out = out.filter((p) => (p.status || "active") === pmStatusFilter);
+    }
+    if (highPriorityOnly) out = out.filter((p) => (p.priority || 0) >= 2);
     return out;
   })();
 
@@ -389,7 +395,11 @@
   repos={projects}
   {loadingCount}
   {statusFilter}
+  {pmStatusFilter}
+  {highPriorityOnly}
   onStatus={(s) => (statusFilter = s)}
+  onPmStatus={(s) => (pmStatusFilter = s)}
+  onHighPriorityToggle={() => (highPriorityOnly = !highPriorityOnly)}
   onRefresh={manualRefresh}
   onFetchAll={fetchAll}
   onAddProject={addProject}

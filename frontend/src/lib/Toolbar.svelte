@@ -3,8 +3,12 @@
   export let repos: any[] = [];
   export let loadingCount: number = 0;
   export let statusFilter: "all" | "dirty" | "behind" = "all";
+  export let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
+  export let highPriorityOnly: boolean = false;
   export let filterInput: HTMLInputElement | undefined = undefined;
   export let onStatus: (s: "all" | "dirty" | "behind") => void;
+  export let onPmStatus: (s: "all" | "active" | "paused" | "done") => void;
+  export let onHighPriorityToggle: () => void;
   export let onFetchAll: () => void;
   export let onRefresh: () => void;
   export let onOpenSettings: () => void;
@@ -41,6 +45,29 @@
     </button>
     <button class="fchip" class:active={statusFilter === "behind"} on:click={() => onStatus("behind")}>
       Behind <span class="fchip-n">{behind}</span>
+    </button>
+  </div>
+
+  <div class="pm-filters">
+    <select
+      class="input toolbar-select"
+      aria-label="Filter by project status"
+      bind:value={pmStatusFilter}
+      on:change={() => onPmStatus(pmStatusFilter)}
+    >
+      <option value="all">All statuses</option>
+      <option value="active">Active</option>
+      <option value="paused">Paused</option>
+      <option value="done">Done</option>
+    </select>
+
+    <button
+      class="fchip"
+      class:active={highPriorityOnly}
+      on:click={onHighPriorityToggle}
+      aria-pressed={highPriorityOnly}
+    >
+      High priority
     </button>
   </div>
 
