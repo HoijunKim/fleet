@@ -59,46 +59,61 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-// Snapshot returns a copy of all records (safe to mutate by the caller).
+// cloneRecord deep-copies the slice fields (Tags, Tasks) so callers cannot
+// mutate the store's internal state without going through Put.
+func cloneRecord(r Record) Record {
+	if r.Tags != nil {
+		r.Tags = append([]string(nil), r.Tags...)
+	}
+	if r.Tasks != nil {
+		r.Tasks = append([]Task(nil), r.Tasks...)
+	}
+	return r
+}
+
+// Snapshot returns a deep copy of all records (safe to mutate by the caller).
 func (s *Store) Snapshot() map[string]Record {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string]Record, len(s.records))
 	for k, v := range s.records {
-		out[k] = v
+		out[k] = cloneRecord(v)
 	}
 	return out
 }
 
-// Get returns the record for id.
+// Get returns a deep copy of the record for id.
 func (s *Store) Get(id string) (Record, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	r, ok := s.records[id]
-	return r, ok
+	if !ok {
+		return Record{}, false
+	}
+	return cloneRecord(r), true
 }
 
-// Put sets the record for id and saves atomically.
+// Put sets the record for id and saves atomically. The whole operation holds
+// the write lock, so concurrent Put/Delete calls serialize their file I/O.
 func (s *Store) Put(id string, r Record) error {
 	s.mu.Lock()
-	s.records[id] = r
-	s.mu.Unlock()
-	return s.save()
+	defer s.mu.Unlock()
+	s.records[id] = cloneRecord(r)
+	return s.saveLocked()
 }
 
-// Delete removes id and saves atomically.
+// Delete removes id and saves atomically (under the write lock).
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.records, id)
-	s.mu.Unlock()
-	return s.save()
+	return s.saveLocked()
 }
 
-// save writes the store to disk atomically (temp file + rename).
-func (s *Store) save() error {
-	s.mu.RLock()
+// saveLocked writes the store to disk atomically (temp file + rename). The
+// caller MUST already hold s.mu (write lock); this serializes all disk writes.
+func (s *Store) saveLocked() error {
 	data, err := json.MarshalIndent(s.records, "", "  ")
-	s.mu.RUnlock()
 	if err != nil {
 		return err
 	}

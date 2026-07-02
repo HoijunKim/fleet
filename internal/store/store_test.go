@@ -3,6 +3,8 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -74,5 +76,45 @@ func TestSnapshotIsCopy(t *testing.T) {
 	snap["a"] = Record{Name: "MUTATED"}
 	if got, _ := s.Get("a"); got.Name != "a" {
 		t.Error("Snapshot must not alias internal state")
+	}
+}
+
+func TestConcurrentPutNoError(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "projects.json")
+	s, _ := Open(p)
+	var wg sync.WaitGroup
+	errs := make(chan error, 50)
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			errs <- s.Put("id-"+strconv.Itoa(n), Record{Manual: true, Name: "n"})
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		if e != nil {
+			t.Fatalf("concurrent Put returned error: %v", e)
+		}
+	}
+	if n := len(s.Snapshot()); n != 50 {
+		t.Errorf("want 50 records, got %d", n)
+	}
+}
+
+func TestGetReturnsIndependentSlices(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "projects.json")
+	s, _ := Open(p)
+	_ = s.Put("a", Record{Manual: true, Tasks: []Task{{ID: "t1", Done: false}}, Tags: []string{"x"}})
+	got, _ := s.Get("a")
+	got.Tasks[0].Done = true
+	got.Tags[0] = "MUTATED"
+	again, _ := s.Get("a")
+	if again.Tasks[0].Done {
+		t.Error("Get must return an independent Tasks slice (internal state was mutated)")
+	}
+	if again.Tags[0] != "x" {
+		t.Error("Get must return an independent Tags slice (internal state was mutated)")
 	}
 }
