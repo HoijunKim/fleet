@@ -9,6 +9,7 @@
   export let onRefresh: () => void;
   export let onOpenSettings: () => void;
   export let onOpenPalette: () => void;
+  export let onAddProject: () => void;
 
   $: dirty = repos.filter((r) => r.dirty).length;
   $: behind = repos.filter((r) => r.behind > 0).length;
@@ -24,10 +25,10 @@
     <input
       class="input"
       type="text"
-      placeholder="Filter repositories..."
+      placeholder="Filter projects..."
       bind:value={filter}
       bind:this={filterInput}
-      aria-label="Filter repositories by name"
+      aria-label="Filter projects by name"
     />
   </div>
 
@@ -62,6 +63,7 @@
       <span class="gear"></span>
     </button>
 
+    <button class="btn btn-secondary" on:click={onAddProject}>+ Project</button>
     <button class="btn btn-secondary" on:click={onRefresh}>Refresh</button>
     <button class="btn btn-primary" on:click={onFetchAll}>Fetch All</button>
   </div>

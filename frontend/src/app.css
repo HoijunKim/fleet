@@ -1425,3 +1425,240 @@ body {
   border-radius: 4px;
   word-break: break-all;
 }
+
+/* =========================================================================
+   Project list - type badge, tasks, deadline, status chip, priority
+   ========================================================================= */
+
+/* PM status accent dots (reuses the .dot base) */
+.dot.active { background: var(--accent); box-shadow: 0 0 6px rgba(110, 168, 254, 0.5); }
+.dot.paused { background: var(--dirty); box-shadow: 0 0 6px rgba(210, 153, 34, 0.5); }
+.dot.done   { background: var(--ok);    box-shadow: 0 0 6px rgba(63, 185, 80, 0.5); }
+
+/* Type badge (code | manual) */
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+}
+.type-badge.code   { color: var(--accent); background: var(--accent-soft); border-color: rgba(110, 168, 254, 0.35); }
+.type-badge.manual { color: var(--muted);  background: var(--raised); }
+
+/* Placeholder dash for empty PM cells */
+.pm-dash { color: var(--faint); }
+
+/* Task progress chip */
+.task-chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+.task-chip.complete { color: var(--ok); border-color: rgba(63, 185, 80, 0.35); background: var(--ok-soft); }
+
+/* Deadline countdown pill */
+.dday {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+.dday.soon { color: var(--dirty); border-color: rgba(210, 153, 34, 0.35); background: var(--dirty-soft); }
+.dday.over { color: var(--err);   border-color: rgba(248, 81, 73, 0.35); background: var(--err-soft); }
+
+/* PM status chip */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--raised);
+}
+.status-chip.active { color: var(--accent); background: var(--accent-soft); border-color: rgba(110, 168, 254, 0.3); }
+.status-chip.paused { color: var(--dirty);  background: var(--dirty-soft);  border-color: rgba(210, 153, 34, 0.3); }
+.status-chip.done   { color: var(--ok);     background: var(--ok-soft);     border-color: rgba(63, 185, 80, 0.3); }
+
+/* Priority dots (0..3) */
+.prio-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.prio-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--border);
+}
+.prio-1 .prio-dot.on { background: var(--accent); }
+.prio-2 .prio-dot.on { background: var(--dirty); }
+.prio-3 .prio-dot.on { background: var(--err); }
+
+/* =========================================================================
+   PM section (detail panel) - tasks, add-task, meta controls
+   ========================================================================= */
+.pm { display: flex; flex-direction: column; gap: 10px; }
+
+.pm-tasks-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pm-progress {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pm-empty { font-size: 12px; color: var(--faint); }
+
+.pm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pm-task {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 6px;
+  border-radius: var(--r-btn);
+  transition: background var(--t);
+}
+.pm-task:hover { background: var(--raised); }
+.pm-task:hover .pm-task-del { opacity: 1; }
+
+.pm-check {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background var(--t), border-color var(--t);
+}
+.pm-check:hover { border-color: var(--accent); }
+.pm-check.on { background: var(--accent); border-color: var(--accent); }
+.pm-check-mark {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: #0d0f13;
+}
+.pm-task-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pm-task.done .pm-task-title { color: var(--faint); text-decoration: line-through; }
+.pm-task-due {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+.pm-task-due.soon { color: var(--dirty); border-color: rgba(210, 153, 34, 0.35); }
+.pm-task-due.over { color: var(--err);   border-color: rgba(248, 81, 73, 0.35); }
+.pm-task-del {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--faint);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: color var(--t), opacity var(--t);
+}
+.pm-task-del:hover { color: var(--err); }
+
+.pm-add { display: flex; gap: 6px; align-items: center; }
+.pm-add-title { flex: 1; min-width: 0; }
+.pm-add-due {
+  flex: 0 0 auto;
+  width: 140px;
+  color-scheme: dark;
+}
+
+.pm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.pm-deadline-field { grid-column: 1 / -1; }
+.pm-select { width: 100%; }
+.pm-select, .pm-deadline-field .input { color-scheme: dark; }
+.pm-notes-field { margin-top: 2px; }
+.pm-notes {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+}
+
+.pm-danger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.pm-confirm-text { flex: 1; font-size: 12px; color: var(--muted); }
+.pm-del-btn { color: var(--err); }
+.pm-del-btn:hover { border-color: rgba(248, 81, 73, 0.4); color: var(--err); }
+
+.btn-danger {
+  background: var(--err);
+  color: #0d0f13;
+  font-weight: 600;
+}
+.btn-danger:hover { background: #ff6a63; }
+
+.add-modal { max-width: 420px; }

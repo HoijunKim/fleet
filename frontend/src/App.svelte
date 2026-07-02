@@ -1,61 +1,76 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ScanRepos, LoadRepo, Fetch, GetConfig } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, DeleteProject, GetConfig } from "../wailsjs/go/main/App";
   import Toolbar from "./lib/Toolbar.svelte";
   import StatsHeader from "./lib/StatsHeader.svelte";
-  import RepoTable from "./lib/RepoTable.svelte";
+  import ProjectTable from "./lib/ProjectTable.svelte";
   import DetailPanel from "./lib/DetailPanel.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import SettingsModal from "./lib/SettingsModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
+  import AddProjectModal from "./lib/AddProjectModal.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
+  import { STATUS_ORDER, deadlineSort } from "./lib/pm";
 
-  let repos: any[] = [];
+  // Each row is a ProjectView with (for code projects) live git fields merged in.
+  let projects: any[] = [];
   let filter = "";
   let statusFilter: "all" | "dirty" | "behind" = "all";
   let sortKey = "";
   let sortDir: "asc" | "desc" = "asc";
-  let selectedPath = "";
+  let selectedId = "";
   let scanned = false;
 
   let paletteOpen = false;
   let settingsOpen = false;
-  let menu: { x: number; y: number; repo: any } | null = null;
+  let addOpen = false;
+  let menu: { x: number; y: number; project: any } | null = null;
   let diffOpen = false;
 
   let filterInput: HTMLInputElement | undefined;
   let autoFetchTimer: ReturnType<typeof setInterval> | undefined;
 
-  // ---- derived list: name filter + status filter + sort ------------------
-  function statusRank(r: any): number {
-    if (r.errMsg) return 0;
-    if (r.dirty) return 1;
-    if (r.behind > 0) return 2;
-    if (r.ahead > 0) return 3;
-    if (!r.isGit) return 5;
+  // Monotonic request generation so a slow list load cannot clobber a newer one.
+  let reqGen = 0;
+
+  // ---- sort / filter ------------------------------------------------------
+  function gitRank(p: any): number {
+    if (p.type !== "code") return 6;
+    if (p.errMsg) return 0;
+    if (p.dirty) return 1;
+    if (p.behind > 0) return 2;
+    if (p.ahead > 0) return 3;
+    if (!p.isGit) return 5;
     return 4; // clean
   }
 
-  function sortVal(r: any, key: string): any {
+  function taskRemaining(p: any): number {
+    const tasks = p.tasks || [];
+    return tasks.filter((t: any) => !t.done).length;
+  }
+
+  function sortVal(p: any, key: string): any {
     switch (key) {
-      case "name": return (r.name || "").toLowerCase();
-      case "branch": return (r.branch || "").toLowerCase();
-      case "status": return statusRank(r);
-      case "last": return (r.lastWhen || "").toLowerCase();
-      case "todo": return r.todo || 0;
-      default: return (r.name || "").toLowerCase();
+      case "name": return (p.name || "").toLowerCase();
+      case "type": return p.type || "";
+      case "git": return gitRank(p);
+      case "tasks": return taskRemaining(p);
+      case "deadline": return deadlineSort(p.deadline);
+      case "status": return STATUS_ORDER[p.status || "active"] ?? 0;
+      case "priority": return p.priority || 0;
+      default: return (p.name || "").toLowerCase();
     }
   }
 
   $: filtered = (() => {
-    let out = repos;
+    let out = projects;
     if (filter) {
       const q = filter.toLowerCase();
-      out = out.filter((r) => r.name.toLowerCase().includes(q));
+      out = out.filter((p) => (p.name || "").toLowerCase().includes(q));
     }
-    if (statusFilter === "dirty") out = out.filter((r) => r.dirty);
-    else if (statusFilter === "behind") out = out.filter((r) => r.behind > 0);
+    if (statusFilter === "dirty") out = out.filter((p) => p.dirty);
+    else if (statusFilter === "behind") out = out.filter((p) => p.behind > 0);
     return out;
   })();
 
@@ -71,55 +86,167 @@
     });
   })();
 
-  $: selected = repos.find((r) => r.path === selectedPath) || null;
-  $: loadingCount = repos.filter((r) => !r.loaded && !r.errMsg).length;
+  $: selected = projects.find((p) => p.id === selectedId) || null;
+  $: loadingCount = projects.filter((p) => p.type === "code" && !p.loaded && !p.errMsg).length;
 
   // ---- data flow (live-load contract) ------------------------------------
-  function upsert(v: any) {
-    const i = repos.findIndex((r) => r.path === v.path);
-    if (i >= 0) { repos[i] = v; repos = repos; } else { repos = [...repos, v]; }
+  const GIT_FIELDS = [
+    "isGit", "branch", "dirty", "modified", "ahead", "behind", "hasUpstream",
+    "remote", "dirtyFiles", "lastHash", "lastMsg", "lastAuthor", "lastWhen",
+    "language", "todo", "errMsg", "loaded",
+  ];
+
+  // Merge git fields from a LoadRepo result onto the project with this id.
+  function mergeGit(id: string, v: any) {
+    const i = projects.findIndex((p) => p.id === id);
+    if (i < 0) return;
+    const merged = { ...projects[i], path: v.path };
+    for (const f of GIT_FIELDS) merged[f] = v[f];
+    projects[i] = merged;
+    projects = projects;
+  }
+
+  // Build a fresh row from a ProjectView (before git fields are loaded).
+  function skeleton(pv: any): any {
+    return {
+      ...pv,
+      path: pv.repoPath,
+      isGit: false,
+      dirtyFiles: [],
+      loaded: pv.type === "manual", // manual rows are complete immediately
+    };
   }
 
   async function loadAll() {
-    const skeletons = await ScanRepos();
-    repos = skeletons;
+    const gen = ++reqGen;
+    const list = await ListProjects();
+    if (gen !== reqGen) return;
+    projects = list.map(skeleton);
     scanned = true;
-    await Promise.all(skeletons.map((s: any) => LoadRepo(s.path).then(upsert)));
+    const code = projects.filter((p) => p.type === "code");
+    await Promise.all(
+      code.map((p) =>
+        LoadRepo(p.repoPath).then((v) => {
+          if (gen === reqGen) mergeGit(p.id, v);
+        })
+      )
+    );
   }
 
-  async function refreshOne(path: string) {
+  // Reconciling refresh: keep already-merged git fields, pull fresh PM fields,
+  // add newly-created projects, drop deleted ones. Used after add/delete.
+  async function reconcile() {
+    const gen = ++reqGen;
+    const list = await ListProjects();
+    if (gen !== reqGen) return;
+    const prev = new Map(projects.map((p) => [p.id, p]));
+    const next = list.map((fresh: any) => {
+      const old = prev.get(fresh.id);
+      if (old) {
+        return {
+          ...old,
+          name: fresh.name, type: fresh.type, repoPath: fresh.repoPath,
+          status: fresh.status, priority: fresh.priority, deadline: fresh.deadline,
+          notes: fresh.notes, tags: fresh.tags, tasks: fresh.tasks,
+        };
+      }
+      return skeleton(fresh);
+    });
+    projects = next;
+    if (selectedId && !projects.some((p) => p.id === selectedId)) selectedId = "";
+    const toLoad = next.filter((p) => p.type === "code" && !p.loaded);
+    await Promise.all(
+      toLoad.map((p) =>
+        LoadRepo(p.repoPath).then((v) => {
+          if (gen === reqGen) mergeGit(p.id, v);
+        })
+      )
+    );
+  }
+
+  // Targeted PM refresh for one project (keeps its git fields). Used after a
+  // task/metadata mutation from the detail panel.
+  async function refreshProject(id: string) {
+    const list = await ListProjects();
+    const fresh = list.find((p: any) => p.id === id);
+    const i = projects.findIndex((p) => p.id === id);
+    if (!fresh) {
+      if (i >= 0) { projects = projects.filter((p) => p.id !== id); }
+      if (selectedId === id) selectedId = "";
+      return;
+    }
+    if (i < 0) return;
+    projects[i] = {
+      ...projects[i],
+      name: fresh.name, type: fresh.type, repoPath: fresh.repoPath,
+      status: fresh.status, priority: fresh.priority, deadline: fresh.deadline,
+      notes: fresh.notes, tags: fresh.tags, tasks: fresh.tasks,
+    };
+    projects = projects;
+  }
+
+  // Reload git fields for a single code project (called by git actions).
+  async function refreshRepo(path: string) {
+    const proj = projects.find((p) => p.repoPath === path);
+    if (!proj) return;
     const v = await LoadRepo(path);
-    upsert(v);
+    mergeGit(proj.id, v);
+  }
+
+  function codeProjects(): any[] {
+    return projects.filter((p) => p.type === "code" && p.isGit);
   }
 
   async function manualRefresh() {
     await loadAll();
-    toastInfo("Repositories refreshed");
+    toastInfo("Projects refreshed");
   }
 
   async function fetchAll() {
-    const gitRepos = repos.filter((r) => r.isGit);
-    if (gitRepos.length === 0) { toastInfo("No git repositories to fetch"); return; }
-    const results = await Promise.all(gitRepos.map((r) => Fetch(r.path)));
+    const git = codeProjects();
+    if (git.length === 0) { toastInfo("No git repositories to fetch"); return; }
+    const results = await Promise.all(git.map((p) => Fetch(p.path)));
     const failed = results.filter((e) => !!e).length;
-    await Promise.all(gitRepos.map((r) => LoadRepo(r.path).then(upsert)));
-    if (failed > 0) toastError("Fetched " + gitRepos.length + " repos, " + failed + " failed");
-    else toastSuccess("Fetched " + gitRepos.length + " repos");
+    await Promise.all(git.map((p) => LoadRepo(p.path).then((v) => mergeGit(p.id, v))));
+    if (failed > 0) toastError("Fetched " + git.length + " repos, " + failed + " failed");
+    else toastSuccess("Fetched " + git.length + " repos");
   }
 
   async function refreshSelected() {
-    const r = selected;
-    if (!r) return;
-    await refreshOne(r.path);
-    toastSuccess("Refreshed " + r.name);
+    const p = selected;
+    if (!p) return;
+    if (p.type === "code") await refreshRepo(p.repoPath);
+    else await refreshProject(p.id);
+    toastSuccess("Refreshed " + p.name);
   }
 
   async function fetchSelected() {
-    const r = selected;
-    if (!r || !r.isGit) return;
-    const err = await Fetch(r.path);
-    if (err) toastError("Fetch " + r.name + ": " + err);
-    else { toastSuccess("Fetched " + r.name); await refreshOne(r.path); }
+    const p = selected;
+    if (!p || p.type !== "code" || !p.isGit) return;
+    const err = await Fetch(p.path);
+    if (err) toastError("Fetch " + p.name + ": " + err);
+    else { toastSuccess("Fetched " + p.name); await refreshRepo(p.repoPath); }
+  }
+
+  async function addProject() {
+    addOpen = true;
+  }
+
+  async function onProjectAdded(id: string) {
+    await reconcile();
+    selectedId = id;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(".repo-row.selected");
+      if (el) (el as HTMLElement).scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  async function deleteProject(id: string) {
+    const p = projects.find((x) => x.id === id);
+    const err = await DeleteProject(id);
+    if (err) { toastError("Delete: " + err); return; }
+    toastSuccess("Deleted " + (p ? p.name : "project"));
+    await reconcile();
   }
 
   // ---- sort ---------------------------------------------------------------
@@ -132,10 +259,10 @@
   // ---- selection movement -------------------------------------------------
   function moveSelection(delta: number) {
     if (!visible.length) return;
-    let idx = visible.findIndex((r) => r.path === selectedPath);
+    let idx = visible.findIndex((p) => p.id === selectedId);
     if (idx === -1) idx = delta > 0 ? 0 : visible.length - 1;
     else idx = Math.min(Math.max(idx + delta, 0), visible.length - 1);
-    selectedPath = visible[idx].path;
+    selectedId = visible[idx].id;
     requestAnimationFrame(() => {
       const el = document.querySelector(".repo-row.selected");
       if (el) (el as HTMLElement).scrollIntoView({ block: "nearest" });
@@ -143,21 +270,22 @@
   }
 
   // ---- context menu -------------------------------------------------------
-  function onContext(r: any, e: MouseEvent) {
+  function onContext(p: any, e: MouseEvent) {
     e.preventDefault();
-    selectedPath = r.path;
-    menu = { x: e.clientX, y: e.clientY, repo: r };
+    selectedId = p.id;
+    menu = { x: e.clientX, y: e.clientY, project: p };
   }
 
   // ---- command palette actions -------------------------------------------
   $: paletteActions = [
-    { id: "refresh", label: "Refresh all repositories", hint: "reload", run: () => { paletteOpen = false; manualRefresh(); } },
+    { id: "add", label: "Add a project", hint: "new", run: () => { paletteOpen = false; addOpen = true; } },
+    { id: "refresh", label: "Refresh all projects", hint: "reload", run: () => { paletteOpen = false; manualRefresh(); } },
     { id: "fetchall", label: "Fetch all repositories", hint: "git fetch", run: () => { paletteOpen = false; fetchAll(); } },
     { id: "settings", label: "Open settings", hint: "config", run: () => { paletteOpen = false; settingsOpen = true; } },
   ];
 
-  function onJump(r: any) {
-    selectedPath = r.path;
+  function onJump(p: any) {
+    selectedId = p.id;
     paletteOpen = false;
     requestAnimationFrame(() => {
       const el = document.querySelector(".repo-row.selected");
@@ -170,11 +298,11 @@
     if (autoFetchTimer) { clearInterval(autoFetchTimer); autoFetchTimer = undefined; }
     if (minutes > 0) {
       autoFetchTimer = setInterval(async () => {
-        const gitRepos = repos.filter((r) => r.isGit);
-        if (gitRepos.length === 0) return;
-        await Promise.all(gitRepos.map((r) => Fetch(r.path)));
-        await Promise.all(gitRepos.map((r) => LoadRepo(r.path).then(upsert)));
-        toastInfo("Auto-fetched " + gitRepos.length + " repos");
+        const git = codeProjects();
+        if (git.length === 0) return;
+        await Promise.all(git.map((p) => Fetch(p.path)));
+        await Promise.all(git.map((p) => LoadRepo(p.path).then((v) => mergeGit(p.id, v))));
+        toastInfo("Auto-fetched " + git.length + " repos");
       }, minutes * 60 * 1000);
     }
   }
@@ -200,7 +328,7 @@
       !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as any).isContentEditable);
 
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
-      if (settingsOpen || menu || diffOpen) return;
+      if (settingsOpen || addOpen || menu || diffOpen) return;
       e.preventDefault();
       paletteOpen = !paletteOpen;
       return;
@@ -209,12 +337,13 @@
     if (e.key === "Escape") {
       if (menu) { menu = null; return; }
       if (paletteOpen) { paletteOpen = false; return; }
+      if (addOpen) { addOpen = false; return; }
       if (settingsOpen) { settingsOpen = false; return; }
       return;
     }
 
     if (typing) return;
-    if (paletteOpen || settingsOpen || menu) return;
+    if (paletteOpen || settingsOpen || addOpen || menu) return;
 
     switch (e.key) {
       case "/":
@@ -257,37 +386,44 @@
 <Toolbar
   bind:filter
   bind:filterInput
-  {repos}
+  repos={projects}
   {loadingCount}
   {statusFilter}
   onStatus={(s) => (statusFilter = s)}
   onRefresh={manualRefresh}
   onFetchAll={fetchAll}
+  onAddProject={addProject}
   onOpenSettings={() => (settingsOpen = true)}
   onOpenPalette={() => (paletteOpen = true)}
 />
 
-<StatsHeader {repos} />
+<StatsHeader repos={projects} />
 
 <div class="main">
-  <RepoTable
-    repos={visible}
-    {selectedPath}
+  <ProjectTable
+    projects={visible}
+    {selectedId}
     {scanned}
     {sortKey}
     {sortDir}
-    onSelect={(r) => (selectedPath = r.path)}
+    onSelect={(p) => (selectedId = p.id)}
     {onSort}
     {onContext}
   />
-  <DetailPanel repo={selected} onChanged={refreshOne} bind:diffOpen />
+  <DetailPanel
+    project={selected}
+    onRepoChanged={refreshRepo}
+    onProjectChanged={refreshProject}
+    onDeleteProject={deleteProject}
+    bind:diffOpen
+  />
 </div>
 
 <Toasts />
 
 {#if paletteOpen}
   <CommandPalette
-    {repos}
+    repos={projects}
     actions={paletteActions}
     onClose={() => (paletteOpen = false)}
     {onJump}
@@ -298,6 +434,10 @@
   <SettingsModal onClose={() => (settingsOpen = false)} onSaved={onSettingsSaved} />
 {/if}
 
+{#if addOpen}
+  <AddProjectModal onClose={() => (addOpen = false)} onAdded={onProjectAdded} />
+{/if}
+
 {#if menu}
-  <ContextMenu x={menu.x} y={menu.y} repo={menu.repo} onClose={() => (menu = null)} />
+  <ContextMenu x={menu.x} y={menu.y} repo={menu.project} onClose={() => (menu = null)} />
 {/if}

@@ -20,6 +20,7 @@
   });
 
   $: hasRemote = !!(repo && repo.remote);
+  $: hasPath = !!(repo && repo.path);
 
   async function openBrowser() {
     onClose();
@@ -31,6 +32,7 @@
 
   async function reveal() {
     onClose();
+    if (!hasPath) return;
     const err = await RevealInExplorer(repo.path);
     if (err) toastError("Reveal: " + err);
     else toastSuccess("Revealed in explorer");
@@ -38,6 +40,7 @@
 
   async function copyPath() {
     onClose();
+    if (!hasPath) return;
     try {
       await navigator.clipboard.writeText(repo.path);
       toastSuccess("Path copied");
@@ -63,8 +66,8 @@
 <div class="ctx-menu" bind:this={menuEl} style="left:{px}px; top:{py}px">
   <div class="ctx-head">{repo.name}</div>
   <button class="ctx-item" on:click={openBrowser} disabled={!hasRemote}>Open in Browser</button>
-  <button class="ctx-item" on:click={reveal}>Reveal in Explorer</button>
+  <button class="ctx-item" on:click={reveal} disabled={!hasPath}>Reveal in Explorer</button>
   <div class="ctx-sep"></div>
-  <button class="ctx-item" on:click={copyPath}>Copy Path</button>
+  <button class="ctx-item" on:click={copyPath} disabled={!hasPath}>Copy Path</button>
   <button class="ctx-item" on:click={copyRemote} disabled={!hasRemote}>Copy Remote</button>
 </div>
