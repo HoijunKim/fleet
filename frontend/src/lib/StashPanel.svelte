@@ -6,14 +6,21 @@
   export let name = "";
   export let onChanged: (path: string) => void;
 
+  let open = false;
   let entries: string[] = [];
   let busy = false;
   let loadedPath = "";
 
-  // Lazily (re)load the stash list whenever the selected repo changes.
+  // Reset when the selected repo changes; reload only if currently expanded.
   $: if (path !== loadedPath) {
     loadedPath = path;
-    load();
+    entries = [];
+    if (open) load();
+  }
+
+  async function toggle() {
+    open = !open;
+    if (open) await load();
   }
 
   async function load() {
@@ -61,24 +68,30 @@
   }
 </script>
 
-<div class="stash">
-  <div class="stash-head">
+<div class="collapse">
+  <button class="collapse-head" on:click={toggle} aria-expanded={open}>
+    <span class="collapse-caret" class:open></span>
     <span class="section-label">Stash</span>
-    <div class="stash-actions">
-      <button class="btn btn-secondary btn-sm" on:click={doStash} disabled={busy}>Stash</button>
-      <button class="btn btn-secondary btn-sm" on:click={doPop} disabled={busy || entries.length === 0}>
-        Pop
-      </button>
-    </div>
-  </div>
+  </button>
 
-  {#if entries.length === 0}
-    <div class="stash-empty">No stash entries</div>
-  {:else}
-    <div class="stash-list">
-      {#each entries as s, i (i)}
-        <span class="stash-entry">{s}</span>
-      {/each}
+  {#if open}
+    <div class="stash">
+      <div class="stash-actions">
+        <button class="btn btn-secondary btn-sm" on:click={doStash} disabled={busy}>Stash</button>
+        <button class="btn btn-secondary btn-sm" on:click={doPop} disabled={busy || entries.length === 0}>
+          Pop
+        </button>
+      </div>
+
+      {#if entries.length === 0}
+        <div class="stash-empty">No stash entries</div>
+      {:else}
+        <div class="stash-list">
+          {#each entries as s, i (i)}
+            <span class="stash-entry">{s}</span>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

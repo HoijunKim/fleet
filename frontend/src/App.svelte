@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ListProjects, LoadRepo, Fetch, DeleteProject, GetConfig, GetProject } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject } from "../wailsjs/go/main/App";
   import Toolbar from "./lib/Toolbar.svelte";
   import StatsHeader from "./lib/StatsHeader.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
@@ -23,6 +23,9 @@
   let sortKey = "";
   let sortDir: "asc" | "desc" = "asc";
   let selectedId = "";
+  // Ids checked via the per-row checkboxes, for bulk actions. Stale ids (rows
+  // that were removed) are simply ignored by everything that reads this.
+  let selectedIds: Set<string> = new Set();
   let scanned = false;
   // Top-level view: the fleet-wide Overview (default) or the project list.
   let view: "overview" | "projects" = "overview";
@@ -97,6 +100,8 @@
 
   $: selected = projects.find((p) => p.id === selectedId) || null;
   $: loadingCount = projects.filter((p) => p.type === "code" && !p.loaded && !p.errMsg).length;
+  // Derived from the live list so removed rows never inflate the count.
+  $: selectedCount = projects.filter((p) => selectedIds.has(p.id)).length;
 
   // Fleet-wide counts, computed once here and passed to both the Overview
   // tiles and the slim Projects-view StatsHeader (no duplicate counting).
@@ -300,6 +305,82 @@
     else toastSuccess("Fetched " + git.length + " repos");
   }
 
+  // Shared bulk git runner: fan `fn` (Fetch/Pull/Push) out over `list` with the
+  // concurrency cap, refresh those repos, and toast a pass/fail summary. Guarded
+  // by reqGen so a slower aggregate load cannot clobber the refreshed rows.
+  async function bulkGit(
+    list: any[],
+    fn: (path: string) => Promise<string>,
+    verb: string,
+    emptyMsg: string
+  ) {
+    if (list.length === 0) { toastInfo(emptyMsg); return; }
+    const gen = ++reqGen;
+    let failed = 0;
+    await runPool(list, 6, async (p) => {
+      try {
+        const err = await fn(p.path);
+        if (err) failed++;
+      } catch {
+        failed++;
+      }
+    });
+    if (gen !== reqGen) return;
+    await runPool(list, 6, (p) => loadGitField(p, gen));
+    if (gen !== reqGen) return;
+    if (failed > 0) toastError(verb + " " + list.length + " repos, " + failed + " failed");
+    else toastSuccess(verb + " " + list.length + " repos");
+  }
+
+  // Toolbar "Pull all" - every git repo. "Push all" - only repos with commits
+  // ahead of their upstream.
+  async function pullAll() {
+    await bulkGit(codeProjects(), Pull, "Pulled", "No git repositories to pull");
+  }
+  async function pushAll() {
+    const ahead = codeProjects().filter((p) => p.ahead > 0);
+    await bulkGit(ahead, Push, "Pushed", "No repositories ahead to push");
+  }
+
+  // ---- multi-select bulk actions ------------------------------------------
+  function toggleSelect(id: string) {
+    if (selectedIds.has(id)) selectedIds.delete(id);
+    else selectedIds.add(id);
+    selectedIds = selectedIds; // trigger reactivity
+  }
+
+  // Header select-all over the currently visible rows: if every visible row is
+  // already checked, clear them; otherwise check them all.
+  function toggleSelectAll() {
+    const allSelected = visible.length > 0 && visible.every((p) => selectedIds.has(p.id));
+    for (const p of visible) {
+      if (allSelected) selectedIds.delete(p.id);
+      else selectedIds.add(p.id);
+    }
+    selectedIds = selectedIds;
+  }
+
+  function clearSelection() {
+    selectedIds = new Set();
+  }
+
+  // The checked, still-existing code repos (bulk git actions ignore manual and
+  // non-git rows). Push additionally narrows to repos that are ahead.
+  function selectedCodeProjects(): any[] {
+    return projects.filter((p) => selectedIds.has(p.id) && p.type === "code" && p.isGit);
+  }
+
+  async function bulkFetch() {
+    await bulkGit(selectedCodeProjects(), Fetch, "Fetched", "No git repositories selected");
+  }
+  async function bulkPull() {
+    await bulkGit(selectedCodeProjects(), Pull, "Pulled", "No git repositories selected");
+  }
+  async function bulkPush() {
+    const ahead = selectedCodeProjects().filter((p) => p.ahead > 0);
+    await bulkGit(ahead, Push, "Pushed", "No selected repositories ahead to push");
+  }
+
   async function refreshSelected() {
     const p = selected;
     if (!p) return;
@@ -369,6 +450,8 @@
     { id: "add", label: "Add a project", hint: "new", run: () => { paletteOpen = false; addOpen = true; } },
     { id: "refresh", label: "Refresh all projects", hint: "reload", run: () => { paletteOpen = false; manualRefresh(); } },
     { id: "fetchall", label: "Fetch all repositories", hint: "git fetch", run: () => { paletteOpen = false; fetchAll(); } },
+    { id: "pullall", label: "Pull all repositories", hint: "git pull", run: () => { paletteOpen = false; pullAll(); } },
+    { id: "pushall", label: "Push all ahead repositories", hint: "git push", run: () => { paletteOpen = false; pushAll(); } },
     { id: "settings", label: "Open settings", hint: "config", run: () => { paletteOpen = false; settingsOpen = true; } },
   ];
 
@@ -503,6 +586,8 @@
   onHighPriorityToggle={() => (highPriorityOnly = !highPriorityOnly)}
   onRefresh={manualRefresh}
   onFetchAll={fetchAll}
+  onPullAll={pullAll}
+  onPushAll={pushAll}
   onAddProject={addProject}
   onOpenSettings={() => (settingsOpen = true)}
   onOpenPalette={() => (paletteOpen = true)}
@@ -511,16 +596,32 @@
 {#if view === "projects"}
   <StatsHeader {stats} />
 
+  {#if selectedCount > 0}
+    <div class="bulk-bar">
+      <span class="bulk-count">{selectedCount} selected</span>
+      <div class="bulk-actions">
+        <button class="btn btn-secondary btn-sm" on:click={bulkFetch}>Fetch</button>
+        <button class="btn btn-secondary btn-sm" on:click={bulkPull}>Pull</button>
+        <button class="btn btn-secondary btn-sm" on:click={bulkPush}>Push</button>
+      </div>
+      <div class="toolbar-spacer"></div>
+      <button class="btn btn-secondary btn-sm" on:click={clearSelection}>Clear</button>
+    </div>
+  {/if}
+
   <div class="main">
     <ProjectTable
       projects={visible}
       {selectedId}
+      {selectedIds}
       {scanned}
       {sortKey}
       {sortDir}
       onSelect={(p) => (selectedId = p.id)}
       {onSort}
       {onContext}
+      onToggleSelect={toggleSelect}
+      onToggleSelectAll={toggleSelectAll}
     />
     <DetailPanel
       project={selected}

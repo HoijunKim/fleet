@@ -12,6 +12,8 @@
   export let onPmStatus: (s: "all" | "active" | "paused" | "done") => void;
   export let onHighPriorityToggle: () => void;
   export let onFetchAll: () => void;
+  export let onPullAll: () => void;
+  export let onPushAll: () => void;
   export let onRefresh: () => void;
   export let onOpenSettings: () => void;
   export let onOpenPalette: () => void;
@@ -105,6 +107,8 @@
 
     <button class="btn btn-secondary" on:click={onAddProject}>+ Project</button>
     <button class="btn btn-secondary" on:click={onRefresh}>Refresh</button>
+    <button class="btn btn-secondary" on:click={onPullAll}>Pull all</button>
+    <button class="btn btn-secondary" on:click={onPushAll}>Push all</button>
     <button class="btn btn-primary" on:click={onFetchAll}>Fetch All</button>
   </div>
 </header>

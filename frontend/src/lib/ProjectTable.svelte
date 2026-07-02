@@ -6,9 +6,25 @@
   export let scanned: boolean = false;
   export let sortKey: string = "";
   export let sortDir: "asc" | "desc" = "asc";
+  // Set of checked (multi-selected) project ids, for bulk actions.
+  export let selectedIds: Set<string> = new Set();
   export let onSelect: (p: any) => void;
   export let onSort: (key: string) => void;
   export let onContext: (p: any, e: MouseEvent) => void;
+  // Toggle a single row's checkbox; toggle-all over the visible rows.
+  export let onToggleSelect: (id: string) => void;
+  export let onToggleSelectAll: () => void;
+
+  // Header checkbox reflects the visible rows: fully checked when all are
+  // selected, indeterminate when only some are.
+  $: allChecked = projects.length > 0 && projects.every((p) => selectedIds.has(p.id));
+  $: someChecked = projects.some((p) => selectedIds.has(p.id));
+
+  // Set the DOM `indeterminate` property (not expressible as an attribute).
+  function indeterminate(node: HTMLInputElement, value: boolean) {
+    node.indeterminate = value;
+    return { update(v: boolean) { node.indeterminate = v; } };
+  }
 
   // Git status pill for code projects. kind is "none" for manual projects (no
   // pill) and "skeleton" while the repo is still loading.
@@ -47,6 +63,16 @@
     <table class="repo-table">
       <thead>
         <tr>
+          <th class="cell-select">
+            <input
+              type="checkbox"
+              class="row-check"
+              checked={allChecked}
+              use:indeterminate={someChecked && !allChecked}
+              on:change={onToggleSelectAll}
+              aria-label="Select all visible projects"
+            />
+          </th>
           <th class="sortable" class:sorted={sortKey === "name"} on:click={() => onSort("name")}>
             Name{#if arrow("name")}<span class="sort-arrow {arrow('name')}"></span>{/if}
           </th>
@@ -78,6 +104,16 @@
             on:click={() => onSelect(p)}
             on:contextmenu={(e) => onContext(p, e)}
           >
+            <td class="cell-select">
+              <input
+                type="checkbox"
+                class="row-check"
+                checked={selectedIds.has(p.id)}
+                on:click|stopPropagation
+                on:change={() => onToggleSelect(p.id)}
+                aria-label="Select {p.name}"
+              />
+            </td>
             <td class="cell-name">{p.name}</td>
             <td>
               <span class="type-badge {p.type}">{p.type}</span>
