@@ -270,6 +270,72 @@ func TestSetTagsNilCoerced(t *testing.T) {
 	}
 }
 
+func TestSetTaskStatus(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("proj")
+	a.AddTask(id, "task one", "")
+	tv := a.GetProject(id).Tasks
+	if len(tv) != 1 || tv[0].Status != "todo" {
+		t.Fatalf("new task should be todo, got %+v", tv)
+	}
+	if msg := a.SetTaskStatus(id, tv[0].ID, "doing"); msg != "" {
+		t.Fatalf("SetTaskStatus doing: %s", msg)
+	}
+	tv = a.GetProject(id).Tasks
+	if tv[0].Status != "doing" || tv[0].Done {
+		t.Errorf("want doing/undone, got %+v", tv[0])
+	}
+	if msg := a.SetTaskStatus(id, tv[0].ID, "done"); msg != "" {
+		t.Fatalf("SetTaskStatus done: %s", msg)
+	}
+	if pv := a.GetProject(id); pv.Tasks[0].Status != "done" || !pv.Tasks[0].Done || pv.DoneCount != 1 || pv.TaskCount != 1 {
+		t.Errorf("want done+mirror+counts, got %+v", pv)
+	}
+	if msg := a.SetTaskStatus(id, tv[0].ID, "bogus"); msg == "" {
+		t.Error("invalid status must be rejected")
+	}
+}
+
+func TestReorderTasks(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("proj2")
+	a.AddTask(id, "A", "")
+	a.AddTask(id, "B", "")
+	a.AddTask(id, "C", "")
+	ts := a.GetProject(id).Tasks
+	ids := []string{ts[2].ID, ts[0].ID, ts[1].ID} // C, A, B
+	if msg := a.ReorderTasks(id, ids); msg != "" {
+		t.Fatalf("ReorderTasks: %s", msg)
+	}
+	got := a.GetProject(id).Tasks
+	if got[0].Title != "C" || got[1].Title != "A" || got[2].Title != "B" {
+		t.Errorf("bad order: %v", []string{got[0].Title, got[1].Title, got[2].Title})
+	}
+	// omitting an id keeps it (appended), never drops
+	if msg := a.ReorderTasks(id, []string{got[2].ID}); msg != "" {
+		t.Fatal(msg)
+	}
+	if len(a.GetProject(id).Tasks) != 3 {
+		t.Error("reorder must never drop a task")
+	}
+	// a duplicate id must not duplicate the task (no store corruption)
+	cur := a.GetProject(id).Tasks
+	if msg := a.ReorderTasks(id, []string{cur[0].ID, cur[0].ID, cur[1].ID, cur[2].ID}); msg != "" {
+		t.Fatal(msg)
+	}
+	after := a.GetProject(id).Tasks
+	if len(after) != 3 {
+		t.Errorf("duplicate id must not duplicate a task, got %d tasks", len(after))
+	}
+	uniq := map[string]bool{}
+	for _, tk := range after {
+		if uniq[tk.ID] {
+			t.Errorf("duplicate task id %s persisted", tk.ID)
+		}
+		uniq[tk.ID] = true
+	}
+}
+
 // helpers
 func (a *App) addTaskReturnID(t *testing.T, projectID, title string) string {
 	t.Helper()
@@ -504,4 +570,58 @@ func containsString(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestAgenda(t *testing.T) {
+	a := newTestApp(t)
+	p := a.AddProject("proj")
+	a.UpdateProject(p, "active", 0, "2026-08-01", "")
+	a.AddTask(p, "due task", "2026-07-10")
+	a.AddTask(p, "no-due doing", "")
+	a.AddTask(p, "done task", "2026-07-05")
+	for _, tk := range a.GetProject(p).Tasks {
+		switch tk.Title {
+		case "no-due doing":
+			a.SetTaskStatus(p, tk.ID, "doing")
+		case "done task":
+			a.SetTaskStatus(p, tk.ID, "done")
+		}
+	}
+
+	items := a.Agenda()
+	if items == nil {
+		t.Fatal("Agenda must be non-nil")
+	}
+
+	for _, it := range items {
+		if it.Title == "done task" {
+			t.Error("done task must be excluded")
+		}
+	}
+
+	var haveDeadline, haveDueTask, haveDoingTask bool
+	for _, it := range items {
+		if it.Kind == "deadline" && it.ProjectID == p {
+			haveDeadline = true
+		}
+		if it.Kind == "task" && it.Title == "due task" {
+			haveDueTask = true
+		}
+		if it.Kind == "task" && it.Title == "no-due doing" {
+			haveDoingTask = true
+		}
+	}
+	if !haveDeadline {
+		t.Errorf("expected a deadline item, got %+v", items)
+	}
+	if !haveDueTask {
+		t.Errorf("expected the due task item, got %+v", items)
+	}
+	if !haveDoingTask {
+		t.Errorf("expected the no-due doing task item, got %+v", items)
+	}
+
+	if last := items[len(items)-1]; last.Due != "" {
+		t.Errorf("empty-due item should sort last, got %+v", last)
+	}
 }

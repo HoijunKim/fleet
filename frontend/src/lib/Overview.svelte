@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { CommitActivity } from "../../wailsjs/go/main/App";
+  import { Agenda, CommitActivity } from "../../wailsjs/go/main/App";
   import { daysUntil } from "./pm";
   import Heatmap from "./Heatmap.svelte";
+  import AgendaCard from "./AgendaCard.svelte";
 
   // Full project list (code + manual) assembled in App.svelte.
   export let projects: any[] = [];
@@ -134,7 +135,40 @@
 
   onDestroy(() => {
     aggGen++; // invalidate any in-flight aggregate load
+    agendaGen++; // invalidate any in-flight agenda load
   });
+
+  // ---- fleet-wide agenda ---------------------------------------------------
+  // Single cheap store-only call (no fan-out needed). Re-fetched only when a
+  // PM-relevant field actually changes - the frequent git-field merges and
+  // auto-fetch ticks reassign `projects` too (bare `projects = projects`), so
+  // guard on a signature over just deadline/status/tasks to avoid firing an
+  // Agenda() call per repo on every refresh.
+  let agendaItems: any[] = [];
+  let agendaGen = 0;
+  let lastAgendaSig = "\0"; // sentinel so the first real signature always loads
+
+  $: agendaSig = projects
+    .map((p) => p.id + "|" + (p.deadline || "") + "|" + (p.status || "") + "|" + JSON.stringify(p.tasks || []))
+    .join("\n");
+  $: {
+    if (agendaSig !== lastAgendaSig) {
+      lastAgendaSig = agendaSig;
+      loadAgenda();
+    }
+  }
+
+  async function loadAgenda() {
+    const gen = ++agendaGen;
+    let items: any[] = [];
+    try {
+      items = (await Agenda()) || [];
+    } catch {
+      items = [];
+    }
+    if (gen !== agendaGen) return; // a newer request superseded this one
+    agendaItems = items;
+  }
 </script>
 
 <div class="overview">
@@ -150,6 +184,9 @@
     </section>
 
     <div class="ov-grid">
+      <!-- Fleet-wide agenda: deadlines + due/doing tasks, soonest first -->
+      <AgendaCard items={agendaItems} {onOpen} />
+
       <!-- Needs-attention queue -->
       <section class="ov-card ov-attention">
         <div class="ov-card-head">

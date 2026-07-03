@@ -9,6 +9,8 @@ export function AddProject(arg1:string):Promise<string>;
 
 export function AddTask(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function Agenda():Promise<Array<main.AgendaItem>>;
+
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
 export function Checkout(arg1:string,arg2:string):Promise<string>;
@@ -53,6 +55,8 @@ export function Push(arg1:string):Promise<string>;
 
 export function RemoveEdge(arg1:string):Promise<string>;
 
+export function ReorderTasks(arg1:string,arg2:Array<string>):Promise<string>;
+
 export function RepoGraph():Promise<main.GraphView>;
 
 export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
@@ -68,6 +72,8 @@ export function ScanRepos():Promise<Array<main.RepoView>>;
 export function SearchAll(arg1:string):Promise<Array<main.SearchHit>>;
 
 export function SetTags(arg1:string,arg2:Array<string>):Promise<string>;
+
+export function SetTaskStatus(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function Stash(arg1:string):Promise<string>;
 

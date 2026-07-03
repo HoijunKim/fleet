@@ -11,10 +11,11 @@ import (
 
 // Task is one checklist item on a project.
 type Task struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Done  bool   `json:"done"`
-	Due   string `json:"due"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Done   bool   `json:"done"`
+	Status string `json:"status"`
+	Due    string `json:"due"`
 }
 
 // Record is the stored project-management data for one project id. For code
@@ -53,10 +54,33 @@ func Open(path string) (*Store, error) {
 	if err := json.Unmarshal(data, &recs); err != nil {
 		return s, err
 	}
+	migrate(recs)
 	if recs != nil {
 		s.records = recs
 	}
 	return s, nil
+}
+
+// migrate normalizes each task's Status/Done pair for legacy data that only
+// carries the "done" bool. If Status is unset, it is derived from Done.
+// Status (whether freshly derived or already present) is then the source of
+// truth: Done is re-mirrored from it so the two fields cannot disagree.
+// Idempotent: running it twice on already-migrated data is a no-op.
+func migrate(recs map[string]Record) {
+	for k, record := range recs {
+		for i, t := range record.Tasks {
+			if t.Status == "" {
+				if t.Done {
+					t.Status = "done"
+				} else {
+					t.Status = "todo"
+				}
+			}
+			t.Done = t.Status == "done"
+			record.Tasks[i] = t
+		}
+		recs[k] = record
+	}
 }
 
 // cloneRecord deep-copies the slice fields (Tags, Tasks) so callers cannot

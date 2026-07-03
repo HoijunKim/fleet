@@ -27,6 +27,30 @@ export namespace config {
 
 export namespace main {
 	
+	export class AgendaItem {
+	    projectId: string;
+	    projectName: string;
+	    kind: string;
+	    taskId: string;
+	    title: string;
+	    due: string;
+	    status: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgendaItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectId = source["projectId"];
+	        this.projectName = source["projectName"];
+	        this.kind = source["kind"];
+	        this.taskId = source["taskId"];
+	        this.title = source["title"];
+	        this.due = source["due"];
+	        this.status = source["status"];
+	    }
+	}
 	export class BranchInfo {
 	    current: string;
 	    all: string[];
@@ -183,6 +207,7 @@ export namespace main {
 	    id: string;
 	    title: string;
 	    done: boolean;
+	    status: string;
 	    due: string;
 	
 	    static createFrom(source: any = {}) {
@@ -194,6 +219,7 @@ export namespace main {
 	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.done = source["done"];
+	        this.status = source["status"];
 	        this.due = source["due"];
 	    }
 	}
@@ -208,6 +234,8 @@ export namespace main {
 	    notes: string;
 	    tags: string[];
 	    tasks: TaskView[];
+	    doneCount: number;
+	    taskCount: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProjectView(source);
@@ -225,6 +253,8 @@ export namespace main {
 	        this.notes = source["notes"];
 	        this.tags = source["tags"];
 	        this.tasks = this.convertValues(source["tasks"], TaskView);
+	        this.doneCount = source["doneCount"];
+	        this.taskCount = source["taskCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

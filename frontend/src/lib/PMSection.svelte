@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { AddTask, ToggleTask, DeleteTask, UpdateProject } from "../../wailsjs/go/main/App";
+  import { AddTask, SetTaskStatus, ReorderTasks, DeleteTask, UpdateProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { ddayLabel } from "./pm";
   import TagChips from "./TagChips.svelte";
@@ -47,7 +47,14 @@
   }
 
   $: tasks = project && project.tasks ? project.tasks : [];
-  $: doneCount = tasks.filter((t: any) => t.done).length;
+  // Prefer the backend-computed counts (kept in sync by GetProject after every
+  // mutation); fall back to a client-side count off t.status for safety.
+  $: taskCount = project && typeof project.taskCount === "number" ? project.taskCount : tasks.length;
+  $: doneCount =
+    project && typeof project.doneCount === "number"
+      ? project.doneCount
+      : tasks.filter((t: any) => t.status === "done").length;
+  $: progressPct = taskCount > 0 ? Math.round((doneCount / taskCount) * 100) : 0;
 
   onDestroy(() => clearTimeout(notesTimer));
 
@@ -109,15 +116,55 @@
     if (e.key === "Enter") { e.preventDefault(); addTask(); }
   }
 
-  async function toggle(taskId: string) {
-    const err = await ToggleTask(project.id, taskId);
-    if (err) toastError("Toggle: " + err);
+  // Per-task status control: click cycles todo -> doing -> done -> todo.
+  const STATUS_ORDER = ["todo", "doing", "done"];
+
+  async function cycleStatus(t: any) {
+    const cur = t.status === "doing" || t.status === "done" ? t.status : "todo";
+    const next = STATUS_ORDER[(STATUS_ORDER.indexOf(cur) + 1) % STATUS_ORDER.length];
+    const err = await SetTaskStatus(project.id, t.id, next);
+    if (err) toastError("Status: " + err);
     else onChanged(project.id);
   }
 
   async function removeTask(taskId: string) {
     const err = await DeleteTask(project.id, taskId);
     if (err) toastError("Delete task: " + err);
+    else onChanged(project.id);
+  }
+
+  // Drag-to-reorder: native HTML5 DnD, no library. Guard against empty/
+  // single-item lists and no-op drops (same id, or dropped outside a task).
+  let dragId: string | null = null;
+
+  function onDragStart(e: DragEvent, id: string) {
+    dragId = id;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", id);
+    }
+  }
+
+  function onDragOver(e: DragEvent) {
+    e.preventDefault();
+  }
+
+  function onDragEnd() {
+    dragId = null;
+  }
+
+  async function onDrop(e: DragEvent, targetId: string) {
+    e.preventDefault();
+    const srcId = dragId;
+    dragId = null;
+    if (!srcId || srcId === targetId || tasks.length < 2) return;
+    // Move the dragged task to just before the drop target.
+    const ids = tasks.map((t: any) => t.id).filter((id: string) => id !== srcId);
+    const idx = ids.indexOf(targetId);
+    if (idx === -1) return;
+    ids.splice(idx, 0, srcId);
+    const err = await ReorderTasks(project.id, ids);
+    if (err) toastError("Reorder: " + err);
     else onChanged(project.id);
   }
 </script>
@@ -129,23 +176,39 @@
 
   <div class="pm-tasks-head">
     <span class="section-label">Tasks</span>
-    <span class="pm-progress">{doneCount}/{tasks.length}</span>
+    <span class="pm-progress">{doneCount}/{taskCount} ({progressPct}%)</span>
   </div>
 
   {#if tasks.length === 0}
     <div class="pm-empty">No tasks yet</div>
   {:else}
+    <div
+      class="pm-progress-bar"
+      role="progressbar"
+      aria-valuenow={progressPct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Task progress"
+    >
+      <div class="pm-progress-fill" style="width: {progressPct}%"></div>
+    </div>
     <ul class="pm-list">
       {#each tasks as t (t.id)}
-        <li class="pm-task" class:done={t.done}>
+        <li
+          class="pm-task"
+          class:done={t.status === "done"}
+          class:dragging={dragId === t.id}
+          draggable={true}
+          on:dragstart={(e) => onDragStart(e, t.id)}
+          on:dragover={onDragOver}
+          on:drop={(e) => onDrop(e, t.id)}
+          on:dragend={onDragEnd}
+        >
           <button
-            class="pm-check"
-            class:on={t.done}
-            on:click={() => toggle(t.id)}
-            aria-label={t.done ? "Mark not done" : "Mark done"}
-          >
-            {#if t.done}<span class="pm-check-mark">x</span>{/if}
-          </button>
+            class="pm-status-pill status-{t.status || 'todo'}"
+            on:click={() => cycleStatus(t)}
+            aria-label={"Status: " + (t.status || "todo") + " (click to cycle)"}
+          >{t.status || "todo"}</button>
           <span class="pm-task-title">{t.title}</span>
           {#if t.due}
             {@const d = ddayLabel(t.due)}
