@@ -713,7 +713,7 @@
     stroke-width: 1.4;
     opacity: 0.85;
     pointer-events: none;
-    transition: stroke 120ms ease, opacity 120ms ease;
+    transition: stroke var(--t), opacity var(--t);
   }
   .edge.hot {
     stroke: var(--accent);
@@ -736,21 +736,21 @@
   }
 
   .node-dot {
-    stroke: rgba(13, 15, 19, 0.85);
+    stroke: rgba(11, 14, 20, 0.85);
     stroke-width: 2;
     cursor: pointer;
-    transition: stroke 120ms ease, stroke-width 120ms ease;
+    transition: stroke var(--t), stroke-width var(--t);
   }
   .node.hot .node-dot {
     stroke: var(--accent);
     stroke-width: 3;
   }
   .node.pending .node-dot {
-    stroke: #e3b341;
+    stroke: var(--accent);
     stroke-width: 4;
   }
   .node.pending .node-label {
-    fill: #e3b341;
+    fill: var(--accent);
   }
 
   .node-label {
