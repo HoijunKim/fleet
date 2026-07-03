@@ -104,13 +104,13 @@
     margin-bottom: 4px;
   }
   .ov-agenda-title {
-    color: var(--faint);
+    color: var(--muted);
     font-weight: 400;
     margin-left: 6px;
   }
   .ov-pill.deadline {
     color: var(--accent);
-    border-color: var(--accent);
-    background: var(--raised);
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
   }
 </style>
