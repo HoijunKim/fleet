@@ -257,25 +257,28 @@ func (a *App) RevealInExplorer(path string) string {
 
 // TaskView is the JS-facing task.
 type TaskView struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Done  bool   `json:"done"`
-	Due   string `json:"due"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Done   bool   `json:"done"`
+	Status string `json:"status"`
+	Due    string `json:"due"`
 }
 
 // ProjectView is the JS-facing unified project (project-management fields only;
 // live git status is merged in by the front end via LoadRepo for code projects).
 type ProjectView struct {
-	ID       string     `json:"id"`
-	Name     string     `json:"name"`
-	Type     string     `json:"type"` // "code" | "manual"
-	RepoPath string     `json:"repoPath"`
-	Status   string     `json:"status"`
-	Priority int        `json:"priority"`
-	Deadline string     `json:"deadline"`
-	Notes    string     `json:"notes"`
-	Tags     []string   `json:"tags"`
-	Tasks    []TaskView `json:"tasks"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Type      string     `json:"type"` // "code" | "manual"
+	RepoPath  string     `json:"repoPath"`
+	Status    string     `json:"status"`
+	Priority  int        `json:"priority"`
+	Deadline  string     `json:"deadline"`
+	Notes     string     `json:"notes"`
+	Tags      []string   `json:"tags"`
+	Tasks     []TaskView `json:"tasks"`
+	DoneCount int        `json:"doneCount"`
+	TaskCount int        `json:"taskCount"`
 }
 
 // DayCountView is the JS-facing per-day commit count.
@@ -287,7 +290,7 @@ type DayCountView struct {
 func toTaskViews(ts []store.Task) []TaskView {
 	out := make([]TaskView, 0, len(ts))
 	for _, t := range ts {
-		out = append(out, TaskView{ID: t.ID, Title: t.Title, Done: t.Done, Due: t.Due})
+		out = append(out, TaskView{ID: t.ID, Title: t.Title, Done: t.Done, Status: t.Status, Due: t.Due})
 	}
 	return out
 }
@@ -297,10 +300,17 @@ func recordToView(id, name, typ, repoPath string, r store.Record) ProjectView {
 	if tags == nil {
 		tags = []string{}
 	}
+	doneCount := 0
+	for _, t := range r.Tasks {
+		if t.Status == "done" {
+			doneCount++
+		}
+	}
 	return ProjectView{
 		ID: id, Name: name, Type: typ, RepoPath: repoPath,
 		Status: r.Status, Priority: r.Priority, Deadline: r.Deadline,
 		Notes: r.Notes, Tags: tags, Tasks: toTaskViews(r.Tasks),
+		DoneCount: doneCount, TaskCount: len(r.Tasks),
 	}
 }
 
@@ -365,18 +375,70 @@ func (a *App) DeleteProject(id string) string { return errMsg(a.store.Delete(id)
 func (a *App) AddTask(projectID, title, due string) string {
 	tid := "t-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	return errMsg(a.store.Update(projectID, func(r *store.Record) {
-		r.Tasks = append(r.Tasks, store.Task{ID: tid, Title: title, Due: due})
+		r.Tasks = append(r.Tasks, store.Task{ID: tid, Title: title, Due: due, Status: "todo"})
 	}))
 }
 
-// ToggleTask flips a task's done state.
+// ToggleTask flips a task's done state, keeping Status in sync with Done.
 func (a *App) ToggleTask(projectID, taskID string) string {
 	return errMsg(a.store.Update(projectID, func(r *store.Record) {
 		for i := range r.Tasks {
 			if r.Tasks[i].ID == taskID {
 				r.Tasks[i].Done = !r.Tasks[i].Done
+				if r.Tasks[i].Done {
+					r.Tasks[i].Status = "done"
+				} else {
+					r.Tasks[i].Status = "todo"
+				}
 			}
 		}
+	}))
+}
+
+// validTaskStatuses are the only statuses SetTaskStatus accepts.
+var validTaskStatuses = map[string]bool{"todo": true, "doing": true, "done": true}
+
+// SetTaskStatus sets a task's status (todo/doing/done), mirroring Done from
+// it. An unrecognized status is rejected with no mutation. A missing taskID
+// is a no-op success, mirroring ToggleTask's silent miss for consistency.
+func (a *App) SetTaskStatus(projectID, taskID, status string) string {
+	if !validTaskStatuses[status] {
+		return "invalid status: " + status
+	}
+	return errMsg(a.store.Update(projectID, func(r *store.Record) {
+		for i := range r.Tasks {
+			if r.Tasks[i].ID == taskID {
+				r.Tasks[i].Status = status
+				r.Tasks[i].Done = status == "done"
+			}
+		}
+	}))
+}
+
+// ReorderTasks rebuilds a project's task order to match orderedIDs. Ids in
+// orderedIDs with no matching task are ignored; any current task whose id is
+// NOT in orderedIDs is appended at the end in its original order, so a task
+// is never dropped.
+func (a *App) ReorderTasks(projectID string, orderedIDs []string) string {
+	return errMsg(a.store.Update(projectID, func(r *store.Record) {
+		byID := make(map[string]store.Task, len(r.Tasks))
+		for _, t := range r.Tasks {
+			byID[t.ID] = t
+		}
+		seen := make(map[string]bool, len(orderedIDs))
+		reordered := make([]store.Task, 0, len(r.Tasks))
+		for _, id := range orderedIDs {
+			if t, ok := byID[id]; ok {
+				reordered = append(reordered, t)
+				seen[id] = true
+			}
+		}
+		for _, t := range r.Tasks {
+			if !seen[t.ID] {
+				reordered = append(reordered, t)
+			}
+		}
+		r.Tasks = reordered
 	}))
 }
 

@@ -270,6 +270,56 @@ func TestSetTagsNilCoerced(t *testing.T) {
 	}
 }
 
+func TestSetTaskStatus(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("proj")
+	a.AddTask(id, "task one", "")
+	tv := a.GetProject(id).Tasks
+	if len(tv) != 1 || tv[0].Status != "todo" {
+		t.Fatalf("new task should be todo, got %+v", tv)
+	}
+	if msg := a.SetTaskStatus(id, tv[0].ID, "doing"); msg != "" {
+		t.Fatalf("SetTaskStatus doing: %s", msg)
+	}
+	tv = a.GetProject(id).Tasks
+	if tv[0].Status != "doing" || tv[0].Done {
+		t.Errorf("want doing/undone, got %+v", tv[0])
+	}
+	if msg := a.SetTaskStatus(id, tv[0].ID, "done"); msg != "" {
+		t.Fatalf("SetTaskStatus done: %s", msg)
+	}
+	if pv := a.GetProject(id); pv.Tasks[0].Status != "done" || !pv.Tasks[0].Done || pv.DoneCount != 1 || pv.TaskCount != 1 {
+		t.Errorf("want done+mirror+counts, got %+v", pv)
+	}
+	if msg := a.SetTaskStatus(id, tv[0].ID, "bogus"); msg == "" {
+		t.Error("invalid status must be rejected")
+	}
+}
+
+func TestReorderTasks(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("proj2")
+	a.AddTask(id, "A", "")
+	a.AddTask(id, "B", "")
+	a.AddTask(id, "C", "")
+	ts := a.GetProject(id).Tasks
+	ids := []string{ts[2].ID, ts[0].ID, ts[1].ID} // C, A, B
+	if msg := a.ReorderTasks(id, ids); msg != "" {
+		t.Fatalf("ReorderTasks: %s", msg)
+	}
+	got := a.GetProject(id).Tasks
+	if got[0].Title != "C" || got[1].Title != "A" || got[2].Title != "B" {
+		t.Errorf("bad order: %v", []string{got[0].Title, got[1].Title, got[2].Title})
+	}
+	// omitting an id keeps it (appended), never drops
+	if msg := a.ReorderTasks(id, []string{got[2].ID}); msg != "" {
+		t.Fatal(msg)
+	}
+	if len(a.GetProject(id).Tasks) != 3 {
+		t.Error("reorder must never drop a task")
+	}
+}
+
 // helpers
 func (a *App) addTaskReturnID(t *testing.T, projectID, title string) string {
 	t.Helper()
