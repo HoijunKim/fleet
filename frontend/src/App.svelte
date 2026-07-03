@@ -665,7 +665,16 @@
 {:else if view === "graph"}
   <Graph onOpen={openFromOverview} />
 {:else}
-  <Overview {projects} {stats} {runPool} onOpen={openFromOverview} />
+  <Overview
+    {projects}
+    {stats}
+    {runPool}
+    onOpen={openFromOverview}
+    onFilter={(key) => {
+      statusFilter = key === "dirty" || key === "behind" ? key : "all";
+      view = "projects";
+    }}
+  />
 {/if}
 
 <Toasts />

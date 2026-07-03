@@ -19,6 +19,9 @@
   } = { total: 0, repos: 0, active: 0, dirty: 0, behind: 0, unpushed: 0, overdue: 0 };
   // Select a project and switch to the Projects view (opens its detail).
   export let onOpen: (id: string) => void;
+  // Click a stat tile to jump into the Projects view, filtered where the
+  // metric maps to a filter (dirty / behind). Key is the tile key.
+  export let onFilter: (key: string) => void = () => {};
   // Bounded concurrency pool from App.svelte. Aggregate heatmap fan-out goes
   // through this (cap 6) instead of an unbounded Promise.all.
   export let runPool: <T>(
@@ -187,10 +190,15 @@
     <!-- Stat tiles -->
     <section class="ov-stats">
       {#each tiles as t (t.key)}
-        <div class="ov-tile tone-{t.tone}" class:hot={t.hot}>
+        <button
+          class="ov-tile tone-{t.tone}"
+          class:hot={t.hot}
+          on:click={() => onFilter(t.key)}
+          title="Show {t.label} in Projects"
+        >
           <span class="ov-tile-num">{t.value}</span>
           <span class="ov-tile-label">{t.label}</span>
-        </div>
+        </button>
       {/each}
     </section>
 
