@@ -134,6 +134,36 @@ func TestUpdateOnMissingIdCreates(t *testing.T) {
 	}
 }
 
+func TestOpenMigratesTaskStatus(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "projects.json")
+	// legacy file: tasks carry only "done", no "status"
+	raw := `{"p1":{"tasks":[{"id":"a","title":"x","done":true},{"id":"b","title":"y","done":false},{"id":"c","title":"z","done":false,"status":"doing"}]}}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, ok := s.Get("p1")
+	if !ok {
+		t.Fatal("expected record p1")
+	}
+	tasks := rec.Tasks
+	if len(tasks) != 3 {
+		t.Fatalf("want 3 tasks, got %d", len(tasks))
+	}
+	if tasks[0].Status != "done" || !tasks[0].Done {
+		t.Errorf("done task -> status done, got %+v", tasks[0])
+	}
+	if tasks[1].Status != "todo" || tasks[1].Done {
+		t.Errorf("undone task -> status todo, got %+v", tasks[1])
+	}
+	if tasks[2].Status != "doing" || tasks[2].Done {
+		t.Errorf("existing status preserved, done re-mirrored, got %+v", tasks[2])
+	}
+}
+
 func TestGetReturnsIndependentSlices(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "projects.json")
 	s, _ := Open(p)
