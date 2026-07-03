@@ -31,6 +31,7 @@ export namespace main {
 	    projectId: string;
 	    projectName: string;
 	    kind: string;
+	    taskId: string;
 	    title: string;
 	    due: string;
 	    status: string;
@@ -44,6 +45,7 @@ export namespace main {
 	        this.projectId = source["projectId"];
 	        this.projectName = source["projectName"];
 	        this.kind = source["kind"];
+	        this.taskId = source["taskId"];
 	        this.title = source["title"];
 	        this.due = source["due"];
 	        this.status = source["status"];

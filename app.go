@@ -472,7 +472,8 @@ func (a *App) SetTags(id string, tags []string) string {
 type AgendaItem struct {
 	ProjectID   string `json:"projectId"`
 	ProjectName string `json:"projectName"`
-	Kind        string `json:"kind"` // "deadline" | "task"
+	Kind        string `json:"kind"`   // "deadline" | "task"
+	TaskID      string `json:"taskId"` // task id for a task item; "" for a deadline
 	Title       string `json:"title"`
 	Due         string `json:"due"` // may be ""
 	Status      string `json:"status"`
@@ -503,7 +504,7 @@ func (a *App) Agenda() []AgendaItem {
 				continue
 			}
 			out = append(out, AgendaItem{
-				ProjectID: id, ProjectName: name, Kind: "task",
+				ProjectID: id, ProjectName: name, Kind: "task", TaskID: t.ID,
 				Title: t.Title, Due: t.Due, Status: t.Status,
 			})
 		}

@@ -67,7 +67,7 @@
         <div class="ov-agenda-group">
           <div class="ov-agenda-group-head">{b.label}</div>
           <ul class="ov-list">
-            {#each b.items as item (item.projectId + ":" + item.kind + ":" + item.title + ":" + (item.due || ""))}
+            {#each b.items as item (item.projectId + ":" + item.kind + ":" + (item.taskId || "") + ":" + item.title)}
               <li>
                 <button class="ov-row" on:click={() => onOpen(item.projectId)}>
                   <span class="ov-name">
