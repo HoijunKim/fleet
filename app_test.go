@@ -571,3 +571,57 @@ func containsString(list []string, want string) bool {
 	}
 	return false
 }
+
+func TestAgenda(t *testing.T) {
+	a := newTestApp(t)
+	p := a.AddProject("proj")
+	a.UpdateProject(p, "active", 0, "2026-08-01", "")
+	a.AddTask(p, "due task", "2026-07-10")
+	a.AddTask(p, "no-due doing", "")
+	a.AddTask(p, "done task", "2026-07-05")
+	for _, tk := range a.GetProject(p).Tasks {
+		switch tk.Title {
+		case "no-due doing":
+			a.SetTaskStatus(p, tk.ID, "doing")
+		case "done task":
+			a.SetTaskStatus(p, tk.ID, "done")
+		}
+	}
+
+	items := a.Agenda()
+	if items == nil {
+		t.Fatal("Agenda must be non-nil")
+	}
+
+	for _, it := range items {
+		if it.Title == "done task" {
+			t.Error("done task must be excluded")
+		}
+	}
+
+	var haveDeadline, haveDueTask, haveDoingTask bool
+	for _, it := range items {
+		if it.Kind == "deadline" && it.ProjectID == p {
+			haveDeadline = true
+		}
+		if it.Kind == "task" && it.Title == "due task" {
+			haveDueTask = true
+		}
+		if it.Kind == "task" && it.Title == "no-due doing" {
+			haveDoingTask = true
+		}
+	}
+	if !haveDeadline {
+		t.Errorf("expected a deadline item, got %+v", items)
+	}
+	if !haveDueTask {
+		t.Errorf("expected the due task item, got %+v", items)
+	}
+	if !haveDoingTask {
+		t.Errorf("expected the no-due doing task item, got %+v", items)
+	}
+
+	if last := items[len(items)-1]; last.Due != "" {
+		t.Errorf("empty-due item should sort last, got %+v", last)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -464,6 +465,60 @@ func (a *App) SetTags(id string, tags []string) string {
 		tags = []string{}
 	}
 	return errMsg(a.store.Update(id, func(r *store.Record) { r.Tags = tags }))
+}
+
+// AgendaItem is one fleet-wide agenda entry: a project deadline or an
+// incomplete due/doing task.
+type AgendaItem struct {
+	ProjectID   string `json:"projectId"`
+	ProjectName string `json:"projectName"`
+	Kind        string `json:"kind"` // "deadline" | "task"
+	Title       string `json:"title"`
+	Due         string `json:"due"` // may be ""
+	Status      string `json:"status"`
+}
+
+// Agenda flattens every project's deadline and every incomplete due/doing
+// task into a single fleet-wide list, sorted by due date ascending (items
+// with no due date sort last). Store-only: no scan, no git.
+func (a *App) Agenda() []AgendaItem {
+	snap := a.store.Snapshot()
+	out := []AgendaItem{}
+	for id, r := range snap {
+		name := r.Name
+		if name == "" {
+			name = filepath.Base(id)
+		}
+		if r.Deadline != "" && r.Status != "done" {
+			out = append(out, AgendaItem{
+				ProjectID: id, ProjectName: name, Kind: "deadline",
+				Title: name, Due: r.Deadline, Status: r.Status,
+			})
+		}
+		for _, t := range r.Tasks {
+			if t.Status == "done" {
+				continue
+			}
+			if t.Due == "" && t.Status != "doing" {
+				continue
+			}
+			out = append(out, AgendaItem{
+				ProjectID: id, ProjectName: name, Kind: "task",
+				Title: t.Title, Due: t.Due, Status: t.Status,
+			})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		di, dj := out[i].Due, out[j].Due
+		if di == "" {
+			return false // empty due never sorts before anything
+		}
+		if dj == "" {
+			return true // non-empty due always sorts before an empty one
+		}
+		return di < dj
+	})
+	return out
 }
 
 // GraphNode/GraphEdge/GraphView are the JS-facing dependency graph.
