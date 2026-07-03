@@ -194,7 +194,9 @@
           class="ov-tile tone-{t.tone}"
           class:hot={t.hot}
           on:click={() => onFilter(t.key)}
-          title="Show {t.label} in Projects"
+          title={["dirty", "behind", "unpushed", "overdue"].includes(t.key)
+            ? "Filter Projects to " + t.label
+            : "Show all projects"}
         >
           <span class="ov-tile-num">{t.value}</span>
           <span class="ov-tile-label">{t.label}</span>

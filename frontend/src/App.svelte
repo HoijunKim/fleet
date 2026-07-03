@@ -19,7 +19,7 @@
   // Each row is a ProjectView with (for code projects) live git fields merged in.
   let projects: any[] = [];
   let filter = "";
-  let statusFilter: "all" | "dirty" | "behind" = "all";
+  let statusFilter: "all" | "dirty" | "behind" | "unpushed" | "overdue" = "all";
   let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   let highPriorityOnly = false;
   let tagFilter = "all";
@@ -84,6 +84,13 @@
     }
     if (statusFilter === "dirty") out = out.filter((p) => p.dirty);
     else if (statusFilter === "behind") out = out.filter((p) => p.behind > 0);
+    else if (statusFilter === "unpushed") out = out.filter((p) => p.ahead > 0);
+    else if (statusFilter === "overdue") {
+      out = out.filter((p) => {
+        const d = daysUntil(p.deadline);
+        return d !== null && d < 0;
+      });
+    }
     if (pmStatusFilter !== "all") {
       out = out.filter((p) => (p.status || "active") === pmStatusFilter);
     }
@@ -485,6 +492,14 @@
     });
   }
 
+  // From an Overview stat tile: jump to Projects, applying the matching status
+  // filter where one exists (dirty/behind/unpushed/overdue), else show all.
+  function onTileFilter(key: string) {
+    const filterable = ["dirty", "behind", "unpushed", "overdue"];
+    statusFilter = (filterable.includes(key) ? key : "all") as typeof statusFilter;
+    view = "projects";
+  }
+
   // ---- settings + auto-fetch ---------------------------------------------
   function setupAutoFetch(minutes: number) {
     if (autoFetchTimer) { clearInterval(autoFetchTimer); autoFetchTimer = undefined; }
@@ -670,10 +685,7 @@
     {stats}
     {runPool}
     onOpen={openFromOverview}
-    onFilter={(key) => {
-      statusFilter = key === "dirty" || key === "behind" ? key : "all";
-      view = "projects";
-    }}
+    onFilter={onTileFilter}
   />
 {/if}
 

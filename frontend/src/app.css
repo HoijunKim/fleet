@@ -19,7 +19,7 @@
   /* Text */
   --text:          #f1f4fa;
   --muted:         #97a1b4;
-  --faint:         #5c6578;
+  --faint:         #7b8598;
 
   /* Accent + status */
   --accent:        #6ea8fe;
@@ -94,17 +94,17 @@ body {
    ------------------------------------------------------------------------- */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2c3240 transparent;
+  scrollbar-color: var(--border) transparent;
 }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #2c3240;
+  background: var(--border);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background: #3a4150; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hover); background-clip: content-box; }
 
 /* -------------------------------------------------------------------------
    Buttons
@@ -172,7 +172,7 @@ body {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--ring);
-  background: #0f1218;
+  background: #0d1220;
 }
 .input.mono { font-family: var(--font-mono); }
 
@@ -291,7 +291,7 @@ body {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(144, 153, 168, 0.25);
+  border: 2px solid rgba(151, 161, 180, 0.25);
   border-top-color: var(--accent);
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -456,9 +456,9 @@ body {
   border-radius: var(--r-pill);
   background: linear-gradient(
     90deg,
-    rgba(144, 153, 168, 0.08) 25%,
-    rgba(144, 153, 168, 0.20) 37%,
-    rgba(144, 153, 168, 0.08) 63%
+    rgba(151, 161, 180, 0.08) 25%,
+    rgba(151, 161, 180, 0.20) 37%,
+    rgba(151, 161, 180, 0.08) 63%
   );
   background-size: 400% 100%;
   animation: shimmer 1.4s ease infinite;
@@ -2033,6 +2033,9 @@ body {
   text-align: left;
   font: inherit;
   color: inherit;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
   transition: border-color var(--t), transform var(--t), box-shadow var(--t);
 }
