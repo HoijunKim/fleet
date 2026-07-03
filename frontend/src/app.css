@@ -1716,6 +1716,19 @@ body {
 }
 .pm-empty { font-size: 12px; color: var(--faint); }
 
+.pm-progress-bar {
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.pm-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--t);
+}
+
 .pm-list {
   list-style: none;
   margin: 0;
@@ -1734,29 +1747,37 @@ body {
 }
 .pm-task:hover { background: var(--raised); }
 .pm-task:hover .pm-task-del { opacity: 1; }
+.pm-task[draggable="true"] { cursor: grab; }
+.pm-task.dragging { opacity: 0.45; }
 
-.pm-check {
+.pm-status-pill {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
+  width: 46px;
+  padding: 2px 0;
+  border-radius: var(--r-pill);
   border: 1px solid var(--border);
   background: var(--bg);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background var(--t), border-color var(--t);
-}
-.pm-check:hover { border-color: var(--accent); }
-.pm-check.on { background: var(--accent); border-color: var(--accent); }
-.pm-check-mark {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
-  line-height: 1;
-  color: #0d0f13;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.pm-status-pill:hover { border-color: var(--accent); }
+.pm-status-pill.status-todo { color: var(--faint); }
+.pm-status-pill.status-doing {
+  color: var(--dirty);
+  border-color: rgba(210, 153, 34, 0.35);
+  background: rgba(210, 153, 34, 0.08);
+}
+.pm-status-pill.status-done {
+  color: var(--ok);
+  border-color: rgba(63, 185, 80, 0.35);
+  background: rgba(63, 185, 80, 0.08);
 }
 .pm-task-title {
   flex: 1;

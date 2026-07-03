@@ -102,6 +102,10 @@ export function RemoveEdge(arg1) {
   return window['go']['main']['App']['RemoveEdge'](arg1);
 }
 
+export function ReorderTasks(arg1, arg2) {
+  return window['go']['main']['App']['ReorderTasks'](arg1, arg2);
+}
+
 export function RepoGraph() {
   return window['go']['main']['App']['RepoGraph']();
 }
@@ -132,6 +136,10 @@ export function SearchAll(arg1) {
 
 export function SetTags(arg1, arg2) {
   return window['go']['main']['App']['SetTags'](arg1, arg2);
+}
+
+export function SetTaskStatus(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetTaskStatus'](arg1, arg2, arg3);
 }
 
 export function Stash(arg1) {
