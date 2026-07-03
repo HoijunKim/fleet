@@ -7,19 +7,19 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces - neutrals biased slightly cool toward the accent (chosen, not
-     a default mid-grey), with a clear 3-step elevation ramp. */
-  --bg:            #0b0e14;
-  --surface:       #121722;
-  --raised:        #1a2130;
-  --border:        #242c3b;
-  --border-hover:  #33394a;
-  --hairline:      #191f2a;
+  /* Surfaces - neutrals biased cool toward the accent, with a WIDE elevation
+     ramp: the page sits well below the surface so cards visibly float. */
+  --bg:            #090c13;
+  --surface:       #151c2a;
+  --raised:        #202a3c;
+  --border:        #2b374e;
+  --border-hover:  #3a4863;
+  --hairline:      #1c2536;
 
   /* Text */
-  --text:          #eef1f6;
-  --muted:         #9099a8;
-  --faint:         #59616f;
+  --text:          #f1f4fa;
+  --muted:         #97a1b4;
+  --faint:         #7b8598;
 
   /* Accent + status */
   --accent:        #6ea8fe;
@@ -46,17 +46,17 @@
   --font-sans: system-ui, "Segoe UI", -apple-system, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "Cascadia Mono", Consolas, monospace;
 
-  --fs-metric: 26px; /* dashboard tile numbers */
+  --fs-metric: 30px; /* dashboard tile numbers */
 
-  /* Radius */
-  --r-card:  10px;
-  --r-btn:   7px;
+  /* Radius - softer, more modern */
+  --r-card:  12px;
+  --r-btn:   8px;
   --r-pill:  999px;
 
-  /* Depth - quiet elevation: a top highlight hairline + layered shadow */
-  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.28);
-  --shadow-lg: 0 12px 34px rgba(0, 0, 0, 0.5);
+  /* Depth - cards float off the darker page on a soft, deep shadow. */
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.52);
   --ring: 0 0 0 3px var(--accent-soft);
 
   /* Motion */
@@ -94,17 +94,17 @@ body {
    ------------------------------------------------------------------------- */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2c3240 transparent;
+  scrollbar-color: var(--border) transparent;
 }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #2c3240;
+  background: var(--border);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background: #3a4150; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hover); background-clip: content-box; }
 
 /* -------------------------------------------------------------------------
    Buttons
@@ -172,7 +172,7 @@ body {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--ring);
-  background: #0f1218;
+  background: #0d1220;
 }
 .input.mono { font-family: var(--font-mono); }
 
@@ -291,7 +291,7 @@ body {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(144, 153, 168, 0.25);
+  border: 2px solid rgba(151, 161, 180, 0.25);
   border-top-color: var(--accent);
   animation: spin 0.7s linear infinite;
   display: inline-block;
@@ -456,9 +456,9 @@ body {
   border-radius: var(--r-pill);
   background: linear-gradient(
     90deg,
-    rgba(144, 153, 168, 0.08) 25%,
-    rgba(144, 153, 168, 0.20) 37%,
-    rgba(144, 153, 168, 0.08) 63%
+    rgba(151, 161, 180, 0.08) 25%,
+    rgba(151, 161, 180, 0.20) 37%,
+    rgba(151, 161, 180, 0.08) 63%
   );
   background-size: 400% 100%;
   animation: shimmer 1.4s ease infinite;
@@ -1996,35 +1996,50 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px;
+  padding: 28px 24px 40px;
+  /* Ambient depth: a faint accent wash high on the page so the dark ground
+     reads as chosen, not flat black. */
+  background:
+    radial-gradient(1100px 460px at 78% -80px, rgba(110, 168, 254, 0.05), transparent 62%),
+    var(--bg);
 }
 .ov-inner {
   max-width: 1120px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* ---- Stat tiles -------------------------------------------------------- */
 .ov-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
 }
 .ov-tile {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 16px 18px;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 18px 20px;
   background: linear-gradient(180deg, var(--raised), var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   box-shadow: var(--highlight), var(--shadow);
   overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
   transition: border-color var(--t), transform var(--t), box-shadow var(--t);
 }
+.ov-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ov-tile:hover {
   transform: translateY(-2px);
   border-color: var(--border-hover);
@@ -2070,7 +2085,7 @@ body {
 .ov-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 20px;
+  gap: 24px;
   align-items: start;
 }
 @media (max-width: 900px) {
@@ -2081,30 +2096,43 @@ body {
 .ov-grid > .ov-agenda { grid-column: 1 / -1; }
 
 .ov-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-card);
   box-shadow: var(--highlight), var(--shadow);
-  padding: 18px;
+  padding: 22px;
   min-width: 0;
 }
-/* The agenda is the dashboard's thesis ("what to do now") - lift it a touch. */
+/* The agenda is the dashboard's thesis ("what to do now"): give it a clear
+   accent spine and wash so the eye lands there first. */
 .ov-card.ov-agenda {
-  background: linear-gradient(180deg, rgba(110, 168, 254, 0.035), transparent 120px), var(--surface);
-  border-color: #2b3446;
+  background: linear-gradient(180deg, rgba(110, 168, 254, 0.06), transparent 150px), var(--surface);
+  border-color: #33415d;
+}
+.ov-card.ov-agenda::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 4px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
 }
 .ov-card-head {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .ov-card-title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .ov-count {
   font-family: var(--font-mono);

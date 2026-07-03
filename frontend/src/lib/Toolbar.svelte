@@ -9,12 +9,12 @@
   export let onRemoteChanges: (() => void) | undefined = undefined;
   export let view: "overview" | "projects" | "graph" = "overview";
   export let onView: (v: "overview" | "projects" | "graph") => void;
-  export let statusFilter: "all" | "dirty" | "behind" = "all";
+  export let statusFilter: "all" | "dirty" | "behind" | "unpushed" | "overdue" = "all";
   export let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   export let highPriorityOnly: boolean = false;
   export let tagFilter: string = "all";
   export let filterInput: HTMLInputElement | undefined = undefined;
-  export let onStatus: (s: "all" | "dirty" | "behind") => void;
+  export let onStatus: (s: "all" | "dirty" | "behind" | "unpushed" | "overdue") => void;
   export let onPmStatus: (s: "all" | "active" | "paused" | "done") => void;
   export let onHighPriorityToggle: () => void;
   export let onTagFilter: (t: string) => void;
