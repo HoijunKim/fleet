@@ -428,6 +428,9 @@ func (a *App) ReorderTasks(projectID string, orderedIDs []string) string {
 		seen := make(map[string]bool, len(orderedIDs))
 		reordered := make([]store.Task, 0, len(r.Tasks))
 		for _, id := range orderedIDs {
+			if seen[id] {
+				continue // a duplicate id must not duplicate the task
+			}
 			if t, ok := byID[id]; ok {
 				reordered = append(reordered, t)
 				seen[id] = true

@@ -318,6 +318,22 @@ func TestReorderTasks(t *testing.T) {
 	if len(a.GetProject(id).Tasks) != 3 {
 		t.Error("reorder must never drop a task")
 	}
+	// a duplicate id must not duplicate the task (no store corruption)
+	cur := a.GetProject(id).Tasks
+	if msg := a.ReorderTasks(id, []string{cur[0].ID, cur[0].ID, cur[1].ID, cur[2].ID}); msg != "" {
+		t.Fatal(msg)
+	}
+	after := a.GetProject(id).Tasks
+	if len(after) != 3 {
+		t.Errorf("duplicate id must not duplicate a task, got %d tasks", len(after))
+	}
+	uniq := map[string]bool{}
+	for _, tk := range after {
+		if uniq[tk.ID] {
+			t.Errorf("duplicate task id %s persisted", tk.ID)
+		}
+		uniq[tk.ID] = true
+	}
 }
 
 // helpers
