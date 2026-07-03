@@ -2058,6 +2058,9 @@ body {
   .ov-grid { grid-template-columns: 1fr; }
 }
 
+/* Agenda leads the dashboard: full-width row above attention + activity. */
+.ov-grid > .ov-agenda { grid-column: 1 / -1; }
+
 .ov-card {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -14,6 +14,10 @@ export function AddTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['AddTask'](arg1, arg2, arg3);
 }
 
+export function Agenda() {
+  return window['go']['main']['App']['Agenda']();
+}
+
 export function Branches(arg1) {
   return window['go']['main']['App']['Branches'](arg1);
 }

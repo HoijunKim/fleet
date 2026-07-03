@@ -9,6 +9,8 @@ export function AddProject(arg1:string):Promise<string>;
 
 export function AddTask(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function Agenda():Promise<Array<main.AgendaItem>>;
+
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
 export function Checkout(arg1:string,arg2:string):Promise<string>;

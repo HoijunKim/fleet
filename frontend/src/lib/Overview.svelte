@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { CommitActivity } from "../../wailsjs/go/main/App";
+  import { Agenda, CommitActivity } from "../../wailsjs/go/main/App";
   import { daysUntil } from "./pm";
   import Heatmap from "./Heatmap.svelte";
+  import AgendaCard from "./AgendaCard.svelte";
 
   // Full project list (code + manual) assembled in App.svelte.
   export let projects: any[] = [];
@@ -134,7 +135,29 @@
 
   onDestroy(() => {
     aggGen++; // invalidate any in-flight aggregate load
+    agendaGen++; // invalidate any in-flight agenda load
   });
+
+  // ---- fleet-wide agenda ---------------------------------------------------
+  // Single cheap store-only call (no fan-out needed). Re-fetched whenever the
+  // project list changes, since edits to tasks/deadlines elsewhere should
+  // refresh what "due soon" shows here.
+  let agendaItems: any[] = [];
+  let agendaGen = 0;
+
+  $: loadAgenda(projects);
+
+  async function loadAgenda(_projects: any[]) {
+    const gen = ++agendaGen;
+    let items: any[] = [];
+    try {
+      items = (await Agenda()) || [];
+    } catch {
+      items = [];
+    }
+    if (gen !== agendaGen) return; // a newer request superseded this one
+    agendaItems = items;
+  }
 </script>
 
 <div class="overview">
@@ -150,6 +173,9 @@
     </section>
 
     <div class="ov-grid">
+      <!-- Fleet-wide agenda: deadlines + due/doing tasks, soonest first -->
+      <AgendaCard items={agendaItems} {onOpen} />
+
       <!-- Needs-attention queue -->
       <section class="ov-card ov-attention">
         <div class="ov-card-head">

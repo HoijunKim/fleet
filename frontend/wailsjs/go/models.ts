@@ -27,6 +27,28 @@ export namespace config {
 
 export namespace main {
 	
+	export class AgendaItem {
+	    projectId: string;
+	    projectName: string;
+	    kind: string;
+	    title: string;
+	    due: string;
+	    status: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgendaItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectId = source["projectId"];
+	        this.projectName = source["projectName"];
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.due = source["due"];
+	        this.status = source["status"];
+	    }
+	}
 	export class BranchInfo {
 	    current: string;
 	    all: string[];
