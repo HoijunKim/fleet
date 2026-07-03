@@ -139,15 +139,26 @@
   });
 
   // ---- fleet-wide agenda ---------------------------------------------------
-  // Single cheap store-only call (no fan-out needed). Re-fetched whenever the
-  // project list changes, since edits to tasks/deadlines elsewhere should
-  // refresh what "due soon" shows here.
+  // Single cheap store-only call (no fan-out needed). Re-fetched only when a
+  // PM-relevant field actually changes - the frequent git-field merges and
+  // auto-fetch ticks reassign `projects` too (bare `projects = projects`), so
+  // guard on a signature over just deadline/status/tasks to avoid firing an
+  // Agenda() call per repo on every refresh.
   let agendaItems: any[] = [];
   let agendaGen = 0;
+  let lastAgendaSig = "\0"; // sentinel so the first real signature always loads
 
-  $: loadAgenda(projects);
+  $: agendaSig = projects
+    .map((p) => p.id + "|" + (p.deadline || "") + "|" + (p.status || "") + "|" + JSON.stringify(p.tasks || []))
+    .join("\n");
+  $: {
+    if (agendaSig !== lastAgendaSig) {
+      lastAgendaSig = agendaSig;
+      loadAgenda();
+    }
+  }
 
-  async function loadAgenda(_projects: any[]) {
+  async function loadAgenda() {
     const gen = ++agendaGen;
     let items: any[] = [];
     try {
