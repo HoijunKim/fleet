@@ -84,6 +84,17 @@
     return { reasons, score };
   }
 
+  // Severity rail class from the most-urgent reason (reasons are pushed in
+  // severity order, so the first one wins).
+  function sevOf(reasons: Reason[]): string {
+    const top = reasons[0];
+    if (!top) return "";
+    if (top.cls === "over" || top.cls === "dn") return "sev-err";
+    if (top.cls === "dirty") return "sev-dirty";
+    if (top.cls === "up") return "sev-ahead";
+    return "";
+  }
+
   $: attention = projects
     .map((p) => ({ p, ...evalAttention(p) }))
     .filter((x) => x.reasons.length > 0)
@@ -199,7 +210,7 @@
           <ul class="ov-list">
             {#each attention as a (a.p.id)}
               <li>
-                <button class="ov-row" on:click={() => onOpen(a.p.id)}>
+                <button class="ov-row {sevOf(a.reasons)}" on:click={() => onOpen(a.p.id)}>
                   <span class="ov-name">{a.p.name}</span>
                   <span class="ov-tags">
                     {#each a.reasons as r}
