@@ -186,8 +186,8 @@
       class="pm-progress-bar"
       role="progressbar"
       aria-valuenow={progressPct}
-      aria-valuemin="0"
-      aria-valuemax="100"
+      aria-valuemin={0}
+      aria-valuemax={100}
       aria-label="Task progress"
     >
       <div class="pm-progress-fill" style="width: {progressPct}%"></div>
