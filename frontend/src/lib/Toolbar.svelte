@@ -137,24 +137,25 @@
       </span>
     {/if}
 
-    <button class="palette-btn" on:click={onOpenPalette} title="Command palette">
-      <span class="palette-label">Jump</span>
-      <span class="palette-kbd">Ctrl K</span>
-    </button>
-
-    <button class="palette-btn" on:click={onOpenSearch} title="Search across repos">
-      <span class="palette-label">Search</span>
-      <span class="palette-kbd">Ctrl Shift F</span>
-    </button>
-
-    <button class="icon-btn" on:click={onOpenSettings} title="Settings" aria-label="Settings">
-      <span class="gear"></span>
-    </button>
-
+    <!-- Git bulk actions -->
     <button class="btn btn-secondary" on:click={onAddProject}>+ Project</button>
     <button class="btn btn-secondary" on:click={onRefresh}>Refresh</button>
     <button class="btn btn-secondary" on:click={onPullAll}>Pull all</button>
     <button class="btn btn-secondary" on:click={onPushAll}>Push all</button>
     <button class="btn btn-primary" on:click={onFetchAll}>Fetch All</button>
+
+    <!-- Utility cluster: jump, search, settings sit together at the far right -->
+    <span class="toolbar-div"></span>
+    <button class="palette-btn" on:click={onOpenPalette} title="Command palette">
+      <span class="palette-label">Jump</span>
+      <span class="palette-kbd">Ctrl K</span>
+    </button>
+    <button class="palette-btn" on:click={onOpenSearch} title="Search across repos">
+      <span class="palette-label">Search</span>
+      <span class="palette-kbd">Ctrl Shift F</span>
+    </button>
+    <button class="icon-btn" on:click={onOpenSettings} title="Settings" aria-label="Settings">
+      <span class="gear"></span>
+    </button>
   </div>
 </header>

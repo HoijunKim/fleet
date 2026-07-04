@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases } from "../../wailsjs/go/main/App";
   import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
 
@@ -36,6 +36,55 @@
     AICheck(cfg.AIProvider, cfg.OpenAIKey || "", cfg.GeminiKey || "")
       .then((ok) => (aiOk = !!ok))
       .catch(() => (aiOk = false));
+  }
+
+  // ---- AI test: run a tiny prompt to prove the provider actually answers ----
+  let aiTesting = false;
+  let aiTestMsg = "";
+  async function testAI() {
+    if (!cfg || aiTesting) return;
+    aiTesting = true;
+    aiTestMsg = "";
+    try {
+      // Save first so AskAI uses the provider/key in front of you.
+      const serr = await SaveConfig(cfg);
+      if (serr) {
+        aiTestMsg = "error: " + serr;
+        return;
+      }
+      const res = await AskAI("Reply with exactly the word: ok");
+      aiTestMsg = typeof res === "string" && res.startsWith("error:") ? res : "Works - " + res;
+    } catch (e) {
+      aiTestMsg = "error: " + String(e);
+    } finally {
+      aiTesting = false;
+      refreshAiOk();
+    }
+  }
+
+  // ---- Notion database picker ----------------------------------------------
+  let notionDBs: { id: string; title: string }[] = [];
+  let notionLoading = false;
+  let notionDbErr = "";
+  async function loadNotionDBs() {
+    if (!cfg || notionLoading) return;
+    notionLoading = true;
+    notionDbErr = "";
+    try {
+      const res: any = await NotionDatabases(cfg.NotionToken || "");
+      if (res && res.error) {
+        notionDbErr = res.error;
+        notionDBs = [];
+      } else {
+        notionDBs = (res && res.dbs) || [];
+        if (notionDBs.length === 0) notionDbErr = "No databases shared with this integration yet.";
+      }
+    } catch (e) {
+      notionDbErr = String(e);
+      notionDBs = [];
+    } finally {
+      notionLoading = false;
+    }
   }
 
   load();
@@ -209,19 +258,55 @@
           </div>
         {/if}
         <div class="ai-hint ai-hint-warn">Keys are stored in plain text in your local config file.</div>
+
+        <div class="ai-test-row">
+          <button class="btn btn-secondary btn-sm" on:click={testAI} disabled={aiTesting}>
+            {aiTesting ? "Testing..." : "Test"}
+          </button>
+          {#if aiTestMsg}
+            <span class="ai-test-msg" class:err={aiTestMsg.startsWith("error:")}>{aiTestMsg}</span>
+          {/if}
+        </div>
       {:else}
         <div class="field">
           <span class="field-label">GitHub</span>
           <div class="ai-hint">CI / PR / issue badges use the <span class="mono">gh</span> CLI's existing auth. Nothing to configure here.</div>
         </div>
+
         <div class="field">
           <label class="field-label" for="set-notion">Notion integration token</label>
           <input id="set-notion" class="input mono" type="password" placeholder="secret_..." bind:value={cfg.NotionToken} />
+          <div class="ai-hint">
+            Create one at <span class="mono">notion.so/my-integrations</span>, then share your tasks
+            database with it (database menu -> Connections).
+          </div>
         </div>
+
         <div class="field">
-          <label class="field-label" for="set-notion-db">Notion tasks database id</label>
-          <input id="set-notion-db" class="input mono" type="text" placeholder="database id" bind:value={cfg.NotionTasksDB} />
-          <div class="ai-hint">Pulls tasks and deadlines into Today. Read-only.</div>
+          <span class="field-label">Tasks database</span>
+          <div class="notion-pick">
+            <button class="btn btn-secondary btn-sm" on:click={loadNotionDBs} disabled={notionLoading || !cfg.NotionToken}>
+              {notionLoading ? "Loading..." : "Load databases"}
+            </button>
+            {#if notionDBs.length > 0}
+              <select class="input notion-select" bind:value={cfg.NotionTasksDB}>
+                <option value="">- pick a database -</option>
+                {#each notionDBs as db (db.id)}
+                  <option value={db.id}>{db.title}</option>
+                {/each}
+              </select>
+            {/if}
+          </div>
+          {#if notionDbErr}
+            <div class="ai-test-msg err">{notionDbErr}</div>
+          {/if}
+          <input
+            class="input mono notion-db-manual"
+            type="text"
+            placeholder="...or paste a database id"
+            bind:value={cfg.NotionTasksDB}
+          />
+          <div class="ai-hint">Pulls open tasks and deadlines into Today. Read-only.</div>
         </div>
       {/if}
 
@@ -262,4 +347,10 @@
   .ai-status.ok { color: var(--ok); }
   .ai-hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
   .ai-hint-warn { color: var(--dirty); margin-top: 12px; }
+  .ai-test-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .ai-test-msg { font-size: 12px; color: var(--ok); }
+  .ai-test-msg.err { color: var(--err); }
+  .notion-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .notion-select { flex: 1; min-width: 160px; }
+  .notion-db-manual { margin-top: 8px; }
 </style>

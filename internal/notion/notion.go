@@ -80,6 +80,81 @@ func (c Client) Tasks(databaseID string) ([]Task, error) {
 	return parseResults(data)
 }
 
+// DB is a Notion database the integration can see (for the settings picker).
+type DB struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// Databases lists the databases shared with this integration, so the user can
+// pick one instead of pasting a raw id. A missing token returns (nil, nil).
+func (c Client) Databases() ([]DB, error) {
+	if strings.TrimSpace(c.Token) == "" {
+		return nil, nil
+	}
+	client := c.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
+	base := c.BaseURL
+	if base == "" {
+		base = "https://api.notion.com/v1"
+	}
+	req, err := http.NewRequest(http.MethodPost, base+"/search",
+		bytes.NewReader([]byte(`{"filter":{"value":"database","property":"object"},"page_size":50}`)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Notion-Version", version)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(data))
+		if len(msg) > 300 {
+			msg = msg[:300]
+		}
+		return nil, fmt.Errorf("notion http %d: %s", resp.StatusCode, msg)
+	}
+	return parseDatabases(data)
+}
+
+// parseDatabases maps a Notion search response into a database list.
+func parseDatabases(data []byte) ([]DB, error) {
+	var resp struct {
+		Results []struct {
+			ID    string `json:"id"`
+			Title []struct {
+				PlainText string `json:"plain_text"`
+			} `json:"title"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("notion: bad response: %w", err)
+	}
+	out := make([]DB, 0, len(resp.Results))
+	for _, r := range resp.Results {
+		var b strings.Builder
+		for _, tt := range r.Title {
+			b.WriteString(tt.PlainText)
+		}
+		title := strings.TrimSpace(b.String())
+		if title == "" {
+			title = "(untitled database)"
+		}
+		out = append(out, DB{ID: r.ID, Title: title})
+	}
+	return out, nil
+}
+
 // parseResults maps a Notion database-query response into Tasks. Property names
 // vary per database, so it keys off each property's "type": the title property
 // becomes the task title, the first date property its due, a status/select its

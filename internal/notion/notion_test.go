@@ -145,6 +145,29 @@ func TestTasksHTTPError(t *testing.T) {
 	}
 }
 
+func TestParseDatabases(t *testing.T) {
+	j := `{"results":[
+	  {"id":"db-1","title":[{"plain_text":"Tasks "},{"plain_text":"2026"}]},
+	  {"id":"db-2","title":[]}
+	]}`
+	dbs, err := parseDatabases([]byte(j))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dbs) != 2 || dbs[0].ID != "db-1" || dbs[0].Title != "Tasks 2026" {
+		t.Fatalf("dbs = %+v", dbs)
+	}
+	if dbs[1].Title != "(untitled database)" {
+		t.Errorf("empty title placeholder: %q", dbs[1].Title)
+	}
+}
+
+func TestDatabasesEmptyOnNoToken(t *testing.T) {
+	if got, err := (Client{}).Databases(); err != nil || got != nil {
+		t.Errorf("no token must be a clean no-op, got %v %v", got, err)
+	}
+}
+
 func TestAvailable(t *testing.T) {
 	if Available("", "db") || Available("tok", "") {
 		t.Error("both token and db required")

@@ -584,6 +584,34 @@ func (a *App) NotionAvailable() bool {
 	return notion.Available(c.NotionToken, c.NotionTasksDB)
 }
 
+// NotionDBView is a Notion database for the settings picker.
+type NotionDBView struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// NotionDBList is the picker result (databases + any error). Token is passed in
+// so the settings UI can list databases for an unsaved token.
+type NotionDBList struct {
+	DBs   []NotionDBView `json:"dbs"`
+	Error string         `json:"error"`
+}
+
+// NotionDatabases lists the databases the given token's integration can see, so
+// the user picks one instead of pasting a raw id.
+func (a *App) NotionDatabases(token string) NotionDBList {
+	res := NotionDBList{DBs: []NotionDBView{}}
+	dbs, err := notion.New(token).Databases()
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	for _, d := range dbs {
+		res.DBs = append(res.DBs, NotionDBView{ID: d.ID, Title: d.Title})
+	}
+	return res
+}
+
 // NotionResult carries the pulled tasks plus any error text, so the UI can tell
 // "empty board" apart from "auth/network failed".
 type NotionResult struct {

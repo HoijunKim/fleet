@@ -49,6 +49,8 @@ export function Log(arg1:string,arg2:number):Promise<Array<main.CommitView>>;
 
 export function NotionAvailable():Promise<boolean>;
 
+export function NotionDatabases(arg1:string):Promise<main.NotionDBList>;
+
 export function NotionTasks():Promise<main.NotionResult>;
 
 export function OpenEditor(arg1:string):Promise<string>;

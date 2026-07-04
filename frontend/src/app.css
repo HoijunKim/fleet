@@ -226,6 +226,13 @@ body {
   align-items: center;
   gap: 8px;
 }
+/* Separates the git actions from the far-right utility cluster (jump/search/settings). */
+.toolbar-div {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 4px;
+  background: var(--border);
+}
 
 /* Count chips */
 .chips { display: flex; align-items: center; gap: 6px; }
