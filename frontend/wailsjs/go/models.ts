@@ -7,6 +7,12 @@ export namespace config {
 	    Terminal: string;
 	    AutoFetchMinutes: number;
 	    ShowNonGit: boolean;
+	    AIProvider: string;
+	    AIModel: string;
+	    OpenAIKey: string;
+	    GeminiKey: string;
+	    NotionToken: string;
+	    NotionTasksDB: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -20,6 +26,12 @@ export namespace config {
 	        this.Terminal = source["Terminal"];
 	        this.AutoFetchMinutes = source["AutoFetchMinutes"];
 	        this.ShowNonGit = source["ShowNonGit"];
+	        this.AIProvider = source["AIProvider"];
+	        this.AIModel = source["AIModel"];
+	        this.OpenAIKey = source["OpenAIKey"];
+	        this.GeminiKey = source["GeminiKey"];
+	        this.NotionToken = source["NotionToken"];
+	        this.NotionTasksDB = source["NotionTasksDB"];
 	    }
 	}
 

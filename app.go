@@ -49,7 +49,7 @@ func NewApp() *App {
 	st, _ := store.Open(storePath) // empty store on error; UI still works
 	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
 	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}, aiRunner: ai.ExecRunner{}}
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}, aiRunner: ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey)}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -158,6 +158,7 @@ func (a *App) SaveConfig(c config.Config) string {
 	}
 	a.mu.Lock()
 	a.cfg = c
+	a.aiRunner = ai.New(c.AIProvider, c.AIModel, c.OpenAIKey, c.GeminiKey)
 	a.mu.Unlock()
 	return ""
 }
@@ -524,18 +525,24 @@ func (a *App) Agenda() []AgendaItem {
 	return out
 }
 
-// AIAvailable reports whether the local Claude CLI is present, so the UI can
-// hide the intelligence features when it is not.
-func (a *App) AIAvailable() bool { return ai.Available() }
+// AIAvailable reports whether the configured provider can run (Claude CLI on
+// PATH, or an API key set), so the UI can degrade gracefully.
+func (a *App) AIAvailable() bool {
+	c := a.cfgSnapshot()
+	return ai.Available(c.AIProvider, c.OpenAIKey, c.GeminiKey)
+}
 
-// AskAI runs a prompt through the local Claude CLI and returns the completion.
-// On any failure it returns a string prefixed with "error:" (never an empty
-// string that the UI might render as a blank answer).
+// AskAI runs a prompt through the configured AI provider and returns the
+// completion. On any failure it returns a string prefixed with "error:" (never
+// an empty string that the UI might render as a blank answer).
 func (a *App) AskAI(prompt string) string {
-	if a.aiRunner == nil {
+	a.mu.RLock()
+	runner := a.aiRunner
+	a.mu.RUnlock()
+	if runner == nil {
 		return "error: AI unavailable"
 	}
-	out, err := a.aiRunner.Ask(prompt)
+	out, err := runner.Ask(prompt)
 	if err != nil {
 		return "error: " + err.Error()
 	}

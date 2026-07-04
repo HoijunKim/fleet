@@ -17,6 +17,19 @@ type Config struct {
 	Terminal         string   `toml:"terminal"`
 	AutoFetchMinutes int      `toml:"auto_fetch_minutes"`
 	ShowNonGit       bool     `toml:"show_non_git"`
+
+	// AI provider for the Project Intelligence briefing. "claude" (default)
+	// shells the local Claude CLI and needs no key; "openai"/"gemini" call
+	// their HTTP APIs with the key below.
+	AIProvider string `toml:"ai_provider"`
+	AIModel    string `toml:"ai_model"`
+	OpenAIKey  string `toml:"openai_key"`
+	GeminiKey  string `toml:"gemini_key"`
+
+	// Notion integration (read-only): an internal-integration token and the
+	// database id fleet pulls tasks/deadlines from.
+	NotionToken   string `toml:"notion_token"`
+	NotionTasksDB string `toml:"notion_tasks_db"`
 }
 
 // Default returns the configuration used when no file exists yet.
@@ -40,6 +53,7 @@ func Default() Config {
 		Terminal:         terminal,
 		AutoFetchMinutes: 0,
 		ShowNonGit:       true,
+		AIProvider:       "claude",
 	}
 }
 
@@ -95,6 +109,9 @@ func loadFrom(p string) (Config, error) {
 	}
 	if c.Terminal == "" {
 		c.Terminal = d.Terminal
+	}
+	if c.AIProvider == "" {
+		c.AIProvider = d.AIProvider
 	}
 	return c, nil
 }
