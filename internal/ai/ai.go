@@ -158,12 +158,13 @@ func (r GeminiRunner) Ask(prompt string) (string, error) {
 			{"parts": []map[string]string{{"text": prompt}}},
 		},
 	})
-	url := r.BaseURL + "/models/" + r.Model + ":generateContent?key=" + r.Key
+	url := r.BaseURL + "/models/" + r.Model + ":generateContent"
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", r.Key)
 	data, err := doJSON(r.Client, req)
 	if err != nil {
 		return "", fmt.Errorf("gemini: %w", err)

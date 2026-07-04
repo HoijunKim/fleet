@@ -542,6 +542,13 @@ func (a *App) AIAvailable() bool {
 	return ai.Available(c.AIProvider, c.OpenAIKey, c.GeminiKey)
 }
 
+// AICheck reports whether the given (unsaved) provider + keys would be usable,
+// so the Settings UI can validate the edit in front of the user, not just the
+// saved config.
+func (a *App) AICheck(provider, openAIKey, geminiKey string) bool {
+	return ai.Available(provider, openAIKey, geminiKey)
+}
+
 // AskAI runs a prompt through the configured AI provider and returns the
 // completion. On any failure it returns a string prefixed with "error:" (never
 // an empty string that the UI might render as a blank answer).
@@ -577,22 +584,30 @@ func (a *App) NotionAvailable() bool {
 	return notion.Available(c.NotionToken, c.NotionTasksDB)
 }
 
-// NotionTasks pulls tasks from the configured Notion database. Not configured
-// or an API error yields an empty (non-nil) list so the UI degrades cleanly.
-func (a *App) NotionTasks() []NotionTaskView {
-	out := []NotionTaskView{}
+// NotionResult carries the pulled tasks plus any error text, so the UI can tell
+// "empty board" apart from "auth/network failed".
+type NotionResult struct {
+	Tasks []NotionTaskView `json:"tasks"`
+	Error string           `json:"error"`
+}
+
+// NotionTasks pulls tasks from the configured Notion database. Tasks is always
+// non-nil; Error is set (and Tasks empty) when the API call fails.
+func (a *App) NotionTasks() NotionResult {
+	res := NotionResult{Tasks: []NotionTaskView{}}
 	c := a.cfgSnapshot()
 	if !notion.Available(c.NotionToken, c.NotionTasksDB) {
-		return out
+		return res
 	}
 	tasks, err := notion.New(c.NotionToken).Tasks(c.NotionTasksDB)
 	if err != nil {
-		return out
+		res.Error = err.Error()
+		return res
 	}
 	for _, t := range tasks {
-		out = append(out, NotionTaskView{Title: t.Title, Due: t.Due, Status: t.Status, Done: t.Done, URL: t.URL})
+		res.Tasks = append(res.Tasks, NotionTaskView{Title: t.Title, Due: t.Due, Status: t.Status, Done: t.Done, URL: t.URL})
 	}
-	return out
+	return res
 }
 
 // GraphNode/GraphEdge/GraphView are the JS-facing dependency graph.

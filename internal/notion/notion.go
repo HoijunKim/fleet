@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -96,7 +97,17 @@ func parseResults(data []byte) ([]Task, error) {
 	out := make([]Task, 0, len(resp.Results))
 	for _, r := range resp.Results {
 		t := Task{URL: r.URL}
-		for _, raw := range r.Properties {
+		// Iterate property names in sorted order so a board with two same-typed
+		// columns (e.g. two dates) always resolves the same way, not per random
+		// map order. A property whose name looks like a due date is preferred.
+		names := make([]string, 0, len(r.Properties))
+		for name := range r.Properties {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		dueNamed := false
+		for _, name := range names {
+			raw := r.Properties[name]
 			var head struct {
 				Type string `json:"type"`
 			}
@@ -107,14 +118,17 @@ func parseResults(data []byte) ([]Task, error) {
 			case "title":
 				t.Title = plainText(raw, "title")
 			case "date":
-				if t.Due == "" {
-					var p struct {
-						Date *struct {
-							Start string `json:"start"`
-						} `json:"date"`
-					}
-					if json.Unmarshal(raw, &p) == nil && p.Date != nil {
+				var p struct {
+					Date *struct {
+						Start string `json:"start"`
+					} `json:"date"`
+				}
+				if json.Unmarshal(raw, &p) == nil && p.Date != nil && p.Date.Start != "" {
+					if t.Due == "" || (isDueName(name) && !dueNamed) {
 						t.Due = dateOnly(p.Date.Start)
+						if isDueName(name) {
+							dueNamed = true
+						}
 					}
 				}
 			case "status":
@@ -141,13 +155,15 @@ func parseResults(data []byte) ([]Task, error) {
 				var p struct {
 					Checkbox bool `json:"checkbox"`
 				}
-				if json.Unmarshal(raw, &p) == nil {
-					t.Done = p.Checkbox
-					if p.Checkbox && t.Status == "" {
-						t.Status = "done"
-					}
+				if json.Unmarshal(raw, &p) == nil && p.Checkbox {
+					t.Done = true
 				}
 			}
+		}
+		// A status/select whose name reads as complete also counts as done, so
+		// finished tasks don't leak into the open list or the AI briefing.
+		if isDoneStatus(t.Status) {
+			t.Done = true
 		}
 		if t.Title == "" {
 			t.Title = "(untitled)"
@@ -155,6 +171,21 @@ func parseResults(data []byte) ([]Task, error) {
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+// isDueName reports whether a property name reads as a due/deadline date.
+func isDueName(name string) bool {
+	n := strings.ToLower(name)
+	return strings.Contains(n, "due") || strings.Contains(n, "deadline") || strings.Contains(n, "end")
+}
+
+// isDoneStatus reports whether a status/select value means the task is finished.
+func isDoneStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "done", "complete", "completed", "archived", "closed":
+		return true
+	}
+	return false
 }
 
 // plainText concatenates the plain_text of a rich-text array property (title).

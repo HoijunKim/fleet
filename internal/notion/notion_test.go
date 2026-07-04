@@ -54,14 +54,44 @@ func TestParseResults(t *testing.T) {
 	if tasks[0].Status != "In progress" {
 		t.Errorf("status: %q", tasks[0].Status)
 	}
-	if !tasks[1].Done || tasks[1].Status != "done" {
-		t.Errorf("checked checkbox -> done + status done: %+v", tasks[1])
+	if !tasks[1].Done {
+		t.Errorf("checked checkbox -> done: %+v", tasks[1])
 	}
 	if tasks[1].Due != "2026-07-05" {
 		t.Errorf("date-only start: %q", tasks[1].Due)
 	}
 	if tasks[2].Title != "(untitled)" {
 		t.Errorf("empty title -> placeholder: %q", tasks[2].Title)
+	}
+}
+
+func TestStatusDoneMarksDone(t *testing.T) {
+	j := `{"results":[
+	  {"url":"u1","properties":{"Name":{"type":"title","title":[{"plain_text":"A"}]},"Stage":{"type":"status","status":{"name":"Done"}}}},
+	  {"url":"u2","properties":{"Name":{"type":"title","title":[{"plain_text":"B"}]},"Stage":{"type":"select","select":{"name":"In progress"}}}}
+	]}`
+	tasks, err := parseResults([]byte(j))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tasks[0].Done {
+		t.Errorf("status Done must mark done: %+v", tasks[0])
+	}
+	if tasks[1].Done {
+		t.Errorf("in-progress must stay open: %+v", tasks[1])
+	}
+}
+
+func TestDuePrefersDueNamedProperty(t *testing.T) {
+	// two date properties; the one named "Due" must win regardless of map order.
+	j := `{"results":[{"url":"u","properties":{
+	  "Name":{"type":"title","title":[{"plain_text":"X"}]},
+	  "Start":{"type":"date","date":{"start":"2026-01-01"}},
+	  "Due":{"type":"date","date":{"start":"2026-09-09"}}
+	}}]}`
+	tasks, _ := parseResults([]byte(j))
+	if tasks[0].Due != "2026-09-09" {
+		t.Errorf("expected the Due-named date, got %q", tasks[0].Due)
 	}
 }
 

@@ -96,9 +96,10 @@ func TestOpenAIRunnerNoKey(t *testing.T) {
 }
 
 func TestGeminiRunnerAsk(t *testing.T) {
-	var gotURL, gotBody string
+	var gotURL, gotBody, gotKey string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		gotURL = req.URL.String()
+		gotKey = req.Header.Get("x-goog-api-key")
 		b, _ := io.ReadAll(req.Body)
 		gotBody = string(b)
 		w.Header().Set("Content-Type", "application/json")
@@ -114,8 +115,11 @@ func TestGeminiRunnerAsk(t *testing.T) {
 	if out != "do the labeling" {
 		t.Errorf("text = %q", out)
 	}
-	if !strings.Contains(gotURL, "gemini-2.0-flash:generateContent") || !strings.Contains(gotURL, "key=g-test") {
+	if !strings.Contains(gotURL, "gemini-2.0-flash:generateContent") {
 		t.Errorf("url = %q", gotURL)
+	}
+	if gotKey != "g-test" {
+		t.Errorf("api key header = %q", gotKey)
 	}
 	if !strings.Contains(gotBody, "plan my day") {
 		t.Errorf("body missing prompt: %s", gotBody)

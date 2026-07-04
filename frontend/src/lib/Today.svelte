@@ -55,16 +55,21 @@
   // ---- Notion tasks (read-only, if configured) ----------------------------
   let notionOn = false;
   let notionTasks: any[] = [];
+  let notionError = "";
 
   NotionAvailable()
     .then((ok) => {
       notionOn = !!ok;
       if (notionOn) return NotionTasks();
-      return [];
+      return { tasks: [], error: "" };
     })
-    .then((rows) => (notionTasks = (rows || []).filter((t: any) => !t.done)))
-    .catch(() => {
-      notionOn = false;
+    .then((res: any) => {
+      const r = res || { tasks: [], error: "" };
+      notionError = r.error || "";
+      notionTasks = (r.tasks || []).filter((t: any) => !t.done);
+    })
+    .catch((e) => {
+      notionError = (e && (e as any).message) || String(e);
       notionTasks = [];
     });
 
@@ -232,7 +237,9 @@
           <h3 class="ov-card-title">From Notion</h3>
           <span class="ov-count">{notionSorted.length}</span>
         </div>
-        {#if notionSorted.length === 0}
+        {#if notionError}
+          <div class="brief-error">Could not reach Notion: {notionError}</div>
+        {:else if notionSorted.length === 0}
           <div class="ov-empty">No open tasks in your Notion board.</div>
         {:else}
           <ul class="ov-list">

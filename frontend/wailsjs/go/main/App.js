@@ -6,6 +6,10 @@ export function AIAvailable() {
   return window['go']['main']['App']['AIAvailable']();
 }
 
+export function AICheck(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AICheck'](arg1, arg2, arg3);
+}
+
 export function AddEdge(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddEdge'](arg1, arg2, arg3, arg4);
 }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AIAvailable } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck } from "../../wailsjs/go/main/App";
   import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
 
@@ -32,7 +32,10 @@
   }
 
   function refreshAiOk() {
-    AIAvailable().then((ok) => (aiOk = !!ok)).catch(() => (aiOk = false));
+    if (!cfg) return;
+    AICheck(cfg.AIProvider, cfg.OpenAIKey || "", cfg.GeminiKey || "")
+      .then((ok) => (aiOk = !!ok))
+      .catch(() => (aiOk = false));
   }
 
   load();
