@@ -171,8 +171,12 @@ func TestAskAISuccess(t *testing.T) {
 func TestAskAIError(t *testing.T) {
 	a := newTestApp(t)
 	a.aiRunner = fakeAI{err: errStub{}}
-	if got := a.AskAI("x"); got == "" || got[:6] != "error:" {
-		t.Errorf("error not surfaced: got %q", got)
+	got := a.AskAI("x")
+	if len(got) < 6 || got[:6] != "error:" {
+		t.Errorf("error not surfaced with prefix: got %q", got)
+	}
+	if !strings.Contains(got, "boom") {
+		t.Errorf("underlying error text dropped: got %q", got)
 	}
 }
 

@@ -33,6 +33,10 @@ func (ExecRunner) Ask(prompt string) (string, error) {
 	cmd := exec.CommandContext(ctx, "claude", "--print")
 	winhide.Apply(cmd)
 	cmd.Stdin = strings.NewReader(prompt)
+	// Bound Wait after a kill: claude (a Node CLI) can spawn a grandchild that
+	// keeps the stdout pipe open, which would otherwise hang the copy goroutine
+	// past the deadline. WaitDelay force-closes the pipes so Run() returns.
+	cmd.WaitDelay = 10 * time.Second
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf

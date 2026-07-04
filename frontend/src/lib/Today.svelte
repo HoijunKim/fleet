@@ -70,9 +70,20 @@
   }
 
   function buildPrompt(): string {
-    const code = (projects || []).filter((p) => p.type === "code");
+    // Only include repos whose git state has actually loaded - an un-loaded or
+    // errored repo has no git fields and would otherwise be briefed as "clean,
+    // on track", making the AI reason over confidently wrong state.
+    const code = (projects || []).filter(
+      (p) => p.type === "code" && p.loaded && !p.errMsg
+    );
+    const pending = (projects || []).filter(
+      (p) => p.type === "code" && (!p.loaded || p.errMsg)
+    ).length;
     const manual = (projects || []).filter((p) => p.type === "manual");
     const lines = code.map(projectLine);
+    if (pending > 0) {
+      lines.push("- (" + pending + " repo(s) still loading - not included)");
+    }
     for (const p of manual) {
       const bits: string[] = [];
       if (p.deadline) {
