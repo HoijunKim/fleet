@@ -2,6 +2,8 @@
   // Fleet-wide agenda: project deadlines + incomplete due/doing tasks,
   // bucketed by how soon they are due. Pure presentation - all data comes
   // from the Agenda() binding via Overview.svelte.
+  import { fly } from "svelte/transition";
+  import { flyUp } from "./motion";
   import { daysUntil } from "./pm";
 
   export let items: any[] = [];
@@ -67,8 +69,8 @@
         <div class="ov-agenda-group">
           <div class="ov-agenda-group-head">{b.label}</div>
           <ul class="ov-list">
-            {#each b.items as item (item.projectId + ":" + item.kind + ":" + (item.taskId || "") + ":" + item.title)}
-              <li>
+            {#each b.items as item, i (item.projectId + ":" + item.kind + ":" + (item.taskId || "") + ":" + item.title)}
+              <li in:fly={flyUp(i)}>
                 <button class="ov-row" on:click={() => onOpen(item.projectId)}>
                   <span class="ov-name">
                     {item.projectName}

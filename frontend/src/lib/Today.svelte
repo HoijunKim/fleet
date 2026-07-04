@@ -1,5 +1,7 @@
 <script lang="ts">
   import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL } from "../../wailsjs/go/main/App";
+  import { fly } from "svelte/transition";
+  import { flyUp } from "./motion";
   import { daysUntil } from "./pm";
 
   // Full project list (code + manual) from App.svelte.
@@ -215,8 +217,8 @@
         <div class="ov-empty">Nothing slipping through the cracks. Clean.</div>
       {:else}
         <ul class="ov-list">
-          {#each forgotten as f (f.p.id + ":" + f.kind)}
-            <li>
+          {#each forgotten as f, i (f.p.id + ":" + f.kind)}
+            <li in:fly={flyUp(i)}>
               <button class="ov-row" on:click={() => onOpen(f.p.id)}>
                 <span class="ov-name">{f.p.name}</span>
                 <span class="forgot-detail">{f.text}</span>
@@ -243,8 +245,8 @@
           <div class="ov-empty">No open tasks in your Notion board.</div>
         {:else}
           <ul class="ov-list">
-            {#each notionSorted as t (t.url + ":" + t.title)}
-              <li>
+            {#each notionSorted as t, i (t.url + ":" + t.title)}
+              <li in:fly={flyUp(i)}>
                 <button class="ov-row" on:click={() => openNotion(t.url)} title="Open in Notion">
                   <span class="ov-name">{t.title}</span>
                   {#if t.due}

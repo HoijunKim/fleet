@@ -184,13 +184,25 @@ body {
   top: 0;
   z-index: 10;
   flex: 0 0 auto;
-  height: 52px;
+  min-height: 52px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
-  padding: 0 16px;
+  row-gap: 8px;
+  padding: 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--hairline);
+}
+/* Narrow window: tighten and drop the palette/filter labels so the toolbar
+   wraps to at most two rows instead of overflowing. */
+@media (max-width: 1080px) {
+  .toolbar { gap: 8px; }
+  .palette-btn .palette-kbd { display: none; }
+}
+@media (max-width: 820px) {
+  .toolbar-search { min-width: 120px; }
+  .palette-btn .palette-label { display: none; }
 }
 
 .brand {
@@ -922,7 +934,9 @@ body {
   align-items: flex-start;
   justify-content: center;
   padding: 12vh 16px 16px;
+  animation: overlayIn 140ms ease;
 }
+.overlay > * { animation: popIn 170ms cubic-bezier(0.2, 0, 0.2, 1); }
 
 /* Command palette */
 .cmd-panel {
@@ -2262,6 +2276,26 @@ pre,
 .stash-entry {
   user-select: text;
   -webkit-user-select: text;
+}
+
+/* -------------------------------------------------------------------------
+   Motion - subtle entrances. The reduced-motion block below flattens them.
+   ------------------------------------------------------------------------- */
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Each top-level view fades up when it mounts (view switches remount it). */
+.today, .overview, .main, .graph {
+  animation: viewIn 190ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 /* -------------------------------------------------------------------------

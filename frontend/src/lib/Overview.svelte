@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { fly } from "svelte/transition";
+  import { flyUp } from "./motion";
   import { Agenda, CommitActivity } from "../../wailsjs/go/main/App";
   import { daysUntil } from "./pm";
   import Heatmap from "./Heatmap.svelte";
@@ -218,8 +220,8 @@
           <div class="ov-empty">Everything is clean, in sync, and on time</div>
         {:else}
           <ul class="ov-list">
-            {#each attention as a (a.p.id)}
-              <li>
+            {#each attention as a, i (a.p.id)}
+              <li in:fly={flyUp(i)}>
                 <button class="ov-row {sevOf(a.reasons)}" on:click={() => onOpen(a.p.id)}>
                   <span class="ov-name">{a.p.name}</span>
                   <span class="ov-tags">
