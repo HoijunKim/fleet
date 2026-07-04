@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hoijun/fleet/internal/action"
+	"github.com/hoijun/fleet/internal/ai"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/deps"
 	"github.com/hoijun/fleet/internal/edges"
@@ -38,6 +39,7 @@ type App struct {
 	edges    *edges.Store
 	symCache map[string]SymbolsView
 	symMu    sync.RWMutex
+	aiRunner ai.Runner
 }
 
 // NewApp builds the App with the real git runner and loaded config.
@@ -47,7 +49,7 @@ func NewApp() *App {
 	st, _ := store.Open(storePath) // empty store on error; UI still works
 	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
 	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}}
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}, aiRunner: ai.ExecRunner{}}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -519,6 +521,27 @@ func (a *App) Agenda() []AgendaItem {
 		}
 		return di < dj
 	})
+	return out
+}
+
+// AIAvailable reports whether the local Claude CLI is present, so the UI can
+// hide the intelligence features when it is not.
+func (a *App) AIAvailable() bool { return ai.Available() }
+
+// AskAI runs a prompt through the local Claude CLI and returns the completion.
+// On any failure it returns a string prefixed with "error:" (never an empty
+// string that the UI might render as a blank answer).
+func (a *App) AskAI(prompt string) string {
+	if a.aiRunner == nil {
+		return "error: AI unavailable"
+	}
+	out, err := a.aiRunner.Ask(prompt)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	if strings.TrimSpace(out) == "" {
+		return "error: no response"
+	}
 	return out
 }
 

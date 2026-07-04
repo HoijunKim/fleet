@@ -11,6 +11,7 @@
   import ContextMenu from "./lib/ContextMenu.svelte";
   import AddProjectModal from "./lib/AddProjectModal.svelte";
   import Overview from "./lib/Overview.svelte";
+  import Today from "./lib/Today.svelte";
   import Graph from "./lib/Graph.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
@@ -32,7 +33,7 @@
   let scanned = false;
   // Top-level view: the fleet-wide Overview (default), the project list, or the
   // interactive dependency Graph.
-  let view: "overview" | "projects" | "graph" = "overview";
+  let view: "today" | "overview" | "projects" | "graph" = "today";
 
   let paletteOpen = false;
   let searchOpen = false;
@@ -679,7 +680,7 @@
   </div>
 {:else if view === "graph"}
   <Graph onOpen={openFromOverview} />
-{:else}
+{:else if view === "overview"}
   <Overview
     {projects}
     {stats}
@@ -687,6 +688,8 @@
     onOpen={openFromOverview}
     onFilter={onTileFilter}
   />
+{:else}
+  <Today {projects} onOpen={openFromOverview} />
 {/if}
 
 <Toasts />
