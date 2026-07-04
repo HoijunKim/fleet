@@ -146,6 +146,48 @@ func TestSaveConfigPersistsAndUpdatesCache(t *testing.T) {
 	}
 }
 
+type fakeAI struct {
+	out string
+	err error
+}
+
+func (f fakeAI) Ask(prompt string) (string, error) { return f.out, f.err }
+
+func TestAskAINilRunner(t *testing.T) {
+	a := newTestApp(t) // no aiRunner set
+	if got := a.AskAI("hi"); got != "error: AI unavailable" {
+		t.Errorf("nil runner: got %q", got)
+	}
+}
+
+func TestAskAISuccess(t *testing.T) {
+	a := newTestApp(t)
+	a.aiRunner = fakeAI{out: "do the EMG labeling first"}
+	if got := a.AskAI("what next?"); got != "do the EMG labeling first" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestAskAIError(t *testing.T) {
+	a := newTestApp(t)
+	a.aiRunner = fakeAI{err: errStub{}}
+	got := a.AskAI("x")
+	if len(got) < 6 || got[:6] != "error:" {
+		t.Errorf("error not surfaced with prefix: got %q", got)
+	}
+	if !strings.Contains(got, "boom") {
+		t.Errorf("underlying error text dropped: got %q", got)
+	}
+}
+
+func TestAskAIEmptyResponse(t *testing.T) {
+	a := newTestApp(t)
+	a.aiRunner = fakeAI{out: "   "}
+	if got := a.AskAI("x"); got != "error: no response" {
+		t.Errorf("empty response: got %q", got)
+	}
+}
+
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "projects.json"))

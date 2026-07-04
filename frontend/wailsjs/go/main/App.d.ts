@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {config} from '../models';
 
+export function AIAvailable():Promise<boolean>;
+
 export function AddEdge(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AddProject(arg1:string):Promise<string>;
@@ -10,6 +12,8 @@ export function AddProject(arg1:string):Promise<string>;
 export function AddTask(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function Agenda():Promise<Array<main.AgendaItem>>;
+
+export function AskAI(arg1:string):Promise<string>;
 
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
