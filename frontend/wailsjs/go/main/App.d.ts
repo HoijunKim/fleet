@@ -5,6 +5,8 @@ import {config} from '../models';
 
 export function AIAvailable():Promise<boolean>;
 
+export function AICheck(arg1:string,arg2:string,arg3:string):Promise<boolean>;
+
 export function AddEdge(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AddProject(arg1:string):Promise<string>;
@@ -45,6 +47,10 @@ export function LoadRepo(arg1:string):Promise<main.RepoView>;
 
 export function Log(arg1:string,arg2:number):Promise<Array<main.CommitView>>;
 
+export function NotionAvailable():Promise<boolean>;
+
+export function NotionTasks():Promise<main.NotionResult>;
+
 export function OpenEditor(arg1:string):Promise<string>;
 
 export function OpenEditorAt(arg1:string,arg2:string):Promise<string>;
@@ -52,6 +58,8 @@ export function OpenEditorAt(arg1:string,arg2:string):Promise<string>;
 export function OpenInBrowser(arg1:string):Promise<string>;
 
 export function OpenTerminal(arg1:string):Promise<string>;
+
+export function OpenURL(arg1:string):Promise<string>;
 
 export function Pull(arg1:string):Promise<string>;
 

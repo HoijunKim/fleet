@@ -19,6 +19,7 @@ import (
 	"github.com/hoijun/fleet/internal/gh"
 	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/meta"
+	"github.com/hoijun/fleet/internal/notion"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/scan"
 	"github.com/hoijun/fleet/internal/store"
@@ -49,7 +50,7 @@ func NewApp() *App {
 	st, _ := store.Open(storePath) // empty store on error; UI still works
 	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
 	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}, aiRunner: ai.ExecRunner{}}
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}, aiRunner: ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey)}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -158,6 +159,7 @@ func (a *App) SaveConfig(c config.Config) string {
 	}
 	a.mu.Lock()
 	a.cfg = c
+	a.aiRunner = ai.New(c.AIProvider, c.AIModel, c.OpenAIKey, c.GeminiKey)
 	a.mu.Unlock()
 	return ""
 }
@@ -524,18 +526,40 @@ func (a *App) Agenda() []AgendaItem {
 	return out
 }
 
-// AIAvailable reports whether the local Claude CLI is present, so the UI can
-// hide the intelligence features when it is not.
-func (a *App) AIAvailable() bool { return ai.Available() }
+// OpenURL opens an arbitrary URL (e.g. a Notion page) in the default browser.
+func (a *App) OpenURL(url string) string {
+	if strings.TrimSpace(url) == "" {
+		return "no url"
+	}
+	wruntime.BrowserOpenURL(a.ctx, url)
+	return ""
+}
 
-// AskAI runs a prompt through the local Claude CLI and returns the completion.
-// On any failure it returns a string prefixed with "error:" (never an empty
-// string that the UI might render as a blank answer).
+// AIAvailable reports whether the configured provider can run (Claude CLI on
+// PATH, or an API key set), so the UI can degrade gracefully.
+func (a *App) AIAvailable() bool {
+	c := a.cfgSnapshot()
+	return ai.Available(c.AIProvider, c.OpenAIKey, c.GeminiKey)
+}
+
+// AICheck reports whether the given (unsaved) provider + keys would be usable,
+// so the Settings UI can validate the edit in front of the user, not just the
+// saved config.
+func (a *App) AICheck(provider, openAIKey, geminiKey string) bool {
+	return ai.Available(provider, openAIKey, geminiKey)
+}
+
+// AskAI runs a prompt through the configured AI provider and returns the
+// completion. On any failure it returns a string prefixed with "error:" (never
+// an empty string that the UI might render as a blank answer).
 func (a *App) AskAI(prompt string) string {
-	if a.aiRunner == nil {
+	a.mu.RLock()
+	runner := a.aiRunner
+	a.mu.RUnlock()
+	if runner == nil {
 		return "error: AI unavailable"
 	}
-	out, err := a.aiRunner.Ask(prompt)
+	out, err := runner.Ask(prompt)
 	if err != nil {
 		return "error: " + err.Error()
 	}
@@ -543,6 +567,47 @@ func (a *App) AskAI(prompt string) string {
 		return "error: no response"
 	}
 	return out
+}
+
+// NotionTaskView is a JS-facing Notion task.
+type NotionTaskView struct {
+	Title  string `json:"title"`
+	Due    string `json:"due"`
+	Status string `json:"status"`
+	Done   bool   `json:"done"`
+	URL    string `json:"url"`
+}
+
+// NotionAvailable reports whether a Notion token and database id are configured.
+func (a *App) NotionAvailable() bool {
+	c := a.cfgSnapshot()
+	return notion.Available(c.NotionToken, c.NotionTasksDB)
+}
+
+// NotionResult carries the pulled tasks plus any error text, so the UI can tell
+// "empty board" apart from "auth/network failed".
+type NotionResult struct {
+	Tasks []NotionTaskView `json:"tasks"`
+	Error string           `json:"error"`
+}
+
+// NotionTasks pulls tasks from the configured Notion database. Tasks is always
+// non-nil; Error is set (and Tasks empty) when the API call fails.
+func (a *App) NotionTasks() NotionResult {
+	res := NotionResult{Tasks: []NotionTaskView{}}
+	c := a.cfgSnapshot()
+	if !notion.Available(c.NotionToken, c.NotionTasksDB) {
+		return res
+	}
+	tasks, err := notion.New(c.NotionToken).Tasks(c.NotionTasksDB)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	for _, t := range tasks {
+		res.Tasks = append(res.Tasks, NotionTaskView{Title: t.Title, Due: t.Due, Status: t.Status, Done: t.Done, URL: t.URL})
+	}
+	return res
 }
 
 // GraphNode/GraphEdge/GraphView are the JS-facing dependency graph.

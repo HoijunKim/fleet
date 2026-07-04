@@ -7,6 +7,12 @@ export namespace config {
 	    Terminal: string;
 	    AutoFetchMinutes: number;
 	    ShowNonGit: boolean;
+	    AIProvider: string;
+	    AIModel: string;
+	    OpenAIKey: string;
+	    GeminiKey: string;
+	    NotionToken: string;
+	    NotionTasksDB: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -20,6 +26,12 @@ export namespace config {
 	        this.Terminal = source["Terminal"];
 	        this.AutoFetchMinutes = source["AutoFetchMinutes"];
 	        this.ShowNonGit = source["ShowNonGit"];
+	        this.AIProvider = source["AIProvider"];
+	        this.AIModel = source["AIModel"];
+	        this.OpenAIKey = source["OpenAIKey"];
+	        this.GeminiKey = source["GeminiKey"];
+	        this.NotionToken = source["NotionToken"];
+	        this.NotionTasksDB = source["NotionTasksDB"];
 	    }
 	}
 
@@ -203,6 +215,59 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class NotionTaskView {
+	    title: string;
+	    due: string;
+	    status: string;
+	    done: boolean;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NotionTaskView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.due = source["due"];
+	        this.status = source["status"];
+	        this.done = source["done"];
+	        this.url = source["url"];
+	    }
+	}
+	export class NotionResult {
+	    tasks: NotionTaskView[];
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NotionResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tasks = this.convertValues(source["tasks"], NotionTaskView);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class TaskView {
 	    id: string;
 	    title: string;

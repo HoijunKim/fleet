@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AskAI, AIAvailable } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL } from "../../wailsjs/go/main/App";
   import { daysUntil } from "./pm";
 
   // Full project list (code + manual) from App.svelte.
@@ -52,6 +52,37 @@
 
   AIAvailable().then((ok) => (aiAvailable = !!ok)).catch(() => (aiAvailable = false));
 
+  // ---- Notion tasks (read-only, if configured) ----------------------------
+  let notionOn = false;
+  let notionTasks: any[] = [];
+  let notionError = "";
+
+  NotionAvailable()
+    .then((ok) => {
+      notionOn = !!ok;
+      if (notionOn) return NotionTasks();
+      return { tasks: [], error: "" };
+    })
+    .then((res: any) => {
+      const r = res || { tasks: [], error: "" };
+      notionError = r.error || "";
+      notionTasks = (r.tasks || []).filter((t: any) => !t.done);
+    })
+    .catch((e) => {
+      notionError = (e && (e as any).message) || String(e);
+      notionTasks = [];
+    });
+
+  $: notionSorted = [...(notionTasks || [])].sort((a, b) => {
+    if (!a.due) return b.due ? 1 : 0; // empty due sorts last
+    if (!b.due) return -1;
+    return a.due < b.due ? -1 : a.due > b.due ? 1 : 0;
+  });
+
+  function openNotion(url: string) {
+    if (url) OpenURL(url);
+  }
+
   // Compact one-line state per code project for the prompt.
   function projectLine(p: any): string {
     const bits: string[] = [];
@@ -93,12 +124,27 @@
       if (p.taskCount > 0) bits.push("tasks " + p.doneCount + "/" + p.taskCount);
       lines.push("- " + (p.name || p.id) + " (notes-only): " + (bits.length ? bits.join(", ") : "no signals"));
     }
+    let notionBlock = "";
+    if (notionTasks && notionTasks.length) {
+      const nl = notionTasks.slice(0, 30).map((t: any) => {
+        const bits: string[] = [];
+        if (t.status) bits.push(t.status);
+        if (t.due) {
+          const d = daysUntil(t.due);
+          if (d !== null) bits.push(d < 0 ? "due " + -d + "d overdue" : "due in " + d + "d");
+        }
+        return "- " + t.title + (bits.length ? " (" + bits.join(", ") + ")" : "");
+      });
+      notionBlock = "\n\nNotion tasks (my planning board):\n" + nl.join("\n");
+    }
     return (
-      "You are my focused engineering chief-of-staff. Below is the live state of my dev projects. " +
-      "Tell me what to work on FIRST today and why, as 3-5 short concrete bullets that name the projects. " +
+      "You are my focused engineering chief-of-staff. Below is the live state of my dev projects" +
+      (notionBlock ? " plus my Notion planning board" : "") +
+      ". Tell me what to work on FIRST today and why, as 3-5 short concrete bullets that name the projects. " +
       "Then one line flagging anything I appear to have forgotten (stale WIP, long-unpushed, abandoned work). " +
       "Be direct, no preamble, under 160 words.\n\nProjects:\n" +
-      lines.join("\n")
+      lines.join("\n") +
+      notionBlock
     );
   }
 
@@ -183,6 +229,40 @@
         </ul>
       {/if}
     </section>
+
+    <!-- Notion tasks, if connected -->
+    {#if notionOn}
+      <section class="ov-card">
+        <div class="ov-card-head">
+          <h3 class="ov-card-title">From Notion</h3>
+          <span class="ov-count">{notionSorted.length}</span>
+        </div>
+        {#if notionError}
+          <div class="brief-error">Could not reach Notion: {notionError}</div>
+        {:else if notionSorted.length === 0}
+          <div class="ov-empty">No open tasks in your Notion board.</div>
+        {:else}
+          <ul class="ov-list">
+            {#each notionSorted as t (t.url + ":" + t.title)}
+              <li>
+                <button class="ov-row" on:click={() => openNotion(t.url)} title="Open in Notion">
+                  <span class="ov-name">{t.title}</span>
+                  {#if t.due}
+                    {@const d = daysUntil(t.due)}
+                    <span class="forgot-detail" class:due-late={d !== null && d < 0}>
+                      {d === null ? t.due : d < 0 ? -d + "d overdue" : d === 0 ? "today" : "in " + d + "d"}
+                    </span>
+                  {/if}
+                  {#if t.status}
+                    <span class="ov-tags"><span class="ov-pill stale">{t.status}</span></span>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+    {/if}
   </div>
 </div>
 
@@ -232,6 +312,7 @@
     margin-right: 8px;
     white-space: nowrap;
   }
+  .forgot-detail.due-late { color: var(--err); }
   .ov-pill.forgot-wip      { color: var(--dirty); border-color: var(--dirty-line); background: var(--dirty-soft); }
   .ov-pill.forgot-unpushed { color: var(--ahead); border-color: var(--ok-line);    background: var(--ok-soft); }
   .ov-pill.forgot-idle     { color: var(--muted); border-color: var(--border);     background: var(--raised); }

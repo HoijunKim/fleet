@@ -6,6 +6,10 @@ export function AIAvailable() {
   return window['go']['main']['App']['AIAvailable']();
 }
 
+export function AICheck(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AICheck'](arg1, arg2, arg3);
+}
+
 export function AddEdge(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddEdge'](arg1, arg2, arg3, arg4);
 }
@@ -86,6 +90,14 @@ export function Log(arg1, arg2) {
   return window['go']['main']['App']['Log'](arg1, arg2);
 }
 
+export function NotionAvailable() {
+  return window['go']['main']['App']['NotionAvailable']();
+}
+
+export function NotionTasks() {
+  return window['go']['main']['App']['NotionTasks']();
+}
+
 export function OpenEditor(arg1) {
   return window['go']['main']['App']['OpenEditor'](arg1);
 }
@@ -100,6 +112,10 @@ export function OpenInBrowser(arg1) {
 
 export function OpenTerminal(arg1) {
   return window['go']['main']['App']['OpenTerminal'](arg1);
+}
+
+export function OpenURL(arg1) {
+  return window['go']['main']['App']['OpenURL'](arg1);
 }
 
 export function Pull(arg1) {
