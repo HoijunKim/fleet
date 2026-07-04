@@ -19,6 +19,7 @@ import (
 	"github.com/hoijun/fleet/internal/gh"
 	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/meta"
+	"github.com/hoijun/fleet/internal/notion"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/scan"
 	"github.com/hoijun/fleet/internal/store"
@@ -525,6 +526,15 @@ func (a *App) Agenda() []AgendaItem {
 	return out
 }
 
+// OpenURL opens an arbitrary URL (e.g. a Notion page) in the default browser.
+func (a *App) OpenURL(url string) string {
+	if strings.TrimSpace(url) == "" {
+		return "no url"
+	}
+	wruntime.BrowserOpenURL(a.ctx, url)
+	return ""
+}
+
 // AIAvailable reports whether the configured provider can run (Claude CLI on
 // PATH, or an API key set), so the UI can degrade gracefully.
 func (a *App) AIAvailable() bool {
@@ -548,6 +558,39 @@ func (a *App) AskAI(prompt string) string {
 	}
 	if strings.TrimSpace(out) == "" {
 		return "error: no response"
+	}
+	return out
+}
+
+// NotionTaskView is a JS-facing Notion task.
+type NotionTaskView struct {
+	Title  string `json:"title"`
+	Due    string `json:"due"`
+	Status string `json:"status"`
+	Done   bool   `json:"done"`
+	URL    string `json:"url"`
+}
+
+// NotionAvailable reports whether a Notion token and database id are configured.
+func (a *App) NotionAvailable() bool {
+	c := a.cfgSnapshot()
+	return notion.Available(c.NotionToken, c.NotionTasksDB)
+}
+
+// NotionTasks pulls tasks from the configured Notion database. Not configured
+// or an API error yields an empty (non-nil) list so the UI degrades cleanly.
+func (a *App) NotionTasks() []NotionTaskView {
+	out := []NotionTaskView{}
+	c := a.cfgSnapshot()
+	if !notion.Available(c.NotionToken, c.NotionTasksDB) {
+		return out
+	}
+	tasks, err := notion.New(c.NotionToken).Tasks(c.NotionTasksDB)
+	if err != nil {
+		return out
+	}
+	for _, t := range tasks {
+		out = append(out, NotionTaskView{Title: t.Title, Due: t.Due, Status: t.Status, Done: t.Done, URL: t.URL})
 	}
 	return out
 }

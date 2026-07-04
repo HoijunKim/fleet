@@ -215,6 +215,26 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class NotionTaskView {
+	    title: string;
+	    due: string;
+	    status: string;
+	    done: boolean;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NotionTaskView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.due = source["due"];
+	        this.status = source["status"];
+	        this.done = source["done"];
+	        this.url = source["url"];
+	    }
+	}
 	export class TaskView {
 	    id: string;
 	    title: string;
