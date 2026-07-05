@@ -78,7 +78,7 @@
     {#if view === "projects" || view === "overview"}
       <div class="tb-actions">
         <button class="btn btn-primary tb-actions-btn" on:click|stopPropagation={() => (actionsOpen = !actionsOpen)} aria-expanded={actionsOpen}>
-          Actions <span class="tb-caret">v</span>
+          Actions <span class="tb-caret"></span>
         </button>
         {#if actionsOpen}
           <div class="tb-menu">

@@ -176,6 +176,21 @@ body {
 }
 .input.mono { font-family: var(--font-mono); }
 
+/* Selects: drop the default OS control and draw our own chevron so every
+   dropdown in the app matches. */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239099a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+}
+select.input:hover { border-color: var(--border-hover); }
+select.input option { background: var(--surface); color: var(--text); }
+
 /* -------------------------------------------------------------------------
    Toolbar / header
    ------------------------------------------------------------------------- */
@@ -198,7 +213,16 @@ body {
 
 /* Bulk-actions dropdown */
 .tb-actions { position: relative; }
-.tb-caret { font-size: 10px; opacity: 0.8; margin-left: 2px; }
+.tb-caret {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -1px);
+  opacity: 0.9;
+}
 .tb-menu {
   position: absolute;
   top: calc(100% + 6px);
