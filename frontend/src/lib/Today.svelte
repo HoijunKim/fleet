@@ -53,6 +53,22 @@
   let brief = "";
   let briefError = "";
 
+  // Output language for the briefing, remembered across sessions.
+  const LANGS: { code: string; name: string }[] = [
+    { code: "ko", name: "Korean" },
+    { code: "en", name: "English" },
+    { code: "ja", name: "Japanese" },
+    { code: "zh", name: "Chinese" },
+  ];
+  let briefLang =
+    (typeof localStorage !== "undefined" && localStorage.getItem("fleet.briefLang")) || "ko";
+  function onLangChange() {
+    if (typeof localStorage !== "undefined") localStorage.setItem("fleet.briefLang", briefLang);
+  }
+  function langName(code: string): string {
+    return (LANGS.find((l) => l.code === code) || LANGS[0]).name;
+  }
+
   AIAvailable().then((ok) => (aiAvailable = !!ok)).catch(() => (aiAvailable = false));
 
   // ---- Notion tasks (read-only, if configured) ----------------------------
@@ -145,7 +161,9 @@
       (notionBlock ? " plus my Notion planning board" : "") +
       ". Tell me what to work on FIRST today and why, as 3-5 short concrete bullets that name the projects. " +
       "Then one line flagging anything I appear to have forgotten (stale WIP, long-unpushed, abandoned work). " +
-      "Be direct, no preamble, under 160 words.\n\nProjects:\n" +
+      "Be direct, no preamble, under 160 words. " +
+      "Write the entire response in " + langName(briefLang) + ", but keep project names and code identifiers as-is." +
+      "\n\nProjects:\n" +
       lines.join("\n") +
       notionBlock
     );
@@ -183,9 +201,16 @@
       <div class="ov-card-head">
         <h3 class="ov-card-title">Briefing</h3>
         {#if aiAvailable}
-          <button class="btn btn-primary btn-sm brief-btn" on:click={generate} disabled={loading}>
-            {loading ? "Thinking..." : brief || briefError ? "Regenerate" : "What first today?"}
-          </button>
+          <div class="brief-controls">
+            <select class="input brief-lang" bind:value={briefLang} on:change={onLangChange} aria-label="Briefing language">
+              {#each LANGS as l (l.code)}
+                <option value={l.code}>{l.name}</option>
+              {/each}
+            </select>
+            <button class="btn btn-primary btn-sm" on:click={generate} disabled={loading}>
+              {loading ? "Thinking..." : brief || briefError ? "Regenerate" : "What first today?"}
+            </button>
+          </div>
         {/if}
       </div>
 
@@ -297,7 +322,8 @@
   .today-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
 
   .brief-card { border-color: #33415d; }
-  .brief-btn { margin-left: auto; }
+  .brief-controls { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .brief-lang { padding: 4px 8px; font-size: 12px; height: 30px; }
   .brief-body {
     line-height: 1.6;
     font-size: 14px;

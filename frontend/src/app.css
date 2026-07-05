@@ -184,26 +184,92 @@ body {
   top: 0;
   z-index: 10;
   flex: 0 0 auto;
-  min-height: 52px;
+  height: 52px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 12px;
-  row-gap: 8px;
-  padding: 8px 16px;
+  padding: 0 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--hairline);
 }
-/* Narrow window: tighten and drop the palette/filter labels so the toolbar
-   wraps to at most two rows instead of overflowing. */
-@media (max-width: 1080px) {
+@media (max-width: 900px) {
   .toolbar { gap: 8px; }
-  .palette-btn .palette-kbd { display: none; }
 }
-@media (max-width: 820px) {
-  .toolbar-search { min-width: 120px; }
-  .palette-btn .palette-label { display: none; }
+
+/* Bulk-actions dropdown */
+.tb-actions { position: relative; }
+.tb-caret { font-size: 10px; opacity: 0.8; margin-left: 2px; }
+.tb-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--highlight), var(--shadow-lg);
+  animation: popIn 150ms cubic-bezier(0.2, 0, 0.2, 1);
 }
+.tb-menu-item {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-btn);
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: background var(--t);
+}
+.tb-menu-item:hover { background: var(--surface); }
+.tb-menu-div { height: 1px; background: var(--border); margin: 4px 6px; }
+
+/* Compact utility icons */
+.ic-jump {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.2;
+}
+.ic-search {
+  position: relative;
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+}
+.ic-search::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border: 1.6px solid var(--muted);
+  border-radius: 50%;
+}
+.ic-search::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 5px;
+  height: 1.6px;
+  background: var(--muted);
+  transform: rotate(45deg);
+  transform-origin: right center;
+}
+.icon-btn:hover .ic-jump { border-color: var(--text); color: var(--text); }
+.icon-btn:hover .ic-search::before { border-color: var(--text); }
+.icon-btn:hover .ic-search::after { background: var(--text); }
 
 .brand {
   display: flex;
