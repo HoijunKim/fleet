@@ -13,6 +13,7 @@
   import Overview from "./lib/Overview.svelte";
   import Today from "./lib/Today.svelte";
   import Graph from "./lib/Graph.svelte";
+  import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
   import { STATUS_ORDER, deadlineSort, daysUntil } from "./lib/pm";
@@ -614,22 +615,11 @@
 </script>
 
 <Toolbar
-  bind:filter
-  bind:filterInput
-  repos={projects}
   {loadingCount}
   remoteChanges={stats.behind}
   onRemoteChanges={() => (view = "overview")}
   {view}
   onView={(v) => (view = v)}
-  {statusFilter}
-  {pmStatusFilter}
-  {highPriorityOnly}
-  {tagFilter}
-  onStatus={(s) => (statusFilter = s)}
-  onPmStatus={(s) => (pmStatusFilter = s)}
-  onHighPriorityToggle={() => (highPriorityOnly = !highPriorityOnly)}
-  onTagFilter={(t) => (tagFilter = t)}
   onRefresh={manualRefresh}
   onFetchAll={fetchAll}
   onPullAll={pullAll}
@@ -642,6 +632,20 @@
 
 {#if view === "projects"}
   <StatsHeader {stats} />
+
+  <ProjectsFilterBar
+    bind:filter
+    bind:filterInput
+    repos={projects}
+    {statusFilter}
+    {pmStatusFilter}
+    {highPriorityOnly}
+    {tagFilter}
+    onStatus={(s) => (statusFilter = s)}
+    onPmStatus={(s) => (pmStatusFilter = s)}
+    onHighPriorityToggle={() => (highPriorityOnly = !highPriorityOnly)}
+    onTagFilter={(t) => (tagFilter = t)}
+  />
 
   {#if selectedCount > 0}
     <div class="bulk-bar">

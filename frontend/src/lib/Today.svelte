@@ -2,6 +2,7 @@
   import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL } from "../../wailsjs/go/main/App";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
+  import { renderBrief } from "./markdown";
   import { daysUntil } from "./pm";
 
   // Full project list (code + manual) from App.svelte.
@@ -199,7 +200,7 @@
       {:else if briefError}
         <div class="brief-error">Could not generate a briefing: {briefError}</div>
       {:else if brief}
-        <div class="brief-body">{brief}</div>
+        <div class="brief-body">{@html renderBrief(brief)}</div>
       {:else}
         <div class="ov-empty">
           One click reads every project's git + tasks and tells you where to start.
@@ -298,11 +299,31 @@
   .brief-card { border-color: #33415d; }
   .brief-btn { margin-left: auto; }
   .brief-body {
-    white-space: pre-wrap;
     line-height: 1.6;
     font-size: 14px;
     color: var(--text);
     user-select: text;
+  }
+  .brief-body :global(p) { margin: 0 0 8px; }
+  .brief-body :global(p:last-child) { margin-bottom: 0; }
+  .brief-body :global(.md-h) {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 12px 0 6px;
+  }
+  .brief-body :global(.md-list) { margin: 4px 0 10px; padding-left: 18px; }
+  .brief-body :global(.md-list li) { margin: 3px 0; }
+  .brief-body :global(strong) { color: var(--text); font-weight: 700; }
+  .brief-body :global(em) { color: var(--muted); font-style: italic; }
+  .brief-body :global(code) {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--raised);
+    padding: 1px 5px;
+    border-radius: 4px;
   }
   .brief-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
   .brief-error { color: var(--err); font-size: 13px; }
