@@ -54,16 +54,18 @@
     </button>
   </div>
 
-  <div class="toolbar-search">
-    <input
-      class="input"
-      type="text"
-      placeholder="Filter projects..."
-      bind:value={filter}
-      bind:this={filterInput}
-      aria-label="Filter projects by name"
-    />
-  </div>
+  {#if view === "projects"}
+    <div class="toolbar-search">
+      <input
+        class="input"
+        type="text"
+        placeholder="Filter projects..."
+        bind:value={filter}
+        bind:this={filterInput}
+        aria-label="Filter projects by name"
+      />
+    </div>
+{/if}
 
   {#if view === "projects"}
     <div class="filter-chips">
@@ -137,20 +139,22 @@
       </span>
     {/if}
 
-    <!-- Git bulk actions -->
-    <button class="btn btn-secondary" on:click={onAddProject}>+ Project</button>
-    <button class="btn btn-secondary" on:click={onRefresh}>Refresh</button>
-    <button class="btn btn-secondary" on:click={onPullAll}>Pull all</button>
-    <button class="btn btn-secondary" on:click={onPushAll}>Push all</button>
-    <button class="btn btn-primary" on:click={onFetchAll}>Fetch All</button>
+    <!-- Git bulk actions live only on the repo-centric views -->
+    {#if view === "projects" || view === "overview"}
+      <button class="btn btn-secondary" on:click={onAddProject}>+ Project</button>
+      <button class="btn btn-secondary" on:click={onRefresh}>Refresh</button>
+      <button class="btn btn-secondary" on:click={onPullAll}>Pull all</button>
+      <button class="btn btn-secondary" on:click={onPushAll}>Push all</button>
+      <button class="btn btn-primary" on:click={onFetchAll}>Fetch All</button>
+      <span class="toolbar-div"></span>
+    {/if}
 
-    <!-- Utility cluster: jump, search, settings sit together at the far right -->
-    <span class="toolbar-div"></span>
-    <button class="palette-btn" on:click={onOpenPalette} title="Command palette">
+    <!-- Global utility: jump, search, settings - always at the far right -->
+    <button class="palette-btn" on:click={onOpenPalette} title="Command palette (Ctrl K)">
       <span class="palette-label">Jump</span>
       <span class="palette-kbd">Ctrl K</span>
     </button>
-    <button class="palette-btn" on:click={onOpenSearch} title="Search across repos">
+    <button class="palette-btn" on:click={onOpenSearch} title="Search across repos (Ctrl Shift F)">
       <span class="palette-label">Search</span>
       <span class="palette-kbd">Ctrl Shift F</span>
     </button>
