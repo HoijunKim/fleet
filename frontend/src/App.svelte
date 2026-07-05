@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from "svelte";
   import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject } from "../wailsjs/go/main/App";
   import Toolbar from "./lib/Toolbar.svelte";
-  import StatsHeader from "./lib/StatsHeader.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
   import DetailPanel from "./lib/DetailPanel.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
@@ -631,8 +630,6 @@
 />
 
 {#if view === "projects"}
-  <StatsHeader {stats} />
-
   <ProjectsFilterBar
     bind:filter
     bind:filterInput

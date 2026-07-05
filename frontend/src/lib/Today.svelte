@@ -323,7 +323,7 @@
 
   .brief-card { border-color: #33415d; }
   .brief-controls { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  .brief-lang { padding: 4px 8px; font-size: 12px; height: 30px; }
+  .brief-lang { min-width: 120px; height: 32px; font-size: 13px; }
   .brief-body {
     line-height: 1.6;
     font-size: 14px;

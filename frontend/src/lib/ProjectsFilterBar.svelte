@@ -19,6 +19,8 @@
 </script>
 
 <div class="pfbar">
+  <span class="pfbar-count"><b>{repos.length}</b> projects</span>
+
   <div class="pfbar-search">
     <input
       class="input"
@@ -73,7 +75,9 @@
     border-bottom: 1px solid var(--hairline);
     background: var(--surface);
   }
-  .pfbar-search { flex: 0 1 260px; min-width: 160px; }
+  .pfbar-count { font-size: 12.5px; color: var(--muted); white-space: nowrap; margin-right: 2px; }
+  .pfbar-count b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pfbar-search { flex: 0 1 240px; min-width: 150px; }
   .pfbar-search .input { width: 100%; }
   .pfbar-spacer { flex: 1; }
 </style>
