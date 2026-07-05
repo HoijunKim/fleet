@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from "./Select.svelte";
   // Project-list filters, lifted out of the global toolbar into a dedicated row
   // above the table so the top bar stays about navigation, not filtering.
   export let filter: string = "";
@@ -12,6 +13,10 @@
   export let onPmStatus: (s: "all" | "active" | "paused" | "done") => void;
   export let onHighPriorityToggle: () => void;
   export let onTagFilter: (t: string) => void;
+
+  function pmChange(v: string) {
+    onPmStatus(v as "all" | "active" | "paused" | "done");
+  }
 
   $: dirty = repos.filter((r) => r.dirty).length;
   $: behind = repos.filter((r) => r.behind > 0).length;
@@ -44,24 +49,29 @@
 
   <div class="pfbar-spacer"></div>
 
-  <select class="input toolbar-select" aria-label="Filter by project status" bind:value={pmStatusFilter} on:change={() => onPmStatus(pmStatusFilter)}>
-    <option value="all">All statuses</option>
-    <option value="active">Active</option>
-    <option value="paused">Paused</option>
-    <option value="done">Done</option>
-  </select>
+  <Select
+    value={pmStatusFilter}
+    options={[
+      { value: "all", label: "All statuses" },
+      { value: "active", label: "Active" },
+      { value: "paused", label: "Paused" },
+      { value: "done", label: "Done" },
+    ]}
+    ariaLabel="Filter by project status"
+    onChange={pmChange}
+  />
 
   <button class="fchip" class:active={highPriorityOnly} on:click={onHighPriorityToggle} aria-pressed={highPriorityOnly}>
     High priority
   </button>
 
   {#if allTags.length > 0}
-    <select class="input toolbar-select" aria-label="Filter by tag" bind:value={tagFilter} on:change={() => onTagFilter(tagFilter)}>
-      <option value="all">All tags</option>
-      {#each allTags as t}
-        <option value={t}>{t}</option>
-      {/each}
-    </select>
+    <Select
+      value={tagFilter}
+      options={[{ value: "all", label: "All tags" }, ...allTags.map((t) => ({ value: t, label: t }))]}
+      ariaLabel="Filter by tag"
+      onChange={(v) => onTagFilter(v)}
+    />
   {/if}
 </div>
 

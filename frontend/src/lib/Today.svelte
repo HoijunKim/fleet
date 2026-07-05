@@ -3,6 +3,7 @@
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
+  import Select from "./Select.svelte";
   import { daysUntil } from "./pm";
 
   // Full project list (code + manual) from App.svelte.
@@ -202,11 +203,14 @@
         <h3 class="ov-card-title">Briefing</h3>
         {#if aiAvailable}
           <div class="brief-controls">
-            <select class="input brief-lang" bind:value={briefLang} on:change={onLangChange} aria-label="Briefing language">
-              {#each LANGS as l (l.code)}
-                <option value={l.code}>{l.name}</option>
-              {/each}
-            </select>
+            <div class="brief-lang">
+              <Select
+                bind:value={briefLang}
+                options={LANGS.map((l) => ({ value: l.code, label: l.name }))}
+                ariaLabel="Briefing language"
+                onChange={onLangChange}
+              />
+            </div>
             <button class="btn btn-primary btn-sm" on:click={generate} disabled={loading}>
               {loading ? "Thinking..." : brief || briefError ? "Regenerate" : "What first today?"}
             </button>
@@ -323,7 +327,8 @@
 
   .brief-card { border-color: #33415d; }
   .brief-controls { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  .brief-lang { min-width: 120px; height: 32px; font-size: 13px; }
+  .brief-lang { min-width: 128px; }
+  .brief-lang :global(.sel) { width: 100%; }
   .brief-body {
     line-height: 1.6;
     font-size: 14px;
