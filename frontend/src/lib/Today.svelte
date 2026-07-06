@@ -102,11 +102,31 @@
     briefAt = new Date().toLocaleString();
     try {
       localStorage.setItem("fleet.brief", JSON.stringify({ text: brief, at: briefAt }));
+      // record that today's brief exists so the auto-brief doesn't re-run
+      localStorage.setItem("fleet.briefAutoDate", new Date().toDateString());
     } catch {
       /* ignore */
     }
   }
   loadBrief();
+
+  // PUSH: on the first open of the day, generate the briefing automatically so
+  // fleet surfaces what you forgot before you ask. Fires once per day, once
+  // enough repo state has loaded to brief on.
+  let autoTried = false;
+  $: maybeAutoBrief(aiAvailable, projects);
+  function maybeAutoBrief(_ok: boolean, _p: any[]) {
+    if (autoTried || loading || !aiAvailable) return;
+    const code = (projects || []).filter((p) => p.type === "code" && p.isGit);
+    if (code.length > 0 && !code.some((p) => p.loaded)) return; // wait for load
+    if (typeof localStorage !== "undefined" &&
+        localStorage.getItem("fleet.briefAutoDate") === new Date().toDateString()) {
+      autoTried = true;
+      return;
+    }
+    autoTried = true;
+    generate();
+  }
 
   // ---- Notion tasks (read-only, if configured) ----------------------------
   let notionOn = false;
