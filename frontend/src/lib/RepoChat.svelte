@@ -26,13 +26,39 @@
     return { ko: "Korean", en: "English", ja: "Japanese", zh: "Chinese" }[code] || "Korean";
   }
 
-  // Reset the conversation whenever the selected repo changes.
+  // Load this repo's saved conversation when the selection changes (per-repo
+  // memory across sessions).
   $: if (project && project.path !== loadedPath) {
     loadedPath = project.path;
-    turns = [];
     contextStr = "";
     question = "";
     loading = false; // any in-flight answer for the old repo is dropped
+    turns = loadChat(project.path);
+  }
+
+  function chatKey(p: string): string {
+    return "fleet.chat:" + p;
+  }
+  function loadChat(p: string): Turn[] {
+    if (typeof localStorage === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(chatKey(p));
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveChat() {
+    if (typeof localStorage === "undefined" || !loadedPath) return;
+    try {
+      localStorage.setItem(chatKey(loadedPath), JSON.stringify(turns.slice(-20)));
+    } catch {
+      /* quota or serialization - non-fatal */
+    }
+  }
+  function clearChat() {
+    turns = [];
+    if (typeof localStorage !== "undefined" && loadedPath) localStorage.removeItem(chatKey(loadedPath));
   }
 
   // Gather real code context for THIS repo once, then reuse it for the chat.
@@ -101,9 +127,11 @@
       if (p !== project.path) return; // selection moved on - don't cross-post
       const answer = typeof res === "string" && res.startsWith("error:") ? res : res || "(no answer)";
       turns = [...turns, { role: "assistant", text: answer }];
+      saveChat();
     } catch (e) {
       if (p !== project.path) return;
       turns = [...turns, { role: "assistant", text: "error: " + String(e) }];
+      saveChat();
     } finally {
       if (p === project.path) loading = false;
     }
@@ -128,6 +156,10 @@
       </div>
     </div>
   {:else}
+    <div class="rchat-bar">
+      <span class="rchat-saved">Saved for this repo</span>
+      <button class="rchat-clear" on:click={clearChat} disabled={loading}>Clear</button>
+    </div>
     <div class="rchat-thread">
       {#each turns as t}
         {#if t.role === "user"}
@@ -158,6 +190,20 @@
 
 <style>
   .rchat { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .rchat-bar { display: flex; align-items: center; justify-content: space-between; }
+  .rchat-saved { font-size: 11px; color: var(--faint); }
+  .rchat-clear {
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 2px 10px;
+    cursor: pointer;
+    transition: color var(--t), border-color var(--t);
+  }
+  .rchat-clear:hover { color: var(--err); border-color: var(--err-line); }
   .rchat-hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
   .rchat-starters { display: flex; flex-direction: column; gap: 8px; }
   .rchat-starter {

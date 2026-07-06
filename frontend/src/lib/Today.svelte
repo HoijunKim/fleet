@@ -73,6 +73,32 @@
 
   AIAvailable().then((ok) => (aiAvailable = !!ok)).catch(() => (aiAvailable = false));
 
+  // Persist the last briefing so reopening Today shows it, not a blank card.
+  let briefAt = "";
+  function loadBrief() {
+    if (typeof localStorage === "undefined") return;
+    try {
+      const raw = localStorage.getItem("fleet.brief");
+      if (raw) {
+        const o = JSON.parse(raw);
+        brief = o.text || "";
+        briefAt = o.at || "";
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  function saveBrief() {
+    if (typeof localStorage === "undefined") return;
+    briefAt = new Date().toISOString().slice(0, 16).replace("T", " ");
+    try {
+      localStorage.setItem("fleet.brief", JSON.stringify({ text: brief, at: briefAt }));
+    } catch {
+      /* ignore */
+    }
+  }
+  loadBrief();
+
   // ---- Notion tasks (read-only, if configured) ----------------------------
   let notionOn = false;
   let notionTasks: any[] = [];
@@ -202,6 +228,7 @@
         briefError = res.slice(6).trim() || "AI request failed";
       } else {
         brief = res || "";
+        saveBrief();
       }
     } catch (e) {
       briefError = (e && (e as any).message) || String(e);
@@ -252,6 +279,7 @@
         briefError = res.slice(6).trim() || "AI request failed";
       } else {
         brief = res || "";
+        saveBrief();
       }
     } catch (e) {
       briefError = (e && (e as any).message) || String(e);
@@ -304,6 +332,7 @@
         <div class="brief-error">Could not generate a briefing: {briefError}</div>
       {:else if brief}
         <div class="brief-body">{@html renderBrief(brief)}</div>
+        {#if briefAt}<div class="brief-at">generated {briefAt}</div>{/if}
       {:else}
         <div class="ov-empty">
           One click reads every project's git + tasks and tells you where to start.
@@ -439,6 +468,7 @@
     padding: 1px 5px;
     border-radius: 4px;
   }
+  .brief-at { margin-top: 10px; font-size: 11px; color: var(--faint); }
   .brief-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
   .brief-error { color: var(--err); font-size: 13px; }
 
