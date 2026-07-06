@@ -2205,6 +2205,7 @@ select.input option { background: var(--surface); color: var(--text); }
 
 /* Agenda leads the dashboard: full-width row above attention + activity. */
 .ov-grid > .ov-agenda { grid-column: 1 / -1; }
+.ov-grid > .ov-wide { grid-column: 1 / -1; }
 
 .ov-card {
   position: relative;

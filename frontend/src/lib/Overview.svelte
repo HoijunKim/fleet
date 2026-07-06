@@ -1,9 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { fly } from "svelte/transition";
-  import { flyUp } from "./motion";
   import { Agenda, CommitActivity } from "../../wailsjs/go/main/App";
-  import { daysUntil } from "./pm";
   import Heatmap from "./Heatmap.svelte";
   import AgendaCard from "./AgendaCard.svelte";
 
@@ -32,9 +29,6 @@
     worker: (item: T) => Promise<void>
   ) => Promise<void>;
 
-  // A commit older than this many days marks a repo "stale".
-  const STALE_DAYS = 14;
-
   // Stat tiles: label + value + accent class (accent only lights up when the
   // count is non-zero, so a healthy fleet reads calm).
   $: tiles = [
@@ -45,65 +39,6 @@
     { key: "unpushed", label: "unpushed", value: stats.unpushed, tone: "ahead", hot: stats.unpushed > 0 },
     { key: "overdue", label: "overdue", value: stats.overdue, tone: "err", hot: stats.overdue > 0 },
   ];
-
-  // ---- needs-attention queue ----------------------------------------------
-  // One ranked list over ALL projects (code + manual), so it never disagrees
-  // with the fleet-wide "overdue" tile. A project earns a spot if it is
-  // dirty, behind, unpushed (ahead), has an overdue deadline, or is stale.
-  // The git-based reasons (dirty/behind/ahead/stale) only ever fire for code
-  // projects: manual rows never carry those git fields, so p.dirty/p.behind/
-  // p.ahead/p.lastWhen are undefined and each check below is a no-op for
-  // them. Manual rows can therefore only qualify via the overdue-deadline
-  // reason, which is exactly the intended behavior. Each reason adds a tag
-  // and a score weight; overdue/behind/unpushed outrank stale.
-  type Reason = { text: string; cls: string };
-
-  function evalAttention(p: any): { reasons: Reason[]; score: number } {
-    const reasons: Reason[] = [];
-    let score = 0;
-
-    const dl = daysUntil(p.deadline);
-    if (dl !== null && dl < 0) {
-      const over = -dl;
-      reasons.push({ text: "overdue " + over + "d", cls: "over" });
-      score += 1000 + over;
-    }
-    if (p.behind > 0) {
-      reasons.push({ text: "behind " + p.behind, cls: "dn" });
-      score += 500 + p.behind;
-    }
-    if (p.ahead > 0) {
-      reasons.push({ text: "unpushed " + p.ahead, cls: "up" });
-      score += 400 + p.ahead;
-    }
-    if (p.dirty) {
-      const n = p.modified || (p.dirtyFiles ? p.dirtyFiles.length : 0);
-      reasons.push({ text: n > 0 ? n + " changed" : "changed", cls: "dirty" });
-      score += 200 + n;
-    }
-    const lw = daysUntil(p.lastWhen);
-    if (lw !== null && -lw > STALE_DAYS) {
-      reasons.push({ text: "stale", cls: "stale" });
-      score += 100;
-    }
-    return { reasons, score };
-  }
-
-  // Severity rail class from the most-urgent reason (reasons are pushed in
-  // severity order, so the first one wins).
-  function sevOf(reasons: Reason[]): string {
-    const top = reasons[0];
-    if (!top) return "";
-    if (top.cls === "over" || top.cls === "dn") return "sev-err";
-    if (top.cls === "dirty") return "sev-dirty";
-    if (top.cls === "up") return "sev-ahead";
-    return "";
-  }
-
-  $: attention = projects
-    .map((p) => ({ p, ...evalAttention(p) }))
-    .filter((x) => x.reasons.length > 0)
-    .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name));
 
   // ---- aggregate commit activity across all code projects -----------------
   let aggDays: Array<{ date: string; count: number }> = [];
@@ -207,37 +142,13 @@
     </section>
 
     <div class="ov-grid">
-      <!-- Fleet-wide agenda: deadlines + due/doing tasks, soonest first -->
+      <!-- Fleet-wide agenda: deadlines + due/doing tasks, soonest first.
+           The old "Needs attention" queue moved to Today ("Easy to forget") so
+           there is one attention list, not two near-identical ones. -->
       <AgendaCard items={agendaItems} {onOpen} />
 
-      <!-- Needs-attention queue -->
-      <section class="ov-card ov-attention">
-        <div class="ov-card-head">
-          <h3 class="ov-card-title">Needs attention</h3>
-          <span class="ov-count">{attention.length}</span>
-        </div>
-        {#if attention.length === 0}
-          <div class="ov-empty">Everything is clean, in sync, and on time</div>
-        {:else}
-          <ul class="ov-list">
-            {#each attention as a, i (a.p.id)}
-              <li in:fly={flyUp(i)}>
-                <button class="ov-row {sevOf(a.reasons)}" on:click={() => onOpen(a.p.id)}>
-                  <span class="ov-name">{a.p.name}</span>
-                  <span class="ov-tags">
-                    {#each a.reasons as r}
-                      <span class="ov-pill {r.cls}">{r.text}</span>
-                    {/each}
-                  </span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </section>
-
       <!-- Aggregate commit activity -->
-      <section class="ov-card ov-activity">
+      <section class="ov-card ov-activity ov-wide">
         <div class="ov-card-head">
           <h3 class="ov-card-title">Commit activity</h3>
           <span class="ov-sub">last 16 weeks, all repos</span>
