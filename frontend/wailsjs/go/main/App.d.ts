@@ -39,6 +39,8 @@ export function GetProject(arg1:string):Promise<main.ProjectView>;
 
 export function GitHubInfo(arg1:string):Promise<main.GitHubView>;
 
+export function GitHubURL(arg1:string):Promise<string>;
+
 export function ListEdges():Promise<Array<main.EdgeView>>;
 
 export function ListProjects():Promise<Array<main.ProjectView>>;

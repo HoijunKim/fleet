@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GitHubInfo } from "../../wailsjs/go/main/App";
+  import { GitHubInfo, GitHubURL, OpenURL } from "../../wailsjs/go/main/App";
 
   // The code project's GitHub remote URL (raw, as stored on the project).
   export let remote: string = "";
@@ -11,6 +11,11 @@
   let loadedPath = "";
   let requestedRemote = "";
   let info: { ci: string; prs: number; issues: number; available: boolean } | null = null;
+  let baseUrl = "";
+
+  function openGh(sub: string) {
+    if (baseUrl) OpenURL(baseUrl + sub);
+  }
 
   // Reset state whenever the selected repo (path) changes. Kept separate from
   // the load trigger below so a late-arriving remote still fires a load.
@@ -18,6 +23,7 @@
     loadedPath = path;
     requestedRemote = "";
     info = null;
+    baseUrl = "";
   }
 
   // Fire the load once a non-empty remote is known for the current selection.
@@ -35,6 +41,11 @@
       const v = await GitHubInfo(remote);
       if (p !== path) return; // selection changed during await -> drop stale result
       info = v;
+      if (v && v.available) {
+        GitHubURL(remote).then((u) => {
+          if (p === path) baseUrl = u || "";
+        }).catch(() => {});
+      }
     } catch {
       if (p !== path) return;
       info = null;
@@ -71,12 +82,12 @@
   <div class="dl-row">
     <span class="dl-label">GitHub</span>
     <span class="gh-badge">
-      <span class="gh-ci {ciClass(info.ci)}">{ciLabel(info.ci)}</span>
+      <button class="gh-ci {ciClass(info.ci)}" class:gh-link={!!baseUrl} on:click={() => openGh("/actions")} disabled={!baseUrl} title="Open Actions">{ciLabel(info.ci)}</button>
       {#if info.prs > 0}
-        <span class="gh-chip">PR <span class="gh-chip-n">{info.prs}</span></span>
+        <button class="gh-chip" class:gh-link={!!baseUrl} on:click={() => openGh("/pulls")} disabled={!baseUrl} title="Open pull requests">PR <span class="gh-chip-n">{info.prs}</span></button>
       {/if}
       {#if info.issues > 0}
-        <span class="gh-chip">Issues <span class="gh-chip-n">{info.issues}</span></span>
+        <button class="gh-chip" class:gh-link={!!baseUrl} on:click={() => openGh("/issues")} disabled={!baseUrl} title="Open issues">Issues <span class="gh-chip-n">{info.issues}</span></button>
       {/if}
     </span>
   </div>

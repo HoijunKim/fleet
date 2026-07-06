@@ -74,6 +74,10 @@ export function GitHubInfo(arg1) {
   return window['go']['main']['App']['GitHubInfo'](arg1);
 }
 
+export function GitHubURL(arg1) {
+  return window['go']['main']['App']['GitHubURL'](arg1);
+}
+
 export function ListEdges() {
   return window['go']['main']['App']['ListEdges']();
 }

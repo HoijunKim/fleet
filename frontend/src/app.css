@@ -1742,6 +1742,11 @@ select.input option { background: var(--surface); color: var(--text); }
   white-space: nowrap;
 }
 .gh-chip-n { color: var(--text); }
+/* CI/PR/issue badges are buttons that open GitHub; reset the button chrome. */
+.gh-ci, .gh-chip { margin: 0; appearance: none; -webkit-appearance: none; cursor: default; }
+.gh-ci.gh-link, .gh-chip.gh-link { cursor: pointer; transition: filter var(--t), border-color var(--t); }
+.gh-ci.gh-link:hover, .gh-chip.gh-link:hover { filter: brightness(1.18); border-color: var(--border-hover); }
+.gh-ci:disabled, .gh-chip:disabled { cursor: default; }
 
 /* PM status chip */
 .status-chip {

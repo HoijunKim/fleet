@@ -533,6 +533,16 @@ func (a *App) Agenda() []AgendaItem {
 	return out
 }
 
+// GitHubURL returns the repo's github.com web URL for a remote, or "" when the
+// remote is not a GitHub repo. The UI appends /actions, /pulls, /issues.
+func (a *App) GitHubURL(remote string) string {
+	owner, repo, ok := gh.OwnerRepo(remote)
+	if !ok {
+		return ""
+	}
+	return "https://github.com/" + owner + "/" + repo
+}
+
 // OpenURL opens an arbitrary URL (e.g. a Notion page) in the default browser.
 func (a *App) OpenURL(url string) string {
 	if strings.TrimSpace(url) == "" {
