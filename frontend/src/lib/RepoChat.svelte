@@ -32,6 +32,7 @@
     turns = [];
     contextStr = "";
     question = "";
+    loading = false; // any in-flight answer for the old repo is dropped
   }
 
   // Gather real code context for THIS repo once, then reuse it for the chat.
@@ -90,18 +91,21 @@
   async function ask(q: string) {
     const text = q.trim();
     if (!text || loading) return;
+    const p = project.path; // capture: drop the answer if the repo changes
     question = "";
     turns = [...turns, { role: "user", text }];
     loading = true;
     try {
       const ctx = await buildContext();
       const res = await AskAI(buildPrompt(ctx, text));
+      if (p !== project.path) return; // selection moved on - don't cross-post
       const answer = typeof res === "string" && res.startsWith("error:") ? res : res || "(no answer)";
       turns = [...turns, { role: "assistant", text: answer }];
     } catch (e) {
+      if (p !== project.path) return;
       turns = [...turns, { role: "assistant", text: "error: " + String(e) }];
     } finally {
-      loading = false;
+      if (p === project.path) loading = false;
     }
   }
 
