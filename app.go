@@ -202,6 +202,13 @@ func (a *App) Checkout(path, branch string) string {
 func (a *App) CommitAll(path, msg string) string { return errMsg(git.CommitAll(a.runner, path, msg)) }
 func (a *App) Push(path string) string           { return errMsg(git.Push(a.runner, path)) }
 
+// RepoDiff returns the repo's uncommitted working changes (capped), for the
+// AI deep-dive prompt.
+func (a *App) RepoDiff(path string) string { return git.Diff(a.runner, path) }
+
+// StagedDiff returns the staged changes (capped), for drafting a commit message.
+func (a *App) StagedDiff(path string) string { return git.StagedDiff(a.runner, path) }
+
 func (a *App) DiffFile(path, file string) string {
 	out, err := git.DiffFile(a.runner, path, file)
 	if err != nil {

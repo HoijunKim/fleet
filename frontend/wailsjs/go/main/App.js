@@ -138,6 +138,10 @@ export function ReorderTasks(arg1, arg2) {
   return window['go']['main']['App']['ReorderTasks'](arg1, arg2);
 }
 
+export function RepoDiff(arg1) {
+  return window['go']['main']['App']['RepoDiff'](arg1);
+}
+
 export function RepoGraph() {
   return window['go']['main']['App']['RepoGraph']();
 }
@@ -172,6 +176,10 @@ export function SetTags(arg1, arg2) {
 
 export function SetTaskStatus(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTaskStatus'](arg1, arg2, arg3);
+}
+
+export function StagedDiff(arg1) {
+  return window['go']['main']['App']['StagedDiff'](arg1);
 }
 
 export function Stash(arg1) {

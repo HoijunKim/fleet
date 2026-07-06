@@ -10,6 +10,7 @@
   import PMSection from "./PMSection.svelte";
   import GitHubBadge from "./GitHubBadge.svelte";
   import SymbolsTab from "./SymbolsTab.svelte";
+  import RepoChat from "./RepoChat.svelte";
 
   export let project: any = null;
   // Reload git fields for a code project (called with its repo path).
@@ -24,7 +25,7 @@
 
   // Active detail tab for code projects. Remembered across selections; defaults
   // to Overview. Manual projects ignore this and show only their Tasks content.
-  let activeTab: "overview" | "git" | "tasks" | "symbols" = "overview";
+  let activeTab: "overview" | "git" | "tasks" | "symbols" | "chat" = "overview";
 
   // Diff viewer state - the file whose diff is open (null = closed).
   let diffFile: string | null = null;
@@ -129,6 +130,13 @@
             aria-selected={activeTab === "symbols"}
             on:click={() => (activeTab = "symbols")}
           >Symbols</button>
+          <button
+            class="detail-tab"
+            class:active={activeTab === "chat"}
+            role="tab"
+            aria-selected={activeTab === "chat"}
+            on:click={() => (activeTab = "chat")}
+          >Ask AI</button>
         </div>
 
         <div class="detail-body">
@@ -272,6 +280,15 @@
             {:else}
               <div class="dl-row">
                 <span class="dl-label">Symbols</span>
+                <span class="dl-value">not a repository</span>
+              </div>
+            {/if}
+          {:else if activeTab === "chat"}
+            {#if project.isGit}
+              <RepoChat {project} />
+            {:else}
+              <div class="dl-row">
+                <span class="dl-label">Ask AI</span>
                 <span class="dl-value">not a repository</span>
               </div>
             {/if}

@@ -71,6 +71,8 @@ export function RemoveEdge(arg1:string):Promise<string>;
 
 export function ReorderTasks(arg1:string,arg2:Array<string>):Promise<string>;
 
+export function RepoDiff(arg1:string):Promise<string>;
+
 export function RepoGraph():Promise<main.GraphView>;
 
 export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
@@ -88,6 +90,8 @@ export function SearchAll(arg1:string):Promise<Array<main.SearchHit>>;
 export function SetTags(arg1:string,arg2:Array<string>):Promise<string>;
 
 export function SetTaskStatus(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function StagedDiff(arg1:string):Promise<string>;
 
 export function Stash(arg1:string):Promise<string>;
 

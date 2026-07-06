@@ -7,6 +7,29 @@ import (
 	"github.com/hoijun/fleet/internal/repo"
 )
 
+// Diff returns the working-tree changes against HEAD (all files), truncated so
+// an AI prompt stays bounded. Empty string when the tree is clean.
+func Diff(r Runner, dir string) string {
+	out, _ := r.Run(dir, "diff", "HEAD")
+	return capText(out, 12000)
+}
+
+// StagedDiff returns the staged changes (git diff --cached), truncated. Used to
+// draft a commit message from what is about to be committed.
+func StagedDiff(r Runner, dir string) string {
+	out, _ := r.Run(dir, "diff", "--cached")
+	return capText(out, 12000)
+}
+
+// capText trims whitespace and truncates to max bytes with a marker.
+func capText(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) > max {
+		return s[:max] + "\n...(truncated)"
+	}
+	return s
+}
+
 // Branches returns the current branch and all local branch names.
 func Branches(r Runner, dir string) (current string, all []string, err error) {
 	cur, err := r.Run(dir, "branch", "--show-current")
