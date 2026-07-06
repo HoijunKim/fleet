@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Agenda, CommitActivity } from "../../wailsjs/go/main/App";
+  import { Agenda, CommitActivity, NotionAvailable, NotionTasks } from "../../wailsjs/go/main/App";
   import Heatmap from "./Heatmap.svelte";
   import AgendaCard from "./AgendaCard.svelte";
 
@@ -116,6 +116,30 @@
       items = (await Agenda()) || [];
     } catch {
       items = [];
+    }
+    // Fold the user's Notion plan into the SAME agenda so there is one due-view,
+    // not a local list here and a separate Notion list elsewhere. A Notion item
+    // needs a due date to belong in a schedule; the full board stays in Today.
+    // Notion is optional - any failure just leaves the local items.
+    try {
+      if (await NotionAvailable()) {
+        const res = await NotionTasks();
+        for (const t of (res && res.tasks) || []) {
+          if (!t || t.done || !t.due) continue;
+          items.push({
+            projectId: "",
+            projectName: "Notion",
+            kind: "notion",
+            taskId: t.id,
+            title: t.title,
+            due: t.due,
+            status: t.status,
+            url: t.url,
+          });
+        }
+      }
+    } catch {
+      /* Notion unreachable - agenda still shows local deadlines/tasks */
     }
     if (gen !== agendaGen) return; // a newer request superseded this one
     agendaItems = items;

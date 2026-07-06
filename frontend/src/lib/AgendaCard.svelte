@@ -5,10 +5,21 @@
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { daysUntil } from "./pm";
+  import { OpenURL } from "../../wailsjs/go/main/App";
 
   export let items: any[] = [];
   // Select a project and switch to the Projects view (opens its detail).
   export let onOpen: (id: string) => void;
+
+  // A Notion item (the plan) opens its page in the browser; a local deadline/
+  // task opens the project's detail. One list, two homes for the source.
+  function openItem(item: any) {
+    if (item.kind === "notion") {
+      if (item.url) OpenURL(item.url);
+    } else {
+      onOpen(item.projectId);
+    }
+  }
 
   type Bucket = { key: string; label: string; items: any[] };
 
@@ -71,7 +82,7 @@
           <ul class="ov-list">
             {#each b.items as item, i (item.projectId + ":" + item.kind + ":" + (item.taskId || "") + ":" + item.title)}
               <li in:fly={flyUp(i)}>
-                <button class="ov-row" on:click={() => onOpen(item.projectId)}>
+                <button class="ov-row" on:click={() => openItem(item)}>
                   <span class="ov-name">
                     {item.projectName}
                     <span class="ov-agenda-title">{item.title}</span>
@@ -79,6 +90,8 @@
                   <span class="ov-tags">
                     {#if item.kind === "deadline"}
                       <span class="ov-pill deadline">deadline</span>
+                    {:else if item.kind === "notion"}
+                      <span class="ov-pill notion">Notion</span>
                     {/if}
                   </span>
                 </button>
@@ -114,5 +127,10 @@
     color: var(--accent);
     border-color: var(--accent-line);
     background: var(--accent-soft);
+  }
+  .ov-pill.notion {
+    color: var(--muted);
+    border-color: var(--border);
+    background: var(--raised);
   }
 </style>
