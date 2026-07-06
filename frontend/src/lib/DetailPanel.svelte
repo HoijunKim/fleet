@@ -22,10 +22,19 @@
   // Bindable flag so App.svelte knows whether the diff modal is open (for
   // suppressing overlapping overlays / the Ctrl+K palette).
   export let diffOpen = false;
+  // Drill-down: App bumps requestNonce with requestTab set to jump to a tab
+  // (e.g. "chat" from the Today briefing). Applied once per bump.
+  export let requestTab = "";
+  export let requestNonce = 0;
 
   // Active detail tab for code projects. Remembered across selections; defaults
   // to Overview. Manual projects ignore this and show only their Tasks content.
   let activeTab: "overview" | "git" | "tasks" | "symbols" | "chat" = "overview";
+  let lastNonce = 0;
+  $: if (requestNonce !== lastNonce) {
+    lastNonce = requestNonce;
+    if (requestTab) activeTab = requestTab as typeof activeTab;
+  }
 
   // Diff viewer state - the file whose diff is open (null = closed).
   let diffFile: string | null = null;

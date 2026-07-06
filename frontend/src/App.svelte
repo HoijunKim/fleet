@@ -493,6 +493,15 @@
     });
   }
 
+  // Drill-down from the briefing: open a project straight into its Ask-AI tab.
+  let detailTab = "";
+  let detailNonce = 0;
+  function openDrill(id: string) {
+    openFromOverview(id);
+    detailTab = "chat";
+    detailNonce++;
+  }
+
   // From an Overview stat tile: jump to Projects, applying the matching status
   // filter where one exists (dirty/behind/unpushed/overdue), else show all.
   function onTileFilter(key: string) {
@@ -676,6 +685,8 @@
       onRepoChanged={refreshRepo}
       onProjectChanged={refreshProject}
       onDeleteProject={deleteProject}
+      requestTab={detailTab}
+      requestNonce={detailNonce}
       bind:diffOpen
     />
   </div>
@@ -690,7 +701,7 @@
     onFilter={onTileFilter}
   />
 {:else}
-  <Today {projects} onOpen={openFromOverview} />
+  <Today {projects} onOpen={openFromOverview} onDrill={openDrill} />
 {/if}
 
 <Toasts />

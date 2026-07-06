@@ -11,6 +11,8 @@
   export let projects: any[] = [];
   // Open a project in the Projects view.
   export let onOpen: (id: string) => void;
+  // Open a project straight into its Ask-AI deep-dive tab.
+  export let onDrill: (id: string) => void = () => {};
 
   // ---- Forgotten work: derived client-side from the loaded projects, the way
   // the attention queue is. "Forgotten" means genuinely neglected, so fresh
@@ -351,7 +353,7 @@
       {:else}
         <ul class="ov-list">
           {#each forgotten as f, i (f.p.id + ":" + f.kind)}
-            <li in:fly={flyUp(i)}>
+            <li in:fly={flyUp(i)} class="forgot-li">
               <button class="ov-row" on:click={() => onOpen(f.p.id)}>
                 <span class="ov-name">{f.p.name}</span>
                 <span class="forgot-detail">{f.text}</span>
@@ -359,6 +361,7 @@
                   <span class="ov-pill forgot-{f.kind}">{KIND_LABEL[f.kind] || f.kind}</span>
                 </span>
               </button>
+              <button class="forgot-ask" on:click|stopPropagation={() => onDrill(f.p.id)} title="Ask AI about this repo">Ask AI</button>
             </li>
           {/each}
         </ul>
@@ -480,6 +483,23 @@
     white-space: nowrap;
   }
   .forgot-detail.due-late { color: var(--err); }
+  .forgot-li { display: flex; align-items: center; gap: 6px; }
+  .forgot-li .ov-row { flex: 1; min-width: 0; }
+  .forgot-ask {
+    flex: none;
+    font: inherit;
+    font-size: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-pill);
+    padding: 3px 10px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--t), background var(--t);
+  }
+  .forgot-li:hover .forgot-ask, .forgot-ask:focus-visible { opacity: 1; }
+  .forgot-ask:hover { background: rgba(110, 168, 254, 0.22); }
   .notion-li { display: flex; align-items: center; gap: 6px; }
   .notion-li .ov-row { flex: 1; min-width: 0; }
   .notion-done {
