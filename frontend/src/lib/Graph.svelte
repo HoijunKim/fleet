@@ -1,13 +1,41 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { RepoGraph, AddEdge, RemoveEdge, ListEdges } from "../../wailsjs/go/main/App";
-  import { tagColor } from "./pm";
+  import { daysUntil } from "./pm";
   import { toastError } from "./toasts";
 
   // Select a repo and switch to the Projects view (opens its detail). For code
   // projects the backend uses id == repo path, and a GraphNode.id is that same
   // repo path, so this id maps straight through to App's selection.
   export let onOpen: (id: string) => void;
+  // Full project list, joined to graph nodes by id (repo path) for health/size.
+  export let projects: any[] = [];
+
+  $: pmap = new Map((projects || []).map((p) => [p.id, p]));
+
+  // Node color encodes health, not tag: overdue/behind = red, dirty = amber,
+  // long-idle = grey, otherwise clean/active = green.
+  function healthColor(p: any): string {
+    if (!p) return "var(--nogit)";
+    const dl = daysUntil(p.deadline);
+    if (dl !== null && dl < 0) return "var(--err)";
+    if (p.behind > 0) return "var(--err)";
+    if (p.dirty) return "var(--dirty)";
+    const since = daysUntil(p.lastWhen);
+    if (since !== null && -since > 21) return "var(--nogit)";
+    return "var(--ok)";
+  }
+
+  // Node radius encodes recent activity - recently-touched repos read bigger.
+  function activityR(p: any): number {
+    const since = p ? daysUntil(p.lastWhen) : null;
+    if (since === null) return 12;
+    const days = -since;
+    if (days <= 2) return 21;
+    if (days <= 7) return 17;
+    if (days <= 21) return 14;
+    return 11;
+  }
 
   // ---- simulation model ----------------------------------------------------
   // A node is a point with position/velocity; edges are from -> to ("from
@@ -96,15 +124,6 @@
   let hoveredId = "";
 
   // -------------------------------------------------------------------------
-  function inDegrees(ns: SimNode[], es: SimEdge[]): Map<string, number> {
-    const deg = new Map<string, number>();
-    for (const n of ns) deg.set(n.id, 0);
-    for (const e of es) {
-      if (deg.has(e.to)) deg.set(e.to, (deg.get(e.to) || 0) + 1);
-    }
-    return deg;
-  }
-
   // Build the simulation model from a GraphView. Crash-safe on missing/empty
   // fields and drops edges that reference an unknown node. `edgeList` (from
   // ListEdges()) is used only to resolve manual edges back to their id, since
@@ -158,13 +177,9 @@
       es.push({ from: e.from, to: e.to, manual, kind, id });
     }
 
-    // Radius scales with in-degree (how many repos depend on this one), so
-    // heavily-depended-on repos read as hubs. Color comes from the first tag.
-    const deg = inDegrees(tmp, es);
+    // Radius encodes recent activity; color (at render) encodes health.
     for (const n of tmp) {
-      const d = deg.get(n.id) || 0;
-      n.r = 12 + Math.min(Math.sqrt(d) * 5, 22);
-      n.color = n.tags.length > 0 ? tagColor(n.tags[0]) : "var(--nogit)";
+      n.r = activityR(pmap.get(n.id));
     }
 
     // Seed positions deterministically on a circle (index-based angle, never
@@ -624,7 +639,7 @@
               cx={nd.x}
               cy={nd.y}
               r={nd.r}
-              style="fill: {nd.color};"
+              style="fill: {healthColor(pmap.get(nd.id))};"
               on:pointerdown={(e) => onNodeDown(e, nd)}
               on:pointerenter={() => (hoveredId = nd.id)}
               on:pointerleave={() => { if (hoveredId === nd.id) hoveredId = ""; }}
@@ -641,19 +656,24 @@
 
     <div class="graph-hud">
       <div class="graph-legend">
-        <span class="graph-count">{nodes.length} repos</span>
+        <span class="graph-count">{nodes.length} projects</span>
         <span class="graph-sep"></span>
-        <span class="graph-hint-text">
-          {#if connectMode}
+        {#if connectMode}
+          <span class="graph-hint-text">
             {#if pendingFrom}
-              pick a target repo (Escape to cancel)
+              pick a target project (Escape to cancel)
             {:else}
-              click a repo to start a connection
+              click a project to start a connection
             {/if}
-          {:else}
-            arrows point to dependencies
-          {/if}
-        </span>
+          </span>
+        {:else}
+          <span class="graph-hkey"><span class="hk-dot" style="background: var(--ok)"></span>active</span>
+          <span class="graph-hkey"><span class="hk-dot" style="background: var(--dirty)"></span>dirty</span>
+          <span class="graph-hkey"><span class="hk-dot" style="background: var(--err)"></span>behind/overdue</span>
+          <span class="graph-hkey"><span class="hk-dot" style="background: var(--nogit)"></span>idle</span>
+          <span class="graph-sep"></span>
+          <span class="graph-hint-text">size = recent activity</span>
+        {/if}
       </div>
       <div class="graph-controls">
         <button class="btn btn-secondary btn-sm" class:active={connectMode} on:click={toggleConnect}>Connect</button>
@@ -675,9 +695,6 @@
       </div>
     {/if}
 
-    {#if edges.length === 0}
-      <div class="graph-note">No dependencies detected between repos</div>
-    {/if}
   {/if}
 </div>
 
@@ -826,6 +843,15 @@
     height: 12px;
     background: var(--border);
   }
+  .graph-hkey {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .hk-dot { width: 8px; height: 8px; border-radius: 50%; }
   .graph-hint-text {
     font-size: 12px;
     color: var(--muted);
@@ -839,22 +865,6 @@
     background: var(--accent-soft);
     color: var(--accent);
     border-color: rgba(110, 168, 254, 0.35);
-  }
-
-  .graph-note {
-    position: absolute;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 6px 14px;
-    font-size: 12px;
-    color: var(--muted);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-pill);
-    box-shadow: var(--shadow);
-    pointer-events: none;
-    white-space: nowrap;
   }
 
   /* Kind picker: shown once a connect-mode source and target are both picked. */

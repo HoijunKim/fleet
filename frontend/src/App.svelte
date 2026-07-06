@@ -680,7 +680,7 @@
     />
   </div>
 {:else if view === "graph"}
-  <Graph onOpen={openFromOverview} />
+  <Graph onOpen={openFromOverview} {projects} />
 {:else if view === "overview"}
   <Overview
     {projects}
