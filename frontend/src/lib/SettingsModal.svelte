@@ -258,6 +258,12 @@
           </div>
         {/if}
         <div class="ai-hint ai-hint-warn">Keys are stored in plain text in your local config file.</div>
+        {#if cfg.AIProvider === "openai" || cfg.AIProvider === "gemini"}
+          <div class="ai-hint ai-hint-warn">
+            Code-aware features send repo diffs to {cfg.AIProvider} (obvious secrets are masked first).
+            The Claude CLI keeps everything on your machine.
+          </div>
+        {/if}
 
         <div class="ai-test-row">
           <button class="btn btn-secondary btn-sm" on:click={testAI} disabled={aiTesting}>

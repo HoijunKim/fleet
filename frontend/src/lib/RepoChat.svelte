@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AskAI, RepoDiff, Log, RepoSymbols, CancelAI } from "../../wailsjs/go/main/App";
   import { renderBrief } from "./markdown";
+  import { redactSecrets } from "./redact";
   import { daysUntil } from "./pm";
 
   // The selected code repo. Chat resets when the path changes.
@@ -100,7 +101,7 @@
       const scr = syms.npmScripts || [];
       if (scr.length) lines.push("npm scripts: " + scr.join(", "));
     }
-    if (diff) lines.push("\nUncommitted diff:\n```\n" + diff + "\n```");
+    if (diff) lines.push("\nUncommitted diff:\n```\n" + redactSecrets(diff) + "\n```");
 
     return lines.join("\n");
   }

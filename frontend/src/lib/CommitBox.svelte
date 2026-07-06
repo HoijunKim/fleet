@@ -1,6 +1,7 @@
 <script lang="ts">
   import { CommitAll, Push, RepoDiff, AskAI } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
+  import { redactSecrets } from "./redact";
 
   export let path: string;
   export let name = "";
@@ -25,7 +26,7 @@
       const prompt =
         "Write a concise git commit message for these changes. First line: an imperative " +
         "summary under 60 characters. Optionally a blank line then 1-3 short '- ' bullets. " +
-        "Output ONLY the message - no preamble, no backticks, no quotes.\n\nChanges:\n" + diff;
+        "Output ONLY the message - no preamble, no backticks, no quotes.\n\nChanges:\n" + redactSecrets(diff);
       const res = await AskAI(prompt);
       if (typeof res === "string" && res.startsWith("error:")) {
         toastError("Draft: " + res.slice(6).trim());

@@ -35,16 +35,32 @@ type App struct {
 	runner   git.Runner
 	store    *store.Store
 	ghRunner gh.Runner
-	ghCache  map[string]GitHubView
+	ghCache  map[string]ghEntry
 	ghMu     sync.RWMutex
 	edges    *edges.Store
-	symCache map[string]SymbolsView
+	symCache map[string]symEntry
 	symMu    sync.RWMutex
 	aiRunner ai.Runner
 	aiMu     sync.Mutex
 	aiCancel context.CancelFunc
 	aiGen    int
 }
+
+// Cached GitHub/symbol lookups expire so a session doesn't show stale CI or
+// symbols indefinitely.
+type ghEntry struct {
+	v  GitHubView
+	at time.Time
+}
+type symEntry struct {
+	v  SymbolsView
+	at time.Time
+}
+
+const (
+	ghTTL  = 3 * time.Minute
+	symTTL = 5 * time.Minute
+)
 
 // NewApp builds the App with the real git runner and loaded config.
 func NewApp() *App {
@@ -53,7 +69,7 @@ func NewApp() *App {
 	st, _ := store.Open(storePath) // empty store on error; UI still works
 	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
 	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]GitHubView{}, edges: ed, symCache: map[string]SymbolsView{}, aiRunner: ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey)}
+	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed, symCache: map[string]symEntry{}, aiRunner: ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey)}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -819,11 +835,11 @@ func (a *App) GitHubInfo(remote string) GitHubView {
 	}
 	key := owner + "/" + repo
 	a.ghMu.RLock()
-	if v, hit := a.ghCache[key]; hit {
-		a.ghMu.RUnlock()
-		return v
-	}
+	e, hit := a.ghCache[key]
 	a.ghMu.RUnlock()
+	if hit && time.Since(e.at) < ghTTL {
+		return e.v
+	}
 
 	info, err := gh.Fetch(a.ghRunner, owner, repo)
 	if err != nil {
@@ -832,9 +848,9 @@ func (a *App) GitHubInfo(remote string) GitHubView {
 	v := GitHubView{CI: info.CI, PRs: info.PRs, Issues: info.Issues, Available: info.Available}
 	a.ghMu.Lock()
 	if a.ghCache == nil {
-		a.ghCache = map[string]GitHubView{}
+		a.ghCache = map[string]ghEntry{}
 	}
-	a.ghCache[key] = v
+	a.ghCache[key] = ghEntry{v: v, at: time.Now()}
 	a.ghMu.Unlock()
 	return v
 }
@@ -853,11 +869,11 @@ type SymbolsView struct {
 // path are served from the cache without touching disk again.
 func (a *App) RepoSymbols(path string) SymbolsView {
 	a.symMu.RLock()
-	if v, hit := a.symCache[path]; hit {
-		a.symMu.RUnlock()
-		return v
-	}
+	e, hit := a.symCache[path]
 	a.symMu.RUnlock()
+	if hit && time.Since(e.at) < symTTL {
+		return e.v
+	}
 
 	set := symbols.Extract(path)
 	v := SymbolsView{
@@ -869,9 +885,9 @@ func (a *App) RepoSymbols(path string) SymbolsView {
 	}
 	a.symMu.Lock()
 	if a.symCache == nil {
-		a.symCache = map[string]SymbolsView{}
+		a.symCache = map[string]symEntry{}
 	}
-	a.symCache[path] = v
+	a.symCache[path] = symEntry{v: v, at: time.Now()}
 	a.symMu.Unlock()
 	return v
 }
