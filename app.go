@@ -578,11 +578,22 @@ func (a *App) AskAI(prompt string) string {
 
 // NotionTaskView is a JS-facing Notion task.
 type NotionTaskView struct {
-	Title  string `json:"title"`
-	Due    string `json:"due"`
-	Status string `json:"status"`
-	Done   bool   `json:"done"`
-	URL    string `json:"url"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Due          string `json:"due"`
+	Status       string `json:"status"`
+	Done         bool   `json:"done"`
+	URL          string `json:"url"`
+	CheckboxProp string `json:"checkboxProp"`
+}
+
+// NotionComplete checks off a checkbox-based Notion task (writes back).
+func (a *App) NotionComplete(pageID, checkboxProp string) string {
+	c := a.cfgSnapshot()
+	if strings.TrimSpace(c.NotionToken) == "" {
+		return "error: Notion not configured"
+	}
+	return errMsg(notion.New(c.NotionToken).Complete(pageID, checkboxProp))
 }
 
 // NotionAvailable reports whether a Notion token and database id are configured.
@@ -640,7 +651,7 @@ func (a *App) NotionTasks() NotionResult {
 		return res
 	}
 	for _, t := range tasks {
-		res.Tasks = append(res.Tasks, NotionTaskView{Title: t.Title, Due: t.Due, Status: t.Status, Done: t.Done, URL: t.URL})
+		res.Tasks = append(res.Tasks, NotionTaskView{ID: t.ID, Title: t.Title, Due: t.Due, Status: t.Status, Done: t.Done, URL: t.URL, CheckboxProp: t.CheckboxProp})
 	}
 	return res
 }

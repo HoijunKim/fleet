@@ -20,11 +20,13 @@ const version = "2022-06-28"
 
 // Task is one row pulled from a Notion database.
 type Task struct {
-	Title  string `json:"title"`
-	Due    string `json:"due"`    // YYYY-MM-DD or ""
-	Status string `json:"status"` // status/select name, or "done" for a checked checkbox
-	Done   bool   `json:"done"`
-	URL    string `json:"url"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Due          string `json:"due"`    // YYYY-MM-DD or ""
+	Status       string `json:"status"` // status/select name, or "done" for a checked checkbox
+	Done         bool   `json:"done"`
+	URL          string `json:"url"`
+	CheckboxProp string `json:"checkboxProp"` // name of the checkbox property, if any (enables completing)
 }
 
 // Client queries a Notion database. BaseURL/HTTP are fields so tests can inject.
@@ -78,6 +80,48 @@ func (c Client) Tasks(databaseID string) ([]Task, error) {
 		return nil, fmt.Errorf("notion http %d: %s", resp.StatusCode, msg)
 	}
 	return parseResults(data)
+}
+
+// Complete checks a page's checkbox property to true (marks a task done). Only
+// checkbox-based tasks are writable; status-based boards stay read-only.
+func (c Client) Complete(pageID, checkboxProp string) error {
+	if strings.TrimSpace(c.Token) == "" || strings.TrimSpace(pageID) == "" || strings.TrimSpace(checkboxProp) == "" {
+		return fmt.Errorf("notion: missing page or property")
+	}
+	client := c.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
+	base := c.BaseURL
+	if base == "" {
+		base = "https://api.notion.com/v1"
+	}
+	body, _ := json.Marshal(map[string]any{
+		"properties": map[string]any{
+			checkboxProp: map[string]any{"checkbox": true},
+		},
+	})
+	req, err := http.NewRequest(http.MethodPatch, base+"/pages/"+pageID, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Notion-Version", version)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(data))
+		if len(msg) > 300 {
+			msg = msg[:300]
+		}
+		return fmt.Errorf("notion http %d: %s", resp.StatusCode, msg)
+	}
+	return nil
 }
 
 // DB is a Notion database the integration can see (for the settings picker).
@@ -162,6 +206,7 @@ func parseDatabases(data []byte) ([]DB, error) {
 func parseResults(data []byte) ([]Task, error) {
 	var resp struct {
 		Results []struct {
+			ID         string                     `json:"id"`
 			URL        string                     `json:"url"`
 			Properties map[string]json.RawMessage `json:"properties"`
 		} `json:"results"`
@@ -171,7 +216,7 @@ func parseResults(data []byte) ([]Task, error) {
 	}
 	out := make([]Task, 0, len(resp.Results))
 	for _, r := range resp.Results {
-		t := Task{URL: r.URL}
+		t := Task{ID: r.ID, URL: r.URL}
 		// Iterate property names in sorted order so a board with two same-typed
 		// columns (e.g. two dates) always resolves the same way, not per random
 		// map order. A property whose name looks like a due date is preferred.
@@ -230,8 +275,11 @@ func parseResults(data []byte) ([]Task, error) {
 				var p struct {
 					Checkbox bool `json:"checkbox"`
 				}
-				if json.Unmarshal(raw, &p) == nil && p.Checkbox {
-					t.Done = true
+				if json.Unmarshal(raw, &p) == nil {
+					t.CheckboxProp = name
+					if p.Checkbox {
+						t.Done = true
+					}
 				}
 			}
 		}

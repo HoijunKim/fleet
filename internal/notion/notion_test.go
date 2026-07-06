@@ -168,6 +168,40 @@ func TestDatabasesEmptyOnNoToken(t *testing.T) {
 	}
 }
 
+func TestComplete(t *testing.T) {
+	var method, path, body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		method = req.Method
+		path = req.URL.Path
+		b, _ := io.ReadAll(req.Body)
+		body = string(b)
+		io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	c := Client{Token: "t", BaseURL: srv.URL, HTTP: srv.Client()}
+	if err := c.Complete("page-1", "Done"); err != nil {
+		t.Fatal(err)
+	}
+	if method != "PATCH" {
+		t.Errorf("method = %q, want PATCH", method)
+	}
+	if !strings.Contains(path, "/pages/page-1") {
+		t.Errorf("path = %q", path)
+	}
+	if !strings.Contains(body, `"Done"`) || !strings.Contains(body, `"checkbox":true`) {
+		t.Errorf("body = %q", body)
+	}
+}
+
+func TestCompleteMissingArgs(t *testing.T) {
+	if err := (Client{Token: "t"}).Complete("", "Done"); err == nil {
+		t.Error("missing page must error")
+	}
+	if err := (Client{Token: "t"}).Complete("p", ""); err == nil {
+		t.Error("missing prop must error")
+	}
+}
+
 func TestAvailable(t *testing.T) {
 	if Available("", "db") || Available("tok", "") {
 		t.Error("both token and db required")

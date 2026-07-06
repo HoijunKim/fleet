@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete } from "../../wailsjs/go/main/App";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
+  import { toastSuccess, toastError } from "./toasts";
   import Select from "./Select.svelte";
   import { daysUntil } from "./pm";
 
@@ -101,6 +102,26 @@
 
   function openNotion(url: string) {
     if (url) OpenURL(url);
+  }
+
+  // Two-way: check off a checkbox-based Notion task, then drop it from the list.
+  let completing = "";
+  async function completeNotion(t: any) {
+    if (!t.checkboxProp || completing) return;
+    completing = t.id;
+    try {
+      const err = await NotionComplete(t.id, t.checkboxProp);
+      if (err) {
+        toastError("Notion: " + err.replace(/^error:\s*/, ""));
+        return;
+      }
+      notionTasks = notionTasks.filter((x) => x.id !== t.id);
+      toastSuccess("Marked done in Notion");
+    } catch (e) {
+      toastError("Notion: " + String(e));
+    } finally {
+      completing = "";
+    }
   }
 
   // Compact one-line state per code project for the prompt.
@@ -329,7 +350,16 @@
         {:else}
           <ul class="ov-list">
             {#each notionSorted as t, i (t.url + ":" + t.title)}
-              <li in:fly={flyUp(i)}>
+              <li in:fly={flyUp(i)} class="notion-li">
+                {#if t.checkboxProp}
+                  <button
+                    class="notion-done"
+                    on:click|stopPropagation={() => completeNotion(t)}
+                    disabled={completing === t.id}
+                    title="Mark done in Notion"
+                    aria-label="Mark done in Notion"
+                  ></button>
+                {/if}
                 <button class="ov-row" on:click={() => openNotion(t.url)} title="Open in Notion">
                   <span class="ov-name">{t.title}</span>
                   {#if t.due}
@@ -420,6 +450,20 @@
     white-space: nowrap;
   }
   .forgot-detail.due-late { color: var(--err); }
+  .notion-li { display: flex; align-items: center; gap: 6px; }
+  .notion-li .ov-row { flex: 1; min-width: 0; }
+  .notion-done {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    border: 1.5px solid var(--faint);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color var(--t), background var(--t);
+  }
+  .notion-done:hover { border-color: var(--ok); background: var(--ok-soft); }
+  .notion-done:disabled { opacity: 0.5; cursor: default; }
   .ov-pill.forgot-wip      { color: var(--dirty); border-color: var(--dirty-line); background: var(--dirty-soft); }
   .ov-pill.forgot-unpushed { color: var(--ahead); border-color: var(--ok-line);    background: var(--ok-soft); }
   .ov-pill.forgot-idle     { color: var(--muted); border-color: var(--border);     background: var(--raised); }

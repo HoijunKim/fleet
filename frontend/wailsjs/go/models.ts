@@ -263,11 +263,13 @@ export namespace main {
 	}
 	
 	export class NotionTaskView {
+	    id: string;
 	    title: string;
 	    due: string;
 	    status: string;
 	    done: boolean;
 	    url: string;
+	    checkboxProp: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new NotionTaskView(source);
@@ -275,11 +277,13 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.due = source["due"];
 	        this.status = source["status"];
 	        this.done = source["done"];
 	        this.url = source["url"];
+	        this.checkboxProp = source["checkboxProp"];
 	    }
 	}
 	export class NotionResult {

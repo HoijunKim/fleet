@@ -94,6 +94,10 @@ export function NotionAvailable() {
   return window['go']['main']['App']['NotionAvailable']();
 }
 
+export function NotionComplete(arg1, arg2) {
+  return window['go']['main']['App']['NotionComplete'](arg1, arg2);
+}
+
 export function NotionDatabases(arg1) {
   return window['go']['main']['App']['NotionDatabases'](arg1);
 }
