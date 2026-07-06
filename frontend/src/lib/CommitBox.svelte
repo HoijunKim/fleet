@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CommitAll, Push } from "../../wailsjs/go/main/App";
+  import { CommitAll, Push, RepoDiff, AskAI } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
 
   export let path: string;
@@ -9,6 +9,35 @@
 
   let msg = "";
   let busy = false;
+  let drafting = false;
+
+  // Draft a commit message from the actual working diff (CommitAll commits all
+  // uncommitted changes, so draft from the working diff, not just staged).
+  async function draft() {
+    if (drafting || clean) return;
+    drafting = true;
+    try {
+      const diff = await RepoDiff(path);
+      if (!diff || !diff.trim()) {
+        toastError("Nothing to summarize yet");
+        return;
+      }
+      const prompt =
+        "Write a concise git commit message for these changes. First line: an imperative " +
+        "summary under 60 characters. Optionally a blank line then 1-3 short '- ' bullets. " +
+        "Output ONLY the message - no preamble, no backticks, no quotes.\n\nChanges:\n" + diff;
+      const res = await AskAI(prompt);
+      if (typeof res === "string" && res.startsWith("error:")) {
+        toastError("Draft: " + res.slice(6).trim());
+        return;
+      }
+      msg = (res || "").trim();
+    } catch (e) {
+      toastError("Draft failed: " + String(e));
+    } finally {
+      drafting = false;
+    }
+  }
 
   $: count = dirtyFiles ? dirtyFiles.length : 0;
   $: clean = count === 0;
@@ -49,6 +78,9 @@
       <span class="commit-count clean">clean</span>
     {:else}
       <span class="commit-count"><span class="commit-num">{count}</span> changed</span>
+      <button class="commit-draft" on:click={draft} disabled={drafting} title="Draft a message from the diff with AI">
+        {#if drafting}<span class="spinner"></span> drafting{:else}Draft with AI{/if}
+      </button>
     {/if}
   </div>
 
@@ -70,3 +102,23 @@
     </button>
   </div>
 </div>
+
+<style>
+  .commit-draft {
+    margin-left: auto;
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-pill);
+    padding: 2px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background var(--t);
+  }
+  .commit-draft:hover { background: rgba(110, 168, 254, 0.22); }
+  .commit-draft:disabled { opacity: 0.6; cursor: default; }
+</style>
