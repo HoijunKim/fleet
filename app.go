@@ -41,6 +41,9 @@ type App struct {
 	symCache map[string]SymbolsView
 	symMu    sync.RWMutex
 	aiRunner ai.Runner
+	aiMu     sync.Mutex
+	aiCancel context.CancelFunc
+	aiGen    int
 }
 
 // NewApp builds the App with the real git runner and loaded config.
@@ -552,6 +555,17 @@ func (a *App) OpenURL(url string) string {
 	return ""
 }
 
+// CancelAI aborts the in-flight AI request (kills the claude subprocess or the
+// HTTP call), so the UI's Cancel button actually stops work.
+func (a *App) CancelAI() {
+	a.aiMu.Lock()
+	c := a.aiCancel
+	a.aiMu.Unlock()
+	if c != nil {
+		c()
+	}
+}
+
 // AIAvailable reports whether the configured provider can run (Claude CLI on
 // PATH, or an API key set), so the UI can degrade gracefully.
 func (a *App) AIAvailable() bool {
@@ -576,7 +590,27 @@ func (a *App) AskAI(prompt string) string {
 	if runner == nil {
 		return "error: AI unavailable"
 	}
-	out, err := runner.Ask(prompt)
+	// Register a cancel so CancelAI() can actually kill the subprocess / abort
+	// the HTTP call, not just hide the spinner.
+	ctx, cancel := context.WithCancel(context.Background())
+	a.aiMu.Lock()
+	if a.aiCancel != nil {
+		a.aiCancel() // supersede an earlier in-flight request
+	}
+	a.aiCancel = cancel
+	a.aiGen++
+	myGen := a.aiGen
+	a.aiMu.Unlock()
+	defer func() {
+		a.aiMu.Lock()
+		if a.aiGen == myGen {
+			a.aiCancel = nil // only clear if a newer request didn't replace us
+		}
+		a.aiMu.Unlock()
+		cancel()
+	}()
+
+	out, err := runner.Ask(ctx, prompt)
 	if err != nil {
 		return "error: " + err.Error()
 	}

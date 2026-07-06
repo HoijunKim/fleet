@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI } from "../../wailsjs/go/main/App";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
@@ -61,6 +61,7 @@
   function cancelBrief() {
     genId++;
     loading = false;
+    CancelAI(); // actually kill the in-flight request, not just hide the spinner
   }
 
   // Output language for the briefing, remembered across sessions.

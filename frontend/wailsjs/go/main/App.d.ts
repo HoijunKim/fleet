@@ -19,6 +19,8 @@ export function AskAI(arg1:string):Promise<string>;
 
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
+export function CancelAI():Promise<void>;
+
 export function Checkout(arg1:string,arg2:string):Promise<string>;
 
 export function CommitActivity(arg1:string,arg2:number):Promise<Array<main.DayCountView>>;

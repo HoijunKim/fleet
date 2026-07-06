@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -62,7 +63,7 @@ func TestOpenAIRunnerAsk(t *testing.T) {
 	defer srv.Close()
 
 	r := OpenAIRunner{Key: "sk-test", Model: "gpt-4o", BaseURL: srv.URL, Client: srv.Client()}
-	out, err := r.Ask("what next?")
+	out, err := r.Ask(context.Background(), "what next?")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,13 +85,13 @@ func TestOpenAIRunnerHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 	r := OpenAIRunner{Key: "sk-bad", Model: "gpt-4o", BaseURL: srv.URL, Client: srv.Client()}
-	if _, err := r.Ask("x"); err == nil || !strings.Contains(err.Error(), "401") {
+	if _, err := r.Ask(context.Background(), "x"); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Errorf("expected an http 401 error, got %v", err)
 	}
 }
 
 func TestOpenAIRunnerNoKey(t *testing.T) {
-	if _, err := (OpenAIRunner{}).Ask("x"); err == nil {
+	if _, err := (OpenAIRunner{}).Ask(context.Background(), "x"); err == nil {
 		t.Error("missing key must error before any request")
 	}
 }
@@ -108,7 +109,7 @@ func TestGeminiRunnerAsk(t *testing.T) {
 	defer srv.Close()
 
 	r := GeminiRunner{Key: "g-test", Model: "gemini-2.0-flash", BaseURL: srv.URL, Client: srv.Client()}
-	out, err := r.Ask("plan my day")
+	out, err := r.Ask(context.Background(), "plan my day")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestGeminiRunnerEmptyCandidates(t *testing.T) {
 	}))
 	defer srv.Close()
 	r := GeminiRunner{Key: "g", Model: "m", BaseURL: srv.URL, Client: srv.Client()}
-	if _, err := r.Ask("x"); err == nil {
+	if _, err := r.Ask(context.Background(), "x"); err == nil {
 		t.Error("empty candidates must error")
 	}
 }

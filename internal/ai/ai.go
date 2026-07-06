@@ -17,9 +17,11 @@ import (
 	"github.com/hoijun/fleet/internal/winhide"
 )
 
-// Runner turns a prompt into a completion. Tests substitute a fake.
+// Runner turns a prompt into a completion. The context lets a caller cancel an
+// in-flight request (killing the CLI subprocess or aborting the HTTP call).
+// Tests substitute a fake.
 type Runner interface {
-	Ask(prompt string) (string, error)
+	Ask(ctx context.Context, prompt string) (string, error)
 }
 
 // timeout bounds a single completion so a hung provider never blocks the UI.
@@ -68,8 +70,8 @@ func httpClient() *http.Client { return &http.Client{Timeout: timeout} }
 // command-line length limit.
 type ClaudeRunner struct{}
 
-func (ClaudeRunner) Ask(prompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func (ClaudeRunner) Ask(ctx context.Context, prompt string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "claude", "--print")
 	winhide.Apply(cmd)
@@ -82,6 +84,9 @@ func (ClaudeRunner) Ask(prompt string) (string, error) {
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.Canceled {
+			return "", fmt.Errorf("cancelled")
+		}
 		if ctx.Err() == context.DeadlineExceeded {
 			return "", fmt.Errorf("claude timed out after %s", timeout)
 		}
@@ -105,7 +110,7 @@ type OpenAIRunner struct {
 	Client  *http.Client
 }
 
-func (r OpenAIRunner) Ask(prompt string) (string, error) {
+func (r OpenAIRunner) Ask(ctx context.Context, prompt string) (string, error) {
 	if strings.TrimSpace(r.Key) == "" {
 		return "", fmt.Errorf("OpenAI API key not set")
 	}
@@ -113,7 +118,7 @@ func (r OpenAIRunner) Ask(prompt string) (string, error) {
 		"model":    r.Model,
 		"messages": []map[string]string{{"role": "user", "content": prompt}},
 	})
-	req, err := http.NewRequest(http.MethodPost, r.BaseURL+"/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -149,7 +154,7 @@ type GeminiRunner struct {
 	Client  *http.Client
 }
 
-func (r GeminiRunner) Ask(prompt string) (string, error) {
+func (r GeminiRunner) Ask(ctx context.Context, prompt string) (string, error) {
 	if strings.TrimSpace(r.Key) == "" {
 		return "", fmt.Errorf("Gemini API key not set")
 	}
@@ -159,7 +164,7 @@ func (r GeminiRunner) Ask(prompt string) (string, error) {
 		},
 	})
 	url := r.BaseURL + "/models/" + r.Model + ":generateContent"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}

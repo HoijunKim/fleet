@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AskAI, RepoDiff, Log, RepoSymbols } from "../../wailsjs/go/main/App";
+  import { AskAI, RepoDiff, Log, RepoSymbols, CancelAI } from "../../wailsjs/go/main/App";
   import { renderBrief } from "./markdown";
   import { daysUntil } from "./pm";
 
@@ -11,13 +11,13 @@
   let turns: Turn[] = [];
   let question = "";
   let loading = false;
-  let contextStr = "";
   let loadedPath = "";
   let genId = 0;
 
   function cancelAsk() {
     genId++;
     loading = false;
+    CancelAI();
   }
 
   const STARTERS = [
@@ -36,7 +36,6 @@
   // memory across sessions).
   $: if (project && project.path !== loadedPath) {
     loadedPath = project.path;
-    contextStr = "";
     question = "";
     loading = false; // any in-flight answer for the old repo is dropped
     turns = loadChat(project.path);
@@ -68,9 +67,9 @@
     if (typeof localStorage !== "undefined" && loadedPath) localStorage.removeItem(chatKey(loadedPath));
   }
 
-  // Gather real code context for THIS repo once, then reuse it for the chat.
+  // Gather real code context for THIS repo. Rebuilt on every question so a
+  // follow-up reasons over the CURRENT diff, not a stale snapshot.
   async function buildContext(): Promise<string> {
-    if (contextStr) return contextStr;
     const p = project.path;
     const [diff, commits, syms] = await Promise.all([
       RepoDiff(p).catch(() => ""),
@@ -103,8 +102,7 @@
     }
     if (diff) lines.push("\nUncommitted diff:\n```\n" + diff + "\n```");
 
-    contextStr = lines.join("\n");
-    return contextStr;
+    return lines.join("\n");
   }
 
   function buildPrompt(ctx: string, latest: string): string {

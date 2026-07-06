@@ -34,6 +34,10 @@ export function Branches(arg1) {
   return window['go']['main']['App']['Branches'](arg1);
 }
 
+export function CancelAI() {
+  return window['go']['main']['App']['CancelAI']();
+}
+
 export function Checkout(arg1, arg2) {
   return window['go']['main']['App']['Checkout'](arg1, arg2);
 }

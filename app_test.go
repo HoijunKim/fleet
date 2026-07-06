@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -151,7 +152,7 @@ type fakeAI struct {
 	err error
 }
 
-func (f fakeAI) Ask(prompt string) (string, error) { return f.out, f.err }
+func (f fakeAI) Ask(_ context.Context, prompt string) (string, error) { return f.out, f.err }
 
 func TestAskAINilRunner(t *testing.T) {
 	a := newTestApp(t) // no aiRunner set
