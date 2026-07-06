@@ -90,7 +90,7 @@
   }
   function saveBrief() {
     if (typeof localStorage === "undefined") return;
-    briefAt = new Date().toISOString().slice(0, 16).replace("T", " ");
+    briefAt = new Date().toLocaleString();
     try {
       localStorage.setItem("fleet.brief", JSON.stringify({ text: brief, at: briefAt }));
     } catch {
@@ -256,7 +256,7 @@
           }
           const recent = commits.filter((c) => {
             const d = daysUntil(c.when);
-            return d !== null && -d <= 7;
+            return d !== null && -d >= 0 && -d < 7; // strict last-7-days window
           });
           if (recent.length) {
             blocks.push(
@@ -378,7 +378,7 @@
           <div class="ov-empty">No open tasks in your Notion board.</div>
         {:else}
           <ul class="ov-list">
-            {#each notionSorted as t, i (t.url + ":" + t.title)}
+            {#each notionSorted as t, i (t.id || t.url + ":" + t.title)}
               <li in:fly={flyUp(i)} class="notion-li">
                 {#if t.checkboxProp}
                   <button

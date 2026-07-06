@@ -272,13 +272,18 @@ func parseResults(data []byte) ([]Task, error) {
 					}
 				}
 			case "checkbox":
-				var p struct {
-					Checkbox bool `json:"checkbox"`
-				}
-				if json.Unmarshal(raw, &p) == nil {
-					t.CheckboxProp = name
-					if p.Checkbox {
-						t.Done = true
+				// Only a checkbox whose NAME reads as completion counts as the
+				// done toggle - otherwise an unrelated checkbox (e.g. "Urgent")
+				// would be treated as done and, worse, written to on complete.
+				if isDoneCheckbox(name) {
+					var p struct {
+						Checkbox bool `json:"checkbox"`
+					}
+					if json.Unmarshal(raw, &p) == nil {
+						t.CheckboxProp = name
+						if p.Checkbox {
+							t.Done = true
+						}
 					}
 				}
 			}
@@ -300,6 +305,15 @@ func parseResults(data []byte) ([]Task, error) {
 func isDueName(name string) bool {
 	n := strings.ToLower(name)
 	return strings.Contains(n, "due") || strings.Contains(n, "deadline") || strings.Contains(n, "end")
+}
+
+// isDoneCheckbox reports whether a checkbox property's NAME reads as a
+// completion toggle, so fleet only ever writes to a "done"-style checkbox.
+func isDoneCheckbox(name string) bool {
+	n := strings.ToLower(name)
+	return strings.Contains(n, "done") || strings.Contains(n, "complete") ||
+		strings.Contains(n, "finish") || strings.Contains(n, "check") ||
+		strings.Contains(n, "closed")
 }
 
 // isDoneStatus reports whether a status/select value means the task is finished.

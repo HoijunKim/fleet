@@ -168,6 +168,23 @@ func TestDatabasesEmptyOnNoToken(t *testing.T) {
 	}
 }
 
+func TestNonDoneCheckboxIgnored(t *testing.T) {
+	// an "Urgent" checkbox must not become the writable done toggle, nor mark
+	// the task done, even when checked.
+	j := `{"results":[{"url":"u","properties":{
+	  "Name":{"type":"title","title":[{"plain_text":"A"}]},
+	  "Urgent":{"type":"checkbox","checkbox":true},
+	  "Done":{"type":"checkbox","checkbox":false}
+	}}]}`
+	tasks, _ := parseResults([]byte(j))
+	if tasks[0].CheckboxProp != "Done" {
+		t.Errorf("writable checkbox must be the done-named one, got %q", tasks[0].CheckboxProp)
+	}
+	if tasks[0].Done {
+		t.Errorf("a checked Urgent (not Done) must not mark the task done: %+v", tasks[0])
+	}
+}
+
 func TestComplete(t *testing.T) {
 	var method, path, body string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
