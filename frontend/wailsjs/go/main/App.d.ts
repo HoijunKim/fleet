@@ -73,13 +73,19 @@ export function Pull(arg1:string):Promise<string>;
 
 export function Push(arg1:string):Promise<string>;
 
+export function ReadRepoFile(arg1:string,arg2:string):Promise<string>;
+
 export function RemoveEdge(arg1:string):Promise<string>;
 
 export function ReorderTasks(arg1:string,arg2:Array<string>):Promise<string>;
 
 export function RepoDiff(arg1:string):Promise<string>;
 
+export function RepoFiles(arg1:string,arg2:string):Promise<string>;
+
 export function RepoGraph():Promise<main.GraphView>;
+
+export function RepoGrep(arg1:string,arg2:string):Promise<string>;
 
 export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
 

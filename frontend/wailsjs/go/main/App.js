@@ -142,6 +142,10 @@ export function Push(arg1) {
   return window['go']['main']['App']['Push'](arg1);
 }
 
+export function ReadRepoFile(arg1, arg2) {
+  return window['go']['main']['App']['ReadRepoFile'](arg1, arg2);
+}
+
 export function RemoveEdge(arg1) {
   return window['go']['main']['App']['RemoveEdge'](arg1);
 }
@@ -154,8 +158,16 @@ export function RepoDiff(arg1) {
   return window['go']['main']['App']['RepoDiff'](arg1);
 }
 
+export function RepoFiles(arg1, arg2) {
+  return window['go']['main']['App']['RepoFiles'](arg1, arg2);
+}
+
 export function RepoGraph() {
   return window['go']['main']['App']['RepoGraph']();
+}
+
+export function RepoGrep(arg1, arg2) {
+  return window['go']['main']['App']['RepoGrep'](arg1, arg2);
 }
 
 export function RepoSymbols(arg1) {

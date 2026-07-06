@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AskAI, RepoDiff, Log, RepoSymbols, CancelAI } from "../../wailsjs/go/main/App";
+  import { AskAI, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles } from "../../wailsjs/go/main/App";
   import { renderBrief } from "./markdown";
   import { redactSecrets } from "./redact";
   import { daysUntil } from "./pm";
@@ -7,7 +7,7 @@
   // The selected code repo. Chat resets when the path changes.
   export let project: any;
 
-  type Turn = { role: "user" | "assistant"; text: string };
+  type Turn = { role: "user" | "assistant" | "tool"; text: string };
 
   let turns: Turn[] = [];
   let question = "";
@@ -106,19 +106,42 @@
     return lines.join("\n");
   }
 
-  function buildPrompt(ctx: string, latest: string): string {
+  function buildPrompt(ctx: string, latest: string, toolLog: string): string {
     const history = turns
+      .filter((t) => t.role === "user" || t.role === "assistant")
       .map((t) => (t.role === "user" ? "Q: " : "A: ") + t.text)
       .join("\n\n");
     return (
-      "You are a senior engineer pair-working on ONE repository. Use the concrete code context below - " +
-      "reference actual files, commits, and diff lines. Be direct and specific, no filler. " +
-      "Answer in " + langName() + " (keep code identifiers as-is).\n\n" +
+      "You are a senior engineer pair-working on ONE repository. Reference actual files, commits and " +
+      "diff lines; be direct and specific, no filler. Answer in " + langName() + " (keep code identifiers as-is).\n\n" +
+      "You can INSPECT the repo. To use a tool, reply with EXACTLY one line and nothing else:\n" +
+      "TOOL read <repo-relative-path>   (read a file)\n" +
+      "TOOL grep <pattern>              (search the code)\n" +
+      "TOOL list <dir>                  (list tracked files; empty dir = repo root)\n" +
+      "I will reply with the result and you continue. Use tools when the diff/commits are not enough " +
+      "(e.g. to see a function's body). When you have enough, give your FINAL answer with no TOOL line.\n\n" +
       "=== Repository context ===\n" + ctx +
       (history ? "\n\n=== Conversation so far ===\n" + history : "") +
+      (toolLog ? "\n\n=== Tool results ===\n" + toolLog : "") +
       "\n\n=== Question ===\n" + latest
     );
   }
+
+  type Tool = { kind: string; arg: string };
+  function parseTool(res: string): Tool | null {
+    const m = res.match(/^\s*TOOL\s+(read|grep|list)\b[ \t]*(.*)$/im);
+    if (!m) return null;
+    return { kind: m[1].toLowerCase(), arg: (m[2] || "").trim() };
+  }
+  async function runTool(t: Tool): Promise<string> {
+    let out = "";
+    if (t.kind === "read") out = await ReadRepoFile(project.path, t.arg);
+    else if (t.kind === "grep") out = await RepoGrep(project.path, t.arg);
+    else if (t.kind === "list") out = await RepoFiles(project.path, t.arg);
+    return redactSecrets(out || "");
+  }
+
+  const MAX_TOOL_STEPS = 6;
 
   async function ask(q: string) {
     const text = q.trim();
@@ -128,19 +151,40 @@
     question = "";
     turns = [...turns, { role: "user", text }];
     loading = true;
+    const stale = () => p !== project.path || g !== genId;
     try {
       const ctx = await buildContext();
-      const res = await AskAI(buildPrompt(ctx, text));
-      if (p !== project.path || g !== genId) return; // moved on or cancelled
-      const answer = typeof res === "string" && res.startsWith("error:") ? res : res || "(no answer)";
+      if (stale()) return;
+      // Agentic loop: the model may inspect the repo (read/grep/list) before
+      // answering, so "code-aware" holds for any language, not just the diff.
+      let toolLog = "";
+      let answer = "";
+      for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+        const res = await AskAI(buildPrompt(ctx, text, toolLog));
+        if (stale()) return;
+        if (typeof res === "string" && res.startsWith("error:")) {
+          answer = res;
+          break;
+        }
+        const tool = parseTool(res || "");
+        if (!tool) {
+          answer = res || "(no answer)";
+          break;
+        }
+        turns = [...turns, { role: "tool", text: tool.kind + " " + tool.arg }];
+        const out = await runTool(tool);
+        if (stale()) return;
+        toolLog += "TOOL " + tool.kind + " " + tool.arg + " ->\n" + out + "\n\n";
+        if (step === MAX_TOOL_STEPS - 1) answer = "(stopped after inspecting the repo; ask a narrower question)";
+      }
       turns = [...turns, { role: "assistant", text: answer }];
       saveChat();
     } catch (e) {
-      if (p !== project.path || g !== genId) return;
+      if (stale()) return;
       turns = [...turns, { role: "assistant", text: "error: " + String(e) }];
       saveChat();
     } finally {
-      if (p === project.path && g === genId) loading = false;
+      if (!stale()) loading = false;
     }
   }
 
@@ -171,6 +215,8 @@
       {#each turns as t}
         {#if t.role === "user"}
           <div class="rchat-q">{t.text}</div>
+        {:else if t.role === "tool"}
+          <div class="rchat-tool"><span class="rchat-tool-dot"></span>inspected <span class="mono">{t.text}</span></div>
         {:else}
           <div class="rchat-a" class:err={t.text.startsWith("error:")}>{@html renderBrief(t.text)}</div>
         {/if}
@@ -262,6 +308,8 @@
     padding: 1px 5px;
     border-radius: 4px;
   }
+  .rchat-tool { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--faint); }
+  .rchat-tool-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex: none; }
   .rchat-loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
   .rchat-input { display: flex; gap: 8px; }
   .rchat-input .input { flex: 1; }
