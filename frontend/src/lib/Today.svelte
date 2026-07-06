@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log } from "../../wailsjs/go/main/App";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
@@ -188,6 +188,56 @@
       loading = false;
     }
   }
+
+  // "This week": summarize recent commits across all code repos.
+  async function generateWeek() {
+    if (loading) return;
+    loading = true;
+    brief = "";
+    briefError = "";
+    try {
+      const code = (projects || []).filter((p) => p.type === "code" && p.isGit).slice(0, 24);
+      const blocks: string[] = [];
+      await Promise.all(
+        code.map(async (p) => {
+          let commits: any[] = [];
+          try {
+            commits = (await Log(p.path, 30)) || [];
+          } catch {
+            commits = [];
+          }
+          const recent = commits.filter((c) => {
+            const d = daysUntil(c.when);
+            return d !== null && -d <= 7;
+          });
+          if (recent.length) {
+            blocks.push(
+              (p.name || p.path) + ":\n" + recent.map((c) => "  - " + c.message).join("\n")
+            );
+          }
+        })
+      );
+      if (blocks.length === 0) {
+        brief = "No commits in the last 7 days.";
+        return;
+      }
+      const prompt =
+        "Summarize what I worked on in the last 7 days, grouped by project, as short bullets. " +
+        "Base it ONLY on the commit messages below; do not invent. Note momentum or a stalled project if obvious. " +
+        "Concise, under 180 words, in " + langName(briefLang) + " (keep project names and code identifiers as-is)." +
+        "\n\nCommits by project:\n" + blocks.join("\n\n");
+      const res = await AskAI(prompt);
+      if (typeof res === "string" && res.startsWith("error:")) {
+        briefError = res.slice(6).trim() || "AI request failed";
+      } else {
+        brief = res || "";
+      }
+    } catch (e) {
+      briefError = (e && (e as any).message) || String(e);
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <div class="today">
@@ -211,6 +261,9 @@
                 onChange={onLangChange}
               />
             </div>
+            <button class="btn btn-secondary btn-sm" on:click={generateWeek} disabled={loading} title="Summarize the last 7 days">
+              This week
+            </button>
             <button class="btn btn-primary btn-sm" on:click={generate} disabled={loading}>
               {loading ? "Thinking..." : brief || briefError ? "Regenerate" : "What first today?"}
             </button>
