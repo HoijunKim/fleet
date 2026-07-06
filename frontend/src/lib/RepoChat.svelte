@@ -13,6 +13,12 @@
   let loading = false;
   let contextStr = "";
   let loadedPath = "";
+  let genId = 0;
+
+  function cancelAsk() {
+    genId++;
+    loading = false;
+  }
 
   const STARTERS = [
     "What's off in this repo right now?",
@@ -119,22 +125,23 @@
     const text = q.trim();
     if (!text || loading) return;
     const p = project.path; // capture: drop the answer if the repo changes
+    const g = ++genId; // or if the user cancels
     question = "";
     turns = [...turns, { role: "user", text }];
     loading = true;
     try {
       const ctx = await buildContext();
       const res = await AskAI(buildPrompt(ctx, text));
-      if (p !== project.path) return; // selection moved on - don't cross-post
+      if (p !== project.path || g !== genId) return; // moved on or cancelled
       const answer = typeof res === "string" && res.startsWith("error:") ? res : res || "(no answer)";
       turns = [...turns, { role: "assistant", text: answer }];
       saveChat();
     } catch (e) {
-      if (p !== project.path) return;
+      if (p !== project.path || g !== genId) return;
       turns = [...turns, { role: "assistant", text: "error: " + String(e) }];
       saveChat();
     } finally {
-      if (p === project.path) loading = false;
+      if (p === project.path && g === genId) loading = false;
     }
   }
 
@@ -170,7 +177,10 @@
         {/if}
       {/each}
       {#if loading}
-        <div class="rchat-loading"><span class="spinner"></span> reading the repo...</div>
+        <div class="rchat-loading">
+          <span class="spinner"></span> reading the repo...
+          <button class="rchat-clear" on:click={cancelAsk}>Cancel</button>
+        </div>
       {/if}
     </div>
   {/if}

@@ -56,6 +56,12 @@
   let loading = false;
   let brief = "";
   let briefError = "";
+  let genId = 0; // soft-cancel: a bump makes an in-flight result get dropped
+
+  function cancelBrief() {
+    genId++;
+    loading = false;
+  }
 
   // Output language for the briefing, remembered across sessions.
   const LANGS: { code: string; name: string }[] = [
@@ -221,11 +227,13 @@
 
   async function generate() {
     if (loading) return;
+    const g = ++genId;
     loading = true;
     brief = "";
     briefError = "";
     try {
       const res = await AskAI(buildPrompt());
+      if (g !== genId) return; // cancelled
       if (typeof res === "string" && res.startsWith("error:")) {
         briefError = res.slice(6).trim() || "AI request failed";
       } else {
@@ -233,15 +241,17 @@
         saveBrief();
       }
     } catch (e) {
+      if (g !== genId) return;
       briefError = (e && (e as any).message) || String(e);
     } finally {
-      loading = false;
+      if (g === genId) loading = false;
     }
   }
 
   // "This week": summarize recent commits across all code repos.
   async function generateWeek() {
     if (loading) return;
+    const g = ++genId;
     loading = true;
     brief = "";
     briefError = "";
@@ -267,6 +277,7 @@
           }
         })
       );
+      if (g !== genId) return; // cancelled during the log fan-out
       if (blocks.length === 0) {
         brief = "No commits in the last 7 days.";
         return;
@@ -277,6 +288,7 @@
         "Concise, under 180 words, in " + langName(briefLang) + " (keep project names and code identifiers as-is)." +
         "\n\nCommits by project:\n" + blocks.join("\n\n");
       const res = await AskAI(prompt);
+      if (g !== genId) return; // cancelled
       if (typeof res === "string" && res.startsWith("error:")) {
         briefError = res.slice(6).trim() || "AI request failed";
       } else {
@@ -284,9 +296,10 @@
         saveBrief();
       }
     } catch (e) {
+      if (g !== genId) return;
       briefError = (e && (e as any).message) || String(e);
     } finally {
-      loading = false;
+      if (g === genId) loading = false;
     }
   }
 </script>
@@ -329,6 +342,7 @@
       {:else if loading}
         <div class="brief-loading">
           <span class="spinner"></span> Reading your projects...
+          <button class="brief-cancel" on:click={cancelBrief}>Cancel</button>
         </div>
       {:else if briefError}
         <div class="brief-error">Could not generate a briefing: {briefError}</div>
@@ -473,6 +487,18 @@
   }
   .brief-at { margin-top: 10px; font-size: 11px; color: var(--faint); }
   .brief-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  .brief-cancel {
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 2px 10px;
+    cursor: pointer;
+    transition: color var(--t), border-color var(--t);
+  }
+  .brief-cancel:hover { color: var(--err); border-color: var(--err-line); }
   .brief-error { color: var(--err); font-size: 13px; }
 
   .forgot-detail {
