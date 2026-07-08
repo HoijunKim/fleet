@@ -1,7 +1,10 @@
-// Package notion reads tasks from a Notion database via an internal-integration
-// token. Read-only: fleet pulls titles, due dates and status into the Today
-// view. The HTTP call is thin; the property mapping (the fiddly part) is a pure
-// function so it is unit-tested.
+// Package notion reads and writes tasks in a Notion database via an
+// internal-integration token. fleet pulls titles, due dates and status into its
+// views, and can create a task or mark one done. The HTTP calls are thin; the
+// fiddly parts - property mapping on read and schema discovery on write - are
+// pure functions so they are unit-tested. Writes only ever touch the property
+// the schema identifies (title, a date, a done-named checkbox, or a status's
+// done option), so fleet never clobbers an unrelated column.
 package notion
 
 import (
