@@ -1,0 +1,36 @@
+# Local dev/e2e stack for the fleet backend: Postgres + the fleetd API server.
+# Usage:
+#   docker compose up -d postgres          # DB only (for `go test` with DATABASE_URL_TEST)
+#   docker compose up -d --build fleetd     # build the Dockerfile + run the server
+# Not for production (dev secrets, sslmode=disable, TRUST_PROXY off).
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fleet
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./scripts/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  fleetd:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/fleet?sslmode=disable
+      JWT_SIGNING_KEY: dev-signing-key-not-for-prod
+      GITHUB_OAUTH_CLIENT_ID: dev-client-id
+      GITHUB_OAUTH_CLIENT_SECRET: dev-client-secret
+      GITHUB_OAUTH_CALLBACK_URL: http://127.0.0.1:8080/auth/github/callback
+      PORT: "8080"
+      TRUST_PROXY: "false"
+    ports:
+      - "8090:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy

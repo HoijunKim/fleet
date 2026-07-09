@@ -107,3 +107,8 @@ go test ./cmd/fleetd/... ./internal/server/...
 DATABASE_URL_TEST="postgres://postgres:postgres@localhost:5432/fleet_test?sslmode=disable" \
   go test ./internal/server/pgstore/...
 ```
+
+Local dev/e2e: `docker compose up -d postgres` then `go test ./...` with
+`DATABASE_URL_TEST=...` (runs the pgstore and `internal/server/e2e` suites
+against it); `docker compose up -d --build fleetd` runs the server via the
+repo's `docker-compose.yml`.
