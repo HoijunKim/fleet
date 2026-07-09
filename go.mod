@@ -4,6 +4,7 @@ go 1.22.0
 
 require (
 	github.com/BurntSushi/toml v1.4.0
+	github.com/go-chi/chi/v5 v5.1.0
 	github.com/wailsapp/wails/v2 v2.12.0
 )
 
