@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS user_versions;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;
