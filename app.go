@@ -53,7 +53,6 @@ type App struct {
 	creds       cloud.CredStore
 	engine      *syncengine.Engine
 	authMu      sync.Mutex
-	access      string
 	user        cloud.User
 	signedIn    bool
 	session     *cloud.Session

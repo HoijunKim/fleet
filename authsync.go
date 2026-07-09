@@ -45,19 +45,25 @@ type SyncStateView struct {
 
 var errNotSignedIn = errors.New("not signed in")
 
-// randB64 returns n random bytes as base64url (no padding).
-func randB64(n int) string {
+// randB64 returns n random bytes as base64url (no padding), or an error if
+// the system CSPRNG fails.
+func randB64(n int) (string, error) {
 	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // pkce generates a PKCE verifier and its S256 challenge.
-func pkce() (verifier, challenge string) {
-	verifier = randB64(32)
+func pkce() (verifier, challenge string, err error) {
+	verifier, err = randB64(32)
+	if err != nil {
+		return "", "", err
+	}
 	sum := sha256.Sum256([]byte(verifier))
 	challenge = base64.RawURLEncoding.EncodeToString(sum[:])
-	return verifier, challenge
+	return verifier, challenge, nil
 }
 
 // oauthCapture is what the loopback callback captures from the browser
@@ -98,8 +104,14 @@ func (a *App) AuthStart() string {
 	port := ln.Addr().(*net.TCPAddr).Port
 	redirect := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
-	verifier, challenge := pkce()
-	state := randB64(16)
+	verifier, challenge, err := pkce()
+	if err != nil {
+		return "cannot generate pkce verifier: " + err.Error()
+	}
+	state, err := randB64(16)
+	if err != nil {
+		return "cannot generate state: " + err.Error()
+	}
 	login := apiURL() + "/auth/github/login?" + url.Values{
 		"state":          {state},
 		"code_challenge": {challenge},
@@ -143,7 +155,6 @@ func (a *App) AuthStart() string {
 	}
 
 	a.authMu.Lock()
-	a.access = tokens.Access
 	a.user = user
 	a.signedIn = true
 	a.session = cloud.NewSession(a.cloudClient, tokens.Access, tokens.Refresh, func(t cloud.Tokens) {
@@ -246,7 +257,6 @@ func (a *App) signOutLocally() {
 	_ = a.creds.DeleteRefresh()
 
 	a.authMu.Lock()
-	a.access = ""
 	a.user = cloud.User{}
 	a.signedIn = false
 	a.session = nil
@@ -314,7 +324,6 @@ func (a *App) startSync(ctx context.Context) {
 			if tok, err := a.cloudClient.Refresh(refresh); err == nil {
 				_ = a.creds.SaveRefresh(tok.Refresh)
 				a.authMu.Lock()
-				a.access = tok.Access
 				a.signedIn = true
 				a.session = cloud.NewSession(a.cloudClient, tok.Access, tok.Refresh, func(t cloud.Tokens) {
 					_ = a.creds.SaveRefresh(t.Refresh)

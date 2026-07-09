@@ -21,7 +21,6 @@ func main() {
 	clientID := mustEnv("GITHUB_OAUTH_CLIENT_ID")
 	clientSecret := mustEnv("GITHUB_OAUTH_CLIENT_SECRET")
 	callbackURL := mustEnv("GITHUB_OAUTH_CALLBACK_URL")
-	allowedRedirect := envOr("FLEET_ALLOWED_REDIRECT", "http://127.0.0.1")
 	addr := ":" + envOr("PORT", "8080")
 	trustProxy := envBool("TRUST_PROXY")
 
@@ -38,12 +37,11 @@ func main() {
 	defer store.Close()
 
 	authH := auth.New(auth.Config{
-		Store:           store,
-		GitHub:          auth.NewHTTPGitHub(clientID, clientSecret),
-		SigningKey:      signingKey,
-		ClientID:        clientID,
-		CallbackURL:     callbackURL,
-		AllowedRedirect: allowedRedirect,
+		Store:       store,
+		GitHub:      auth.NewHTTPGitHub(clientID, clientSecret),
+		SigningKey:  signingKey,
+		ClientID:    clientID,
+		CallbackURL: callbackURL,
 	})
 
 	router := httpapi.NewRouter(httpapi.Options{

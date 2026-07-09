@@ -16,16 +16,15 @@ const maxRequestBodyBytes = 64 << 10 // 64 KiB
 
 // Config carries the OAuth handlers' dependencies.
 type Config struct {
-	Store           pgstore.Store
-	GitHub          GitHubClient
-	SigningKey      []byte
-	ClientID        string
-	AuthorizeURL    string // default https://github.com/login/oauth/authorize
-	CallbackURL     string // this server's public callback URL
-	AllowedRedirect string // allowed loopback redirect prefix, e.g. http://127.0.0.1
-	AccessTTL       time.Duration
-	RefreshTTL      time.Duration
-	Now             func() time.Time
+	Store        pgstore.Store
+	GitHub       GitHubClient
+	SigningKey   []byte
+	ClientID     string
+	AuthorizeURL string // default https://github.com/login/oauth/authorize
+	CallbackURL  string // this server's public callback URL
+	AccessTTL    time.Duration
+	RefreshTTL   time.Duration
+	Now          func() time.Time
 }
 
 // Handlers holds the OAuth endpoints plus short-lived server state.
@@ -118,7 +117,11 @@ func (h *Handlers) GithubLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "redirect not allowed", http.StatusBadRequest)
 		return
 	}
-	serverState := randToken()
+	serverState, err := randToken()
+	if err != nil {
+		http.Error(w, "token error", http.StatusInternalServerError)
+		return
+	}
 	if !h.pending.put(serverState, pendingAuth{clientState: state, codeChallenge: challenge, redirect: redirect}, 10*time.Minute) {
 		http.Error(w, "server busy", http.StatusServiceUnavailable)
 		return
@@ -176,7 +179,11 @@ func (h *Handlers) GithubCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user upsert failed", http.StatusInternalServerError)
 		return
 	}
-	linkCode := randToken()
+	linkCode, err := randToken()
+	if err != nil {
+		http.Error(w, "token error", http.StatusInternalServerError)
+		return
+	}
 	if !h.links.put(linkCode, linkData{
 		userID: user.ID, login: user.Login, avatarURL: user.AvatarURL, codeChallenge: pend.codeChallenge,
 	}, 5*time.Minute) {

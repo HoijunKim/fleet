@@ -93,13 +93,12 @@ func TestOAuthFullFlow(t *testing.T) {
 	key := []byte("k")
 	store := newFakeStore()
 	h := New(Config{
-		Store:           store,
-		GitHub:          fakeGitHub{user: GitHubUser{ID: 5, Login: "octo", AvatarURL: "http://a"}},
-		SigningKey:      key,
-		ClientID:        "cid",
-		AuthorizeURL:    "https://github.test/authorize",
-		CallbackURL:     "https://api.test/auth/github/callback",
-		AllowedRedirect: "http://127.0.0.1",
+		Store:        store,
+		GitHub:       fakeGitHub{user: GitHubUser{ID: 5, Login: "octo", AvatarURL: "http://a"}},
+		SigningKey:   key,
+		ClientID:     "cid",
+		AuthorizeURL: "https://github.test/authorize",
+		CallbackURL:  "https://api.test/auth/github/callback",
 	})
 	srv := newTestServer(h)
 	defer srv.Close()
@@ -212,11 +211,10 @@ func TestOAuthFullFlow(t *testing.T) {
 
 func TestExchangeRejectsBadPKCE(t *testing.T) {
 	h := New(Config{
-		Store:           newFakeStore(),
-		GitHub:          fakeGitHub{user: GitHubUser{ID: 5, Login: "o"}},
-		SigningKey:      []byte("k"),
-		AuthorizeURL:    "https://github.test/authorize",
-		AllowedRedirect: "http://127.0.0.1",
+		Store:        newFakeStore(),
+		GitHub:       fakeGitHub{user: GitHubUser{ID: 5, Login: "o"}},
+		SigningKey:   []byte("k"),
+		AuthorizeURL: "https://github.test/authorize",
 	})
 	srv := newTestServer(h)
 	defer srv.Close()
@@ -262,11 +260,10 @@ func TestGithubLoginRedirectValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := New(Config{
-				Store:           newFakeStore(),
-				GitHub:          fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
-				SigningKey:      []byte("k"),
-				AuthorizeURL:    "https://github.test/authorize",
-				AllowedRedirect: "http://127.0.0.1",
+				Store:        newFakeStore(),
+				GitHub:       fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
+				SigningKey:   []byte("k"),
+				AuthorizeURL: "https://github.test/authorize",
 			})
 			srv := newTestServer(h)
 			defer srv.Close()
@@ -304,11 +301,10 @@ func TestGithubLoginRedirectValidation(t *testing.T) {
 // confirms the callback still refuses to redirect to it.
 func TestCallbackRejectsInvalidStashedRedirect(t *testing.T) {
 	h := New(Config{
-		Store:           newFakeStore(),
-		GitHub:          fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
-		SigningKey:      []byte("k"),
-		AuthorizeURL:    "https://github.test/authorize",
-		AllowedRedirect: "http://127.0.0.1",
+		Store:        newFakeStore(),
+		GitHub:       fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
+		SigningKey:   []byte("k"),
+		AuthorizeURL: "https://github.test/authorize",
 	})
 	if !h.pending.put("forged-state", pendingAuth{
 		clientState: "cs", codeChallenge: "chal", redirect: "http://evil.com/cb",

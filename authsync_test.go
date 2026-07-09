@@ -25,8 +25,14 @@ import (
 // verifiable (see task-B8-report.md for the manual verification steps).
 
 func TestPKCE(t *testing.T) {
-	v1, c1 := pkce()
-	v2, c2 := pkce()
+	v1, c1, err := pkce()
+	if err != nil {
+		t.Fatalf("pkce(): %v", err)
+	}
+	v2, c2, err := pkce()
+	if err != nil {
+		t.Fatalf("pkce(): %v", err)
+	}
 	if v1 == "" || c1 == "" {
 		t.Fatal("pkce() returned an empty verifier/challenge")
 	}
@@ -76,7 +82,6 @@ func testApp(t *testing.T, backendURL string, signedIn bool) (*App, *cloud.MemCr
 	if signedIn {
 		_ = creds.SaveRefresh("r0")
 		a.signedIn = true
-		a.access = "acc"
 		a.session = cloud.NewSession(cl, "acc", "r0", func(tok cloud.Tokens) { _ = creds.SaveRefresh(tok.Refresh) })
 	}
 	return a, creds

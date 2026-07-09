@@ -24,9 +24,12 @@ func HashRefresh(raw string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// randToken returns a 32-byte base64url random string (state / link codes).
-func randToken() string {
+// randToken returns a 32-byte base64url random string (state / link codes),
+// or an error if the system CSPRNG fails.
+func randToken() (string, error) {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
