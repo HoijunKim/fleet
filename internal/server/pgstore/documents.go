@@ -21,8 +21,29 @@ func (p *Pg) Push(ctx context.Context, userID string, docs []Doc) ([]PushResult,
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO user_versions (user_id, current) VALUES ($1, 0) ON CONFLICT DO NOTHING`, userID); err != nil {
+	// Serialize concurrent Pushes for the same user by locking the per-user
+	// counter row for the whole transaction. Without this, two Pushes creating
+	// the same (kind, doc_id) both see the documents row absent (an absent row
+	// grants no lock under READ COMMITTED) and both insert, letting a later
+	// committer overwrite a newer updated_at and violate newest-wins. Holding
+	// this lock forces same-user Pushes to run one-at-a-time, so the per-doc
+	// SELECT ... FOR UPDATE + LWW decision below always sees committed state,
+	// including for first-inserts.
+	var current int64
+	err = tx.QueryRow(ctx,
+		`SELECT current FROM user_versions WHERE user_id=$1 FOR UPDATE`, userID).Scan(&current)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The row is normally bootstrapped at user creation; recreate it
+		// defensively, then re-take the lock so the gate still holds.
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO user_versions (user_id, current) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING`, userID); err != nil {
+			return nil, 0, err
+		}
+		if err := tx.QueryRow(ctx,
+			`SELECT current FROM user_versions WHERE user_id=$1 FOR UPDATE`, userID).Scan(&current); err != nil {
+			return nil, 0, err
+		}
+	} else if err != nil {
 		return nil, 0, err
 	}
 
@@ -32,6 +53,12 @@ func (p *Pg) Push(ctx context.Context, userID string, docs []Doc) ([]PushResult,
 		if err != nil {
 			return nil, 0, fmt.Errorf("bad updated_at for doc %q: %w", d.DocID, err)
 		}
+		// Postgres timestamptz keeps only microsecond resolution, so truncate
+		// the parsed value to microseconds before both the LWW compare and the
+		// store. Otherwise a re-pushed identical timestamp string carrying
+		// sub-microsecond nanoseconds would compare newer than the rounded
+		// stored value and be wrongly re-accepted.
+		pushedAt = pushedAt.Truncate(time.Microsecond)
 
 		var storedAt time.Time
 		var storedVersion int64
@@ -45,9 +72,13 @@ func (p *Pg) Push(ctx context.Context, userID string, docs []Doc) ([]PushResult,
 			return nil, 0, err
 		}
 
-		if found && !pushedAt.After(storedAt) {
-			results = append(results, PushResult{DocID: d.DocID, Kind: d.Kind, Accepted: false, Version: storedVersion})
-			continue
+		if found {
+			// Match resolutions on both sides of the compare.
+			storedAt = storedAt.Truncate(time.Microsecond)
+			if !pushedAt.After(storedAt) {
+				results = append(results, PushResult{DocID: d.DocID, Kind: d.Kind, Accepted: false, Version: storedVersion})
+				continue
+			}
 		}
 
 		var newVersion int64

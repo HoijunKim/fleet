@@ -3,7 +3,9 @@ package pgstore
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
+	"time"
 )
 
 func mkDoc(docID, updatedAt string, deleted bool) Doc {
@@ -79,6 +81,58 @@ func TestPushLWWAndCursor(t *testing.T) {
 	}
 	if len(docs) != 0 || pcur != 3 {
 		t.Fatalf("pull-since wrong: %+v cursor=%d", docs, pcur)
+	}
+}
+
+// TestPushConcurrentCreateNewestWins documents the concurrent-create
+// expectation: two Pushes that create the SAME (kind, doc_id) for one user at
+// the same time must not let an older updated_at survive. The per-user lock
+// taken at the start of Push serializes them, so whichever commits second sees
+// the row the first inserted and applies LWW, leaving the newer timestamp.
+// Skips offline like the other Postgres-backed tests.
+func TestPushConcurrentCreateNewestWins(t *testing.T) {
+	pg := testPg(t)
+	ctx := context.Background()
+	u, err := pg.UpsertUserByGitHub(ctx, GitHubIdentity{GitHubID: 20, Login: "c"})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	older := "2026-01-01T00:00:00Z"
+	newer := "2026-06-01T00:00:00Z"
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	errs := make([]error, 2)
+	go func() {
+		defer wg.Done()
+		_, _, errs[0] = pg.Push(ctx, u.ID, []Doc{mkDoc("race", older, false)})
+	}()
+	go func() {
+		defer wg.Done()
+		_, _, errs[1] = pg.Push(ctx, u.ID, []Doc{mkDoc("race", newer, false)})
+	}()
+	wg.Wait()
+	for i, e := range errs {
+		if e != nil {
+			t.Fatalf("push %d: %v", i, e)
+		}
+	}
+
+	docs, _, err := pg.Pull(ctx, u.ID, 0)
+	if err != nil {
+		t.Fatalf("pull: %v", err)
+	}
+	if len(docs) != 1 {
+		t.Fatalf("want exactly one row, got %d: %+v", len(docs), docs)
+	}
+	got, err := time.Parse(time.RFC3339, docs[0].UpdatedAt)
+	if err != nil {
+		t.Fatalf("parse stored updated_at %q: %v", docs[0].UpdatedAt, err)
+	}
+	want, _ := time.Parse(time.RFC3339, newer)
+	if !got.Equal(want) {
+		t.Fatalf("newest-wins violated: stored updated_at = %s, want %s", docs[0].UpdatedAt, newer)
 	}
 }
 
