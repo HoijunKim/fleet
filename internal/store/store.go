@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Task is one checklist item on a project.
@@ -22,14 +23,15 @@ type Task struct {
 // projects the id is the repo path and Name is left empty (the scan supplies
 // it); for manual projects Manual is true and Name is authoritative.
 type Record struct {
-	Manual   bool     `json:"manual"`
-	Name     string   `json:"name"`
-	Status   string   `json:"status"`
-	Priority int      `json:"priority"`
-	Deadline string   `json:"deadline"`
-	Notes    string   `json:"notes"`
-	Tags     []string `json:"tags"`
-	Tasks    []Task   `json:"tasks"`
+	Manual    bool     `json:"manual"`
+	Name      string   `json:"name"`
+	Status    string   `json:"status"`
+	Priority  int      `json:"priority"`
+	Deadline  string   `json:"deadline"`
+	Notes     string   `json:"notes"`
+	Tags      []string `json:"tags"`
+	Tasks     []Task   `json:"tasks"`
+	UpdatedAt string   `json:"updatedAt"`
 }
 
 // Store is a concurrency-safe, file-backed map of id -> Record.
@@ -67,6 +69,7 @@ func Open(path string) (*Store, error) {
 // truth: Done is re-mirrored from it so the two fields cannot disagree.
 // Idempotent: running it twice on already-migrated data is a no-op.
 func migrate(recs map[string]Record) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for k, record := range recs {
 		for i, t := range record.Tasks {
 			if t.Status == "" {
@@ -78,6 +81,9 @@ func migrate(recs map[string]Record) {
 			}
 			t.Done = t.Status == "done"
 			record.Tasks[i] = t
+		}
+		if record.UpdatedAt == "" {
+			record.UpdatedAt = now
 		}
 		recs[k] = record
 	}
@@ -135,6 +141,7 @@ func (s *Store) Update(id string, fn func(*Record)) error {
 	defer s.mu.Unlock()
 	rec := cloneRecord(s.records[id])
 	fn(&rec)
+	rec.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	s.records[id] = rec
 	return s.saveLocked()
 }

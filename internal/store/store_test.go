@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestOpenMissingIsEmpty(t *testing.T) {
@@ -161,6 +162,48 @@ func TestOpenMigratesTaskStatus(t *testing.T) {
 	}
 	if tasks[2].Status != "doing" || tasks[2].Done {
 		t.Errorf("existing status preserved, done re-mirrored, got %+v", tasks[2])
+	}
+}
+
+func TestOpenStampsMissingUpdatedAt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "projects.json")
+	// legacy file: record has no updatedAt
+	raw := `{"p1":{"manual":true,"name":"legacy","tasks":[]}}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, ok := s.Get("p1")
+	if !ok {
+		t.Fatal("expected record p1")
+	}
+	if rec.UpdatedAt == "" {
+		t.Error("migrate should stamp a missing UpdatedAt")
+	}
+	if _, perr := time.Parse(time.RFC3339Nano, rec.UpdatedAt); perr != nil {
+		t.Errorf("stamped UpdatedAt not RFC3339Nano: %q (%v)", rec.UpdatedAt, perr)
+	}
+}
+
+func TestUpdateStampsUpdatedAt(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "projects.json")
+	s, _ := Open(p)
+	if err := s.Update("m-1", func(r *Record) { r.Manual = true; r.Name = "n" }); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Get("m-1")
+	if got.UpdatedAt == "" {
+		t.Fatal("Update must stamp UpdatedAt")
+	}
+	ts, perr := time.Parse(time.RFC3339Nano, got.UpdatedAt)
+	if perr != nil {
+		t.Fatalf("UpdatedAt not RFC3339Nano: %q (%v)", got.UpdatedAt, perr)
+	}
+	if time.Since(ts) > time.Minute {
+		t.Errorf("stamp not recent: %v", ts)
 	}
 }
 
