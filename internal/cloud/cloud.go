@@ -56,6 +56,15 @@ type Client struct {
 // Session can refresh the access token and retry.
 var ErrUnauthorized = errors.New("cloud: unauthorized")
 
+// ErrRefreshFailed is returned by Refresh (and propagated verbatim through
+// Session.WithAccess) when the server rejects the refresh token itself (401):
+// the token was revoked or expired, not merely offline or a transient server
+// error. Callers should treat this as a signed-out condition - clear local
+// session state and prompt re-authentication - rather than retrying forever
+// or showing a generic error. A non-401 failure (network error, 5xx) is
+// returned unwrapped so it is not mistaken for a dead token.
+var ErrRefreshFailed = errors.New("cloud: refresh token rejected")
+
 // New builds a Client for baseURL with a sane timeout.
 func New(baseURL string) *Client {
 	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: &http.Client{Timeout: 15 * time.Second}}
@@ -113,6 +122,9 @@ func (c *Client) Refresh(refresh string) (Tokens, error) {
 		return Tokens{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return Tokens{}, ErrRefreshFailed
+	}
 	if resp.StatusCode != http.StatusOK {
 		return Tokens{}, fmt.Errorf("refresh: status %d", resp.StatusCode)
 	}

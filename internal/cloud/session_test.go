@@ -60,7 +60,10 @@ func TestSessionRefreshesOn401(t *testing.T) {
 // fails (e.g. the refresh token was revoked), WithAccess surfaces the refresh
 // error instead of looping: fn is called exactly once, onRotate is never
 // invoked, and the session's tokens are left untouched so the caller can
-// treat this as a signed-out condition.
+// treat this as a signed-out condition. It also asserts the failure is the
+// distinguishable ErrRefreshFailed sentinel (the server rejected the refresh
+// token with 401), not a generic error - callers (Task 8's runSync) match on
+// this to surface a "signedout" state instead of "offline"/"error".
 func TestSessionRefreshFailureSignsOut(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -89,6 +92,9 @@ func TestSessionRefreshFailureSignsOut(t *testing.T) {
 	}
 	if errors.Is(err, ErrUnauthorized) {
 		t.Errorf("expected the refresh error, got ErrUnauthorized passthrough: %v", err)
+	}
+	if !errors.Is(err, ErrRefreshFailed) {
+		t.Errorf("expected ErrRefreshFailed (401 on refresh = dead token), got: %v", err)
 	}
 	if calls != 1 {
 		t.Errorf("expected fn called exactly once (no retry after failed refresh), got %d", calls)
