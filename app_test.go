@@ -379,6 +379,33 @@ func TestReorderTasks(t *testing.T) {
 	}
 }
 
+// TestGeneratedIDsUnique guards against the coarse-clock collision: rapid
+// successive AddTask/AddProject calls once shared a time.Now().UnixNano() and so
+// got the same id, which the id-keyed mutators then corrupted. Every generated id
+// must be distinct regardless of clock resolution.
+func TestGeneratedIDsUnique(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	seen := map[string]bool{id: true}
+	for i := 0; i < 200; i++ {
+		a.AddTask(id, "t", "")
+		pid := a.AddProject("q")
+		if seen[pid] {
+			t.Fatalf("duplicate project id %q at iter %d", pid, i)
+		}
+		seen[pid] = true
+	}
+	for _, tk := range a.GetProject(id).Tasks {
+		if seen[tk.ID] {
+			t.Fatalf("duplicate task id %q", tk.ID)
+		}
+		seen[tk.ID] = true
+	}
+	if len(a.GetProject(id).Tasks) != 200 {
+		t.Errorf("want 200 tasks, got %d (ids collided or dropped)", len(a.GetProject(id).Tasks))
+	}
+}
+
 // helpers
 func (a *App) addTaskReturnID(t *testing.T, projectID, title string) string {
 	t.Helper()

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hoijun/fleet/internal/action"
@@ -375,9 +376,21 @@ func (a *App) GetProject(id string) ProjectView {
 	return recordToView(id, filepath.Base(id), "code", id, rec)
 }
 
+// idSeq makes generated ids unique even when time.Now().UnixNano() repeats,
+// which it does on Windows' coarse clock for calls within the same tick. Without
+// it two tasks (or projects) added in the same tick share an id, and the id-keyed
+// mutators (SetTaskStatus, ToggleTask, DeleteTask, ReorderTasks) then corrupt the
+// list. The time prefix keeps ids roughly ordered and distinct across restarts;
+// the counter guarantees uniqueness within a process run.
+var idSeq atomic.Uint64
+
+func nextID(prefix string) string {
+	return prefix + strconv.FormatInt(time.Now().UnixNano(), 36) + "-" + strconv.FormatUint(idSeq.Add(1), 36)
+}
+
 // AddProject creates a manual project and returns its id, or "" on failure.
 func (a *App) AddProject(name string) string {
-	id := "m-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	id := nextID("m-")
 	if err := a.store.Update(id, func(r *store.Record) {
 		r.Manual = true
 		r.Name = name
@@ -404,7 +417,7 @@ func (a *App) DeleteProject(id string) string { return errMsg(a.store.Delete(id)
 
 // AddTask appends a task to a project.
 func (a *App) AddTask(projectID, title, due string) string {
-	tid := "t-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	tid := nextID("t-")
 	return errMsg(a.store.Update(projectID, func(r *store.Record) {
 		r.Tasks = append(r.Tasks, store.Task{ID: tid, Title: title, Due: due, Status: "todo"})
 	}))
