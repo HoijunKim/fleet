@@ -2,7 +2,6 @@ package syncengine
 
 import (
 	"encoding/json"
-	"strings"
 	"sync"
 	"time"
 
@@ -108,7 +107,7 @@ func (e *Engine) SyncOnce(access string) error {
 	}
 
 	if len(dirty) > 0 {
-		results, cursor, err := e.client.Push(dirty, access)
+		results, _, err := e.client.Push(dirty, access)
 		if err != nil {
 			return err
 		}
@@ -127,9 +126,11 @@ func (e *Engine) SyncOnce(access string) error {
 			ds.Deleted = d.Deleted
 			e.state.Docs[r.DocID] = ds
 		}
-		if cursor > e.state.Cursor {
-			e.state.Cursor = cursor
-		}
+		// Do NOT advance the cursor from the push response: it is the server's
+		// GLOBAL max version, and adopting it when this device is behind on
+		// pulls would skip remote versions we never pulled (Pull is monotonic),
+		// causing silent lost updates and preventing a rejected push from ever
+		// reconciling. Only the pull below advances e.state.Cursor.
 	}
 
 	docs, cursor, err := e.client.Pull(e.state.Cursor, access)
@@ -178,9 +179,6 @@ func (e *Engine) SyncOnce(access string) error {
 func (e *Engine) localIDForDoc(d cloud.Doc) string {
 	if ds, ok := e.state.Docs[d.DocID]; ok && ds.LocalID != "" {
 		return ds.LocalID
-	}
-	if !strings.HasPrefix(d.DocID, "git:") && !strings.HasPrefix(d.DocID, "local:") {
-		return d.DocID
 	}
 	return d.DocID
 }

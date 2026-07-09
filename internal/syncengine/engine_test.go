@@ -239,3 +239,128 @@ func TestSyncDetachedCodeDocNotRepushed(t *testing.T) {
 		t.Errorf("second B sync re-pushed the detached doc: pushes %d -> %d", pushesAfterFirst, f.pushes)
 	}
 }
+
+// TestSyncCursorAdvancesOnlyFromPull guards the multi-device data-loss bug:
+// the cursor must advance ONLY from the pull step, never from the push
+// response (which is the server's global max version). If a device is behind
+// on pulls AND pushes a dirty doc in the same cycle, adopting the push cursor
+// would skip remote versions it never pulled (Pull is monotonic), silently
+// losing updates and preventing a rejected push from ever reconciling.
+func TestSyncCursorAdvancesOnlyFromPull(t *testing.T) {
+	t.Run("behind on pulls while pushing still applies unpulled remote", func(t *testing.T) {
+		f := newFake()
+		ts := httptest.NewServer(f)
+		defer ts.Close()
+
+		// Device A publishes m-1 (server v1).
+		eA, stA, _ := newEngine(t, ts.URL)
+		_ = stA.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "A1" })
+		if err := eA.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Device B catches up to v1 (cursor=1), holding m-1.
+		eB, stB, bStatePath := newEngine(t, ts.URL)
+		if err := eB.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+
+		// A now publishes a SECOND doc that B has not pulled: server reaches v2.
+		_ = stA.Update("m-2", func(r *store.Record) { r.Manual = true; r.Name = "A2" })
+		if err := eA.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+
+		// B is behind (cursor=1) AND has a fresh local dirty doc to push. Its
+		// push of m-b is accepted as server v3. With the bug, B would adopt the
+		// push cursor (3) and Pull(since=3) would silently drop the unpulled
+		// m-2 (v2). After the fix, Pull(since=1) still delivers m-2.
+		_ = stB.Update("m-b", func(r *store.Record) { r.Manual = true; r.Name = "B-local" })
+		if err := eB.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+
+		rec, ok := stB.Get("m-2")
+		if !ok || rec.Name != "A2" {
+			t.Fatalf("silent lost update: B missing unpulled m-2 (got %+v ok=%v)", rec, ok)
+		}
+		if _, ok := stB.Get("m-b"); !ok {
+			t.Fatal("B lost its own just-pushed doc")
+		}
+		// The pull (not the push) advanced the cursor to the server's max (3).
+		back, _ := loadState(bStatePath)
+		if back.Cursor != 3 {
+			t.Errorf("cursor should advance to server max via pull, got %d", back.Cursor)
+		}
+	})
+
+	t.Run("rejected push reconciles and stops repushing", func(t *testing.T) {
+		f := newFake()
+		ts := httptest.NewServer(f)
+		defer ts.Close()
+
+		// Device A creates m-1 and both devices converge on it.
+		eA, stA, _ := newEngine(t, ts.URL)
+		_ = stA.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "A1" })
+		if err := eA.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+		eB, stB, _ := newEngine(t, ts.URL)
+		if err := eB.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+
+		// B makes a losing local edit but does not sync yet.
+		_ = stB.Update("m-1", func(r *store.Record) { r.Name = "B-losing" })
+
+		// A makes a strictly-newer edit and publishes it (server v2).
+		time.Sleep(2 * time.Millisecond)
+		_ = stA.Update("m-1", func(r *store.Record) { r.Name = "A-winning" })
+		if err := eA.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+
+		// B syncs: its push is rejected (server copy is newer) and the pull must
+		// deliver + apply the winning server version in the same cycle. With the
+		// bug, B would adopt the push cursor (2) and Pull(since=2) would return
+		// nothing, so B would keep and forever re-push its losing content.
+		pushesBefore := f.pushes
+		if err := eB.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+		if f.pushes != pushesBefore+1 {
+			t.Fatalf("expected exactly one push attempt, got %d", f.pushes-pushesBefore)
+		}
+		rec, _ := stB.Get("m-1")
+		if rec.Name != "A-winning" {
+			t.Fatalf("rejected push did not reconcile: B still has %q", rec.Name)
+		}
+		if !eB.TookRemoteEdit() {
+			t.Error("expected remote-edit flag after the server version overwrote a local edit")
+		}
+		// DocState.Hash now matches the applied server content, so B is clean.
+		if ds := eB.state.Docs["m-1"]; ds.Hash != payloadHash(mustMarshal(t, rec)) {
+			t.Errorf("DocState.Hash does not match applied server content: %+v", ds)
+		}
+
+		// A follow-up sync must NOT re-push the losing content.
+		pushesAfter := f.pushes
+		if err := eB.SyncOnce("tok"); err != nil {
+			t.Fatal(err)
+		}
+		if f.pushes != pushesAfter {
+			t.Errorf("B kept re-pushing losing content: pushes %d -> %d", pushesAfter, f.pushes)
+		}
+	})
+}
+
+// mustMarshal is a test helper that JSON-encodes a record the way the engine's
+// dirty-detection does, so a test can compare against a stored DocState.Hash.
+func mustMarshal(t *testing.T, rec store.Record) []byte {
+	t.Helper()
+	b, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	return b
+}
