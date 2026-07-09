@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -49,7 +50,7 @@ func TestAuthMiddlewareSetsUserID(t *testing.T) {
 
 func TestRateLimiterAllowAndRefill(t *testing.T) {
 	now := time.Unix(0, 0)
-	rl := NewRateLimiter(1, 2) // 1 token/sec, burst 2
+	rl := NewRateLimiter(1, 2, false) // 1 token/sec, burst 2
 	rl.now = func() time.Time { return now }
 
 	if !rl.Allow("ip") || !rl.Allow("ip") {
@@ -61,5 +62,123 @@ func TestRateLimiterAllowAndRefill(t *testing.T) {
 	now = now.Add(1100 * time.Millisecond) // ~1 token refilled
 	if !rl.Allow("ip") {
 		t.Fatal("request after refill should pass")
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		trustProxy bool
+		remoteAddr string
+		flyIP      string
+		xff        string
+		want       string
+	}{
+		{
+			name:       "trust honors Fly-Client-IP first",
+			trustProxy: true,
+			remoteAddr: "10.0.0.1:5000",
+			flyIP:      "203.0.113.7",
+			xff:        "198.51.100.9, 10.0.0.1",
+			want:       "203.0.113.7",
+		},
+		{
+			name:       "trust falls to left-most XFF",
+			trustProxy: true,
+			remoteAddr: "10.0.0.1:5000",
+			xff:        "  198.51.100.9 , 10.0.0.1 ",
+			want:       "198.51.100.9",
+		},
+		{
+			name:       "trust falls to RemoteAddr host",
+			trustProxy: true,
+			remoteAddr: "192.0.2.5:44321",
+			want:       "192.0.2.5",
+		},
+		{
+			name:       "no-trust ignores headers, uses RemoteAddr",
+			trustProxy: false,
+			remoteAddr: "192.0.2.5:44321",
+			flyIP:      "203.0.113.7",
+			xff:        "198.51.100.9",
+			want:       "192.0.2.5",
+		},
+		{
+			name:       "RemoteAddr without port returns raw value",
+			trustProxy: false,
+			remoteAddr: "192.0.2.5",
+			want:       "192.0.2.5",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+			r.RemoteAddr = tt.remoteAddr
+			if tt.flyIP != "" {
+				r.Header.Set("Fly-Client-IP", tt.flyIP)
+			}
+			if tt.xff != "" {
+				r.Header.Set("X-Forwarded-For", tt.xff)
+			}
+			if got := clientIP(r, tt.trustProxy); got != tt.want {
+				t.Fatalf("clientIP(trustProxy=%v) = %q, want %q", tt.trustProxy, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRateLimiterEvictsIdleBuckets(t *testing.T) {
+	now := time.Unix(0, 0)
+	rl := NewRateLimiter(1, 100, false) // 1 token/sec, burst 100 (slow refill)
+	rl.now = func() time.Time { return now }
+
+	// idle: spends one token; within the sweep window it refills back to full
+	// burst, so it carries no state and is safe to evict.
+	if !rl.Allow("idle") {
+		t.Fatal("idle: first request should pass")
+	}
+	// busy: drained mid-consumption; even after the sweep window it has refilled
+	// well below full burst, so it must be retained.
+	rl.buckets["busy"] = &bucket{tokens: 0, last: now}
+
+	// Advance just past the sweep window; the sweep runs on the next Allow.
+	now = now.Add(sweepInterval + time.Second)
+	rl.Allow("trigger")
+
+	if _, ok := rl.buckets["idle"]; ok {
+		t.Fatal("idle bucket (refilled to full burst) should have been evicted")
+	}
+	if _, ok := rl.buckets["busy"]; !ok {
+		t.Fatal("busy bucket (still below full burst) should be retained")
+	}
+}
+
+func TestRateLimiterHardCapDeniesNewKeys(t *testing.T) {
+	now := time.Unix(0, 0)
+	rl := NewRateLimiter(1, 2, false)
+	rl.now = func() time.Time { return now }
+
+	// Fill the map to the hard cap with drained buckets so the sweep cannot
+	// reclaim them, then verify a brand-new key is denied while an existing
+	// (still non-empty) key continues to be served.
+	for i := 0; i < maxEntries; i++ {
+		k := "k" + strconv.Itoa(i)
+		rl.buckets[k] = &bucket{tokens: 0, last: now}
+	}
+	if len(rl.buckets) != maxEntries {
+		t.Fatalf("setup: len(buckets)=%d, want %d", len(rl.buckets), maxEntries)
+	}
+
+	if rl.Allow("brand-new-key") {
+		t.Fatal("new key past hard cap should be denied")
+	}
+	if _, ok := rl.buckets["brand-new-key"]; ok {
+		t.Fatal("denied new key must not be inserted")
+	}
+
+	// An existing key with tokens still works (no new map entry needed).
+	rl.buckets["existing"] = &bucket{tokens: 2, last: now}
+	if !rl.Allow("existing") {
+		t.Fatal("existing key with tokens should still be served past the cap")
 	}
 }
