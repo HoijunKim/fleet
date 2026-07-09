@@ -238,3 +238,121 @@ func TestExchangeRejectsBadPKCE(t *testing.T) {
 		t.Fatalf("bad-pkce exchange status = %d, want 401", resp.StatusCode)
 	}
 }
+
+// TestGithubLoginRedirectValidation exercises the strict loopback-only
+// redirect check (FIX 1). A naive strings.HasPrefix(redirect, "http://127.0.0.1")
+// check would accept lookalike hosts like "127.0.0.1.attacker.com" and
+// userinfo tricks like "127.0.0.1@evil.com", both of which resolve to an
+// attacker-controlled host and would leak the link_code on to it.
+func TestGithubLoginRedirectValidation(t *testing.T) {
+	cases := []struct {
+		name     string
+		redirect string
+		wantOK   bool
+	}{
+		{"subdomain lookalike host", "http://127.0.0.1.attacker.com:9/cb", false},
+		{"userinfo trick", "http://127.0.0.1@evil.com/cb", false},
+		{"https scheme not allowed", "https://127.0.0.1:9/cb", false},
+		{"non-loopback host", "http://evil.com/cb", false},
+		{"loopback with no port", "http://127.0.0.1/cb", false},
+		{"loopback with port", "http://127.0.0.1:53017/cb", true},
+		{"localhost with port", "http://localhost:53017/cb", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := New(Config{
+				Store:           newFakeStore(),
+				GitHub:          fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
+				SigningKey:      []byte("k"),
+				AuthorizeURL:    "https://github.test/authorize",
+				AllowedRedirect: "http://127.0.0.1",
+			})
+			srv := newTestServer(h)
+			defer srv.Close()
+			client := srv.Client()
+			client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+			sum := sha256.Sum256([]byte("verifier"))
+			challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+			loginURL := srv.URL + "/auth/github/login?state=cs&code_challenge=" + challenge + "&redirect=" + url.QueryEscape(tc.redirect)
+
+			resp, err := client.Get(loginURL)
+			if err != nil {
+				t.Fatalf("login: %v", err)
+			}
+			if tc.wantOK {
+				if resp.StatusCode != http.StatusFound {
+					t.Fatalf("redirect %q: status = %d, want 302", tc.redirect, resp.StatusCode)
+				}
+				return
+			}
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("redirect %q: status = %d, want 400", tc.redirect, resp.StatusCode)
+			}
+			if loc := resp.Header.Get("Location"); loc != "" {
+				t.Fatalf("redirect %q: unexpected Location header %q on rejection", tc.redirect, loc)
+			}
+		})
+	}
+}
+
+// TestCallbackRejectsInvalidStashedRedirect exercises the defense-in-depth
+// re-validation in GithubCallback. It bypasses GithubLogin's own check by
+// stashing a malicious redirect directly into the pending store, simulating
+// what a future regression in the login-time check would allow through, and
+// confirms the callback still refuses to redirect to it.
+func TestCallbackRejectsInvalidStashedRedirect(t *testing.T) {
+	h := New(Config{
+		Store:           newFakeStore(),
+		GitHub:          fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
+		SigningKey:      []byte("k"),
+		AuthorizeURL:    "https://github.test/authorize",
+		AllowedRedirect: "http://127.0.0.1",
+	})
+	if !h.pending.put("forged-state", pendingAuth{
+		clientState: "cs", codeChallenge: "chal", redirect: "http://evil.com/cb",
+	}, 10*time.Minute) {
+		t.Fatal("pending.put unexpectedly failed")
+	}
+
+	srv := newTestServer(h)
+	defer srv.Close()
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	resp, err := client.Get(srv.URL + "/auth/github/callback?code=xyz&state=forged-state")
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want 400", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "" {
+		t.Fatalf("unexpected Location header %q on rejection", loc)
+	}
+}
+
+// TestExchangeRejectsOversizedBody exercises FIX 2: the request body is
+// wrapped with http.MaxBytesReader before decoding, so a body over the cap
+// is rejected (400) instead of being buffered in full.
+func TestExchangeRejectsOversizedBody(t *testing.T) {
+	h := New(Config{
+		Store:        newFakeStore(),
+		GitHub:       fakeGitHub{user: GitHubUser{ID: 1, Login: "o"}},
+		SigningKey:   []byte("k"),
+		AuthorizeURL: "https://github.test/authorize",
+	})
+	srv := newTestServer(h)
+	defer srv.Close()
+
+	oversized := strings.Repeat("a", maxRequestBodyBytes+1)
+	body := `{"link_code":"x","code_verifier":"` + oversized + `"}`
+	resp, err := srv.Client().Post(srv.URL+"/auth/exchange", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("exchange: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("oversized body status = %d, want 400", resp.StatusCode)
+	}
+}

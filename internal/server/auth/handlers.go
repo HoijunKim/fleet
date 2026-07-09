@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/hoijun/fleet/internal/server/pgstore"
 )
+
+// maxRequestBodyBytes caps the size of JSON request bodies accepted by the
+// token endpoints, so an oversized body is rejected instead of buffered in
+// full before decoding.
+const maxRequestBodyBytes = 64 << 10 // 64 KiB
 
 // Config carries the OAuth handlers' dependencies.
 type Config struct {
@@ -71,6 +75,36 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// validateRedirect enforces a strict loopback-only redirect URL. It rejects
+// lookalike hosts (e.g. "127.0.0.1.attacker.com") and userinfo tricks (e.g.
+// "127.0.0.1@evil.com") that a naive prefix check would accept, since both
+// resolve to an attacker-controlled host and would leak the link_code.
+//
+// Accepted only when: scheme is "http", there is no userinfo component, the
+// parsed hostname (which strips userinfo and port) is exactly "127.0.0.1" or
+// "localhost", and an explicit port is present.
+func validateRedirect(redirect string) bool {
+	u, err := url.Parse(redirect)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	if u.User != nil {
+		return false
+	}
+	switch u.Hostname() {
+	case "127.0.0.1", "localhost":
+	default:
+		return false
+	}
+	if u.Port() == "" {
+		return false
+	}
+	return true
+}
+
 // GithubLogin starts the flow: stashes {clientState, challenge, redirect} under
 // a server state and redirects to GitHub's authorize URL.
 func (h *Handlers) GithubLogin(w http.ResponseWriter, r *http.Request) {
@@ -80,12 +114,15 @@ func (h *Handlers) GithubLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing params", http.StatusBadRequest)
 		return
 	}
-	if !strings.HasPrefix(redirect, h.cfg.AllowedRedirect) {
+	if !validateRedirect(redirect) {
 		http.Error(w, "redirect not allowed", http.StatusBadRequest)
 		return
 	}
 	serverState := randToken()
-	h.pending.put(serverState, pendingAuth{clientState: state, codeChallenge: challenge, redirect: redirect}, 10*time.Minute)
+	if !h.pending.put(serverState, pendingAuth{clientState: state, codeChallenge: challenge, redirect: redirect}, 10*time.Minute) {
+		http.Error(w, "server busy", http.StatusServiceUnavailable)
+		return
+	}
 
 	au, err := url.Parse(h.cfg.AuthorizeURL)
 	if err != nil {
@@ -115,6 +152,12 @@ func (h *Handlers) GithubCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown state", http.StatusBadRequest)
 		return
 	}
+	// Defense in depth: re-validate the stashed redirect even though
+	// GithubLogin already validated it before storing it.
+	if !validateRedirect(pend.redirect) {
+		http.Error(w, "redirect not allowed", http.StatusBadRequest)
+		return
+	}
 	ctx := r.Context()
 	ghToken, err := h.cfg.GitHub.Exchange(ctx, code)
 	if err != nil {
@@ -134,9 +177,12 @@ func (h *Handlers) GithubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	linkCode := randToken()
-	h.links.put(linkCode, linkData{
+	if !h.links.put(linkCode, linkData{
 		userID: user.ID, login: user.Login, avatarURL: user.AvatarURL, codeChallenge: pend.codeChallenge,
-	}, 5*time.Minute)
+	}, 5*time.Minute) {
+		http.Error(w, "server busy", http.StatusServiceUnavailable)
+		return
+	}
 
 	dest, err := url.Parse(pend.redirect)
 	if err != nil {
@@ -152,6 +198,7 @@ func (h *Handlers) GithubCallback(w http.ResponseWriter, r *http.Request) {
 
 // Exchange validates PKCE for a link code and returns fleet session tokens.
 func (h *Handlers) Exchange(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	var req struct {
 		LinkCode     string `json:"link_code"`
 		CodeVerifier string `json:"code_verifier"`
@@ -192,6 +239,7 @@ func (h *Handlers) Exchange(w http.ResponseWriter, r *http.Request) {
 
 // Refresh rotates the refresh token and issues a new access token.
 func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -220,6 +268,7 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 
 // Logout revokes a refresh token.
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
