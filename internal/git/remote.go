@@ -4,10 +4,20 @@ import "strings"
 
 // NormalizeRemote reduces a git remote URL to a stable, machine-independent
 // identity: scheme and credentials removed, host+path lowercased, trailing
-// ".git" stripped. It is the basis of a code project's sync doc_id.
+// "/" and ".git" stripped (in both orders, so "repo/", "repo.git",
+// "repo.git/", and "repo/.git" all converge). It is the basis of a code
+// project's sync doc_id.
+//
+// The whole path is lowercased so the same GitHub repo converges regardless
+// of owner/repo casing (GitHub is case-insensitive). Known limitation: on
+// case-SENSITIVE hosts (self-hosted GitLab/Gitea/Bitbucket Server), two repos
+// that differ only by path case would collide to one doc_id; acceptable for
+// the GitHub-centric v0.
 func NormalizeRemote(remote string) string {
 	remote = strings.TrimSpace(remote)
+	remote = strings.TrimSuffix(remote, "/")
 	remote = strings.TrimSuffix(remote, ".git")
+	remote = strings.TrimSuffix(remote, "/")
 	switch {
 	case strings.HasPrefix(remote, "git@"):
 		rest := strings.TrimPrefix(remote, "git@")

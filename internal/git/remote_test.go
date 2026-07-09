@@ -18,6 +18,36 @@ func TestNormalizeRemote(t *testing.T) {
 	}
 }
 
+func TestNormalizeRemote_TrailingSlashConvergence(t *testing.T) {
+	const want = "github.com/user/repo"
+	forms := []string{
+		"https://github.com/user/repo",
+		"https://github.com/user/repo/",
+		"https://github.com/user/repo.git",
+		"https://github.com/user/repo.git/",
+		"https://github.com/user/repo/.git",
+	}
+	for _, in := range forms {
+		if got := NormalizeRemote(in); got != want {
+			t.Errorf("NormalizeRemote(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalizeRemote_DistinctReposStayDistinct(t *testing.T) {
+	a := NormalizeRemote("https://github.com/user/repo-a")
+	b := NormalizeRemote("https://github.com/user/repo-b")
+	if a == b {
+		t.Errorf("NormalizeRemote collided distinct repos: %q == %q", a, b)
+	}
+
+	h1 := NormalizeRemote("https://host1.com/x/y")
+	h2 := NormalizeRemote("https://host2.com/x/y")
+	if h1 == h2 {
+		t.Errorf("NormalizeRemote collided distinct hosts: %q == %q", h1, h2)
+	}
+}
+
 func TestRemoteURL(t *testing.T) {
 	f := &opFake{out: map[string]string{
 		"remote get-url": "git@github.com:o/r.git\n",
