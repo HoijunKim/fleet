@@ -1,4 +1,8 @@
 <script lang="ts">
+  import SyncPill from "./SyncPill.svelte";
+  import AccountChip from "./AccountChip.svelte";
+  import SignIn from "./SignIn.svelte";
+
   export let loadingCount: number = 0;
   // Count of code projects with unfetched upstream commits (behind > 0).
   // Computed once in App.svelte as stats.behind - not recomputed here so the
@@ -15,6 +19,20 @@
   export let onOpenPalette: () => void;
   export let onOpenSearch: () => void;
   export let onAddProject: () => void;
+
+  export let authSignedIn: boolean = false;
+  export let authLogin: string = "";
+  export let authAvatar: string = "";
+  export let authBusy: boolean = false;
+  export let syncState: { state: string; lastSyncedUnix: number; error: string } = {
+    state: "signedout",
+    lastSyncedUnix: 0,
+    error: "",
+  };
+  export let onSignIn: () => void = () => {};
+  export let onSignOut: () => void = () => {};
+  export let onSyncNow: () => void = () => {};
+  export let onRetrySync: () => void = () => {};
 
   // Bulk git actions collapse into one dropdown so the bar stays a single row.
   let actionsOpen = false;
@@ -93,6 +111,22 @@
       </div>
       <span class="toolbar-div"></span>
     {/if}
+
+    <div class="acct-cluster">
+      <SyncPill
+        state={syncState.state}
+        lastSyncedUnix={syncState.lastSyncedUnix}
+        error={syncState.error}
+        onRetry={onRetrySync}
+        {onSignIn}
+      />
+      {#if authSignedIn}
+        <AccountChip login={authLogin} avatarUrl={authAvatar} {onSignOut} {onSyncNow} />
+      {:else}
+        <SignIn {onSignIn} busy={authBusy} />
+      {/if}
+    </div>
+    <span class="toolbar-div"></span>
 
     <!-- Global utility: jump, search, settings - always at the far right -->
     <button class="icon-btn" on:click={onOpenPalette} title="Command palette (Ctrl K)" aria-label="Command palette">

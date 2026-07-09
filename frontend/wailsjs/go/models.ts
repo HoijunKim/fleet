@@ -63,6 +63,22 @@ export namespace main {
 	        this.status = source["status"];
 	    }
 	}
+	export class AuthStatusView {
+	    signedIn: boolean;
+	    login: string;
+	    avatarUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AuthStatusView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.signedIn = source["signedIn"];
+	        this.login = source["login"];
+	        this.avatarUrl = source["avatarUrl"];
+	    }
+	}
 	export class BranchInfo {
 	    current: string;
 	    all: string[];
@@ -479,6 +495,22 @@ export namespace main {
 	        this.npmScripts = source["npmScripts"];
 	        this.npmBin = source["npmBin"];
 	        this.truncated = source["truncated"];
+	    }
+	}
+	export class SyncStateView {
+	    state: string;
+	    lastSyncedUnix: number;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncStateView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.lastSyncedUnix = source["lastSyncedUnix"];
+	        this.error = source["error"];
 	    }
 	}
 

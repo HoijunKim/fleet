@@ -30,6 +30,14 @@ export function AskAI(arg1) {
   return window['go']['main']['App']['AskAI'](arg1);
 }
 
+export function AuthStart() {
+  return window['go']['main']['App']['AuthStart']();
+}
+
+export function AuthStatus() {
+  return window['go']['main']['App']['AuthStatus']();
+}
+
 export function Branches(arg1) {
   return window['go']['main']['App']['Branches'](arg1);
 }
@@ -202,6 +210,10 @@ export function SetTaskStatus(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTaskStatus'](arg1, arg2, arg3);
 }
 
+export function SignOut() {
+  return window['go']['main']['App']['SignOut']();
+}
+
 export function StagedDiff(arg1) {
   return window['go']['main']['App']['StagedDiff'](arg1);
 }
@@ -216,6 +228,14 @@ export function StashList(arg1) {
 
 export function StashPop(arg1) {
   return window['go']['main']['App']['StashPop'](arg1);
+}
+
+export function SyncNow() {
+  return window['go']['main']['App']['SyncNow']();
+}
+
+export function SyncState() {
+  return window['go']['main']['App']['SyncState']();
 }
 
 export function ToggleTask(arg1, arg2) {

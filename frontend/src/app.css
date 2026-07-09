@@ -336,6 +336,9 @@ select.input option { background: var(--surface); color: var(--text); }
   background: var(--border);
 }
 
+/* Cloud auth + sync cluster (sync pill + account chip / sign-in button). */
+.acct-cluster { display: inline-flex; align-items: center; gap: 8px; }
+
 /* Count chips */
 .chips { display: flex; align-items: center; gap: 6px; }
 .chip {

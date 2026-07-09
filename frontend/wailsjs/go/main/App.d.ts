@@ -17,6 +17,10 @@ export function Agenda():Promise<Array<main.AgendaItem>>;
 
 export function AskAI(arg1:string):Promise<string>;
 
+export function AuthStart():Promise<string>;
+
+export function AuthStatus():Promise<main.AuthStatusView>;
+
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
 export function CancelAI():Promise<void>;
@@ -103,6 +107,8 @@ export function SetTags(arg1:string,arg2:Array<string>):Promise<string>;
 
 export function SetTaskStatus(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function SignOut():Promise<string>;
+
 export function StagedDiff(arg1:string):Promise<string>;
 
 export function Stash(arg1:string):Promise<string>;
@@ -110,6 +116,10 @@ export function Stash(arg1:string):Promise<string>;
 export function StashList(arg1:string):Promise<Array<string>>;
 
 export function StashPop(arg1:string):Promise<string>;
+
+export function SyncNow():Promise<string>;
+
+export function SyncState():Promise<main.SyncStateView>;
 
 export function ToggleTask(arg1:string,arg2:string):Promise<string>;
 

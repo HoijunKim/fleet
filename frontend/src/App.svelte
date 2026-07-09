@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, SignOut, SyncNow, SyncState } from "../wailsjs/go/main/App";
+  import { EventsOn } from "../wailsjs/runtime/runtime";
   import Toolbar from "./lib/Toolbar.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
   import DetailPanel from "./lib/DetailPanel.svelte";
@@ -34,6 +35,33 @@
   // Top-level view: the fleet-wide Overview (default), the project list, or the
   // interactive dependency Graph.
   let view: "today" | "overview" | "projects" | "graph" = "today";
+
+  // ---- cloud auth + sync ---------------------------------------------------
+  let auth = { signedIn: false, login: "", avatarUrl: "" };
+  let sync = { state: "signedout", lastSyncedUnix: 0, error: "" };
+  let authBusy = false;
+  let unsubs: Array<() => void> = [];
+
+  async function signIn() {
+    if (authBusy) return;
+    authBusy = true;
+    try {
+      const err = await AuthStart();
+      if (err) toastError("Sign in: " + err);
+    } catch (e) {
+      toastError("Sign in: " + errText(e));
+    } finally {
+      authBusy = false;
+    }
+  }
+  async function signOut() {
+    const err = await SignOut();
+    if (err) toastError("Sign out: " + err);
+  }
+  async function syncNow() {
+    const err = await SyncNow();
+    if (err) toastError("Sync: " + err);
+  }
 
   let paletteOpen = false;
   let searchOpen = false;
@@ -614,11 +642,27 @@
     window.addEventListener("keydown", onKey);
     await loadAll();
     await refreshAutoFetch();
+
+    try {
+      auth = await AuthStatus();
+      sync = await SyncState();
+    } catch {
+      /* offline-first: ignore */
+    }
+    unsubs.push(EventsOn("auth:changed", (v: any) => { if (v) auth = v; }));
+    unsubs.push(EventsOn("sync:changed", (v: any) => {
+      if (v && v.state === "error" && sync.state !== "error") {
+        toastError("Sync failed: " + (v.error || "unknown error"));
+      }
+      if (v) sync = v;
+    }));
+    unsubs.push(EventsOn("sync:remoteEdit", () => toastInfo("Updated on another device")));
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", onKey);
     if (autoFetchTimer) clearInterval(autoFetchTimer);
+    for (const off of unsubs) off();
   });
 </script>
 
@@ -636,6 +680,15 @@
   onOpenSettings={() => (settingsOpen = true)}
   onOpenPalette={() => (paletteOpen = true)}
   onOpenSearch={() => (searchOpen = true)}
+  authSignedIn={auth.signedIn}
+  authLogin={auth.login}
+  authAvatar={auth.avatarUrl}
+  {authBusy}
+  syncState={sync}
+  onSignIn={signIn}
+  onSignOut={signOut}
+  onSyncNow={syncNow}
+  onRetrySync={syncNow}
 />
 
 {#if view === "projects"}
