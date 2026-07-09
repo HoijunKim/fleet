@@ -14,6 +14,7 @@ import (
 
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/ai"
+	"github.com/hoijun/fleet/internal/cloud"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/deps"
 	"github.com/hoijun/fleet/internal/edges"
@@ -25,6 +26,7 @@ import (
 	"github.com/hoijun/fleet/internal/scan"
 	"github.com/hoijun/fleet/internal/store"
 	"github.com/hoijun/fleet/internal/symbols"
+	"github.com/hoijun/fleet/internal/syncengine"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -45,6 +47,26 @@ type App struct {
 	aiMu     sync.Mutex
 	aiCancel context.CancelFunc
 	aiGen    int
+
+	// cloud sync + auth
+	cloudClient *cloud.Client
+	creds       cloud.CredStore
+	engine      *syncengine.Engine
+	authMu      sync.Mutex
+	access      string
+	user        cloud.User
+	signedIn    bool
+	session     *cloud.Session
+	syncMu      sync.Mutex
+	syncView    SyncStateView
+	syncTrigger chan struct{}
+	// syncRunMu single-flights the actual SyncOnce call: the background loop
+	// and a UI-triggered SyncNow can both call runSync concurrently, and
+	// running two syncs at once on the same Session/Engine risks a double
+	// Refresh (one spuriously failing) and concurrent store/state mutation.
+	// It is deliberately separate from syncMu (which only guards syncView)
+	// since it must stay held across the whole network round trip.
+	syncRunMu sync.Mutex
 }
 
 // Cached GitHub/symbol lookups expire so a session doesn't show stale CI or
@@ -63,14 +85,33 @@ const (
 	symTTL = 5 * time.Minute
 )
 
-// NewApp builds the App with the real git runner and loaded config.
+// NewApp builds the App with the real git runner, loaded config, and the cloud
+// sync stack (API client, keychain-backed credential store, sync engine).
 func NewApp() *App {
 	cfg, cfgPath, _ := config.Load()
-	storePath := filepath.Join(filepath.Dir(cfgPath), "projects.json")
+	dir := filepath.Dir(cfgPath)
+	storePath := filepath.Join(dir, "projects.json")
 	st, _ := store.Open(storePath) // empty store on error; UI still works
-	edgesPath := filepath.Join(filepath.Dir(cfgPath), "edges.json")
+	edgesPath := filepath.Join(dir, "edges.json")
 	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
-	return &App{cfg: cfg, runner: git.ExecRunner{}, store: st, ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed, symCache: map[string]symEntry{}, aiRunner: ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey)}
+
+	cl := cloud.New(apiURL())
+	creds := cloud.KeyringStore{Service: "fleet", User: "refresh"}
+	syncPath := filepath.Join(dir, "sync.json")
+	eng := syncengine.New(st, cl, syncPath, func(path string) string {
+		u, _ := git.RemoteURL(git.ExecRunner{}, path)
+		return u
+	})
+
+	return &App{
+		cfg: cfg, runner: git.ExecRunner{}, store: st,
+		ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed,
+		symCache:    map[string]symEntry{},
+		aiRunner:    ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey),
+		cloudClient: cl, creds: creds, engine: eng,
+		syncTrigger: make(chan struct{}, 1),
+		syncView:    SyncStateView{State: "signedout"},
+	}
 }
 
 // cfgSnapshot returns a copy of the current config, safe to call from any
@@ -81,7 +122,10 @@ func (a *App) cfgSnapshot() config.Config {
 	return a.cfg
 }
 
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	a.startSync(ctx)
+}
 
 // RepoView is the JS-serializable view of a repo (repo.Repo's error field does
 // not serialize, so it becomes ErrMsg; last-commit fields are flattened).
