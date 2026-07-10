@@ -358,7 +358,10 @@ vi.mock("../../wailsjs/go/main/App", () => ({
 
 import * as S from "./agentSession";
 
-beforeEach(() => { calls.length = 0; localStorage.clear(); });
+// vitest runs in the `node` environment (no localStorage). The store guards
+// `typeof localStorage === "undefined"`, so chat persistence simply no-ops here;
+// guard the test's own cleanup the same way.
+beforeEach(() => { calls.length = 0; if (typeof localStorage !== "undefined") localStorage.clear(); });
 
 describe("agentSession", () => {
   it("runs a question and lands the answer on agent:done", async () => {
