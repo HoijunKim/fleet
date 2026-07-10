@@ -23,7 +23,8 @@ func DefaultPolicy() Policy {
 		Disallowed: []string{
 			"Read(**/.env)", "Read(**/.env.*)", "Read(**/*secret*)",
 			"Read(**/id_rsa)", "Read(**/id_ed25519)", "Read(**/*.pem)",
-			"Read(**/credentials)", "Read(**/.aws/**)",
+			"Read(**/*.key)", "Read(**/.ssh/**)",
+			"Read(**/credentials)", "Read(**/credentials*)", "Read(**/.aws/**)",
 			"Bash(rm:*)", "Bash(git push:*)", "Bash(sudo:*)", "Bash(curl:*)",
 		},
 	}

@@ -22,6 +22,9 @@ func TestDefaultPolicyLists(t *testing.T) {
 	if !has(p.Disallowed, "Read(**/.env)") || !has(p.Disallowed, "Bash(rm:*)") || !has(p.Disallowed, "Bash(git push:*)") {
 		t.Errorf("secret/destructive must be denied: %+v", p.Disallowed)
 	}
+	if !has(p.Disallowed, "Read(**/*.key)") || !has(p.Disallowed, "Read(**/.ssh/**)") || !has(p.Disallowed, "Read(**/credentials*)") {
+		t.Errorf("expanded secret coverage must be denied: %+v", p.Disallowed)
+	}
 	// Mutators are gated by the hook, so they are in NEITHER list.
 	for _, m := range []string{"Edit", "Write"} {
 		if has(p.Allowed, m) || has(p.Disallowed, m) {
