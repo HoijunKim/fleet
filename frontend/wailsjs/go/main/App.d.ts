@@ -15,6 +15,14 @@ export function AddTask(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function Agenda():Promise<Array<main.AgendaItem>>;
 
+export function AgentAsk(arg1:string,arg2:string):Promise<string>;
+
+export function AgentAvailable():Promise<boolean>;
+
+export function AgentConsent():Promise<boolean>;
+
+export function ApproveAction(arg1:string,arg2:boolean):Promise<void>;
+
 export function AskAI(arg1:string):Promise<string>;
 
 export function AuthStart():Promise<string>;
@@ -24,6 +32,8 @@ export function AuthStatus():Promise<main.AuthStatusView>;
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
 export function CancelAI():Promise<void>;
+
+export function CancelAgent():Promise<void>;
 
 export function Checkout(arg1:string,arg2:string):Promise<string>;
 
@@ -46,6 +56,8 @@ export function GetProject(arg1:string):Promise<main.ProjectView>;
 export function GitHubInfo(arg1:string):Promise<main.GitHubView>;
 
 export function GitHubURL(arg1:string):Promise<string>;
+
+export function GiveAgentConsent():Promise<string>;
 
 export function ListEdges():Promise<Array<main.EdgeView>>;
 

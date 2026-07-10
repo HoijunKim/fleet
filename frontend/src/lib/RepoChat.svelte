@@ -1,8 +1,14 @@
 <script lang="ts">
-  import { AskAI, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles } from "../../wailsjs/go/main/App";
+  import {
+    AskAI, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles,
+    AgentAsk, ApproveAction, CancelAgent, AgentAvailable, AgentConsent, GiveAgentConsent,
+  } from "../../wailsjs/go/main/App";
+  import { EventsOn } from "../../wailsjs/runtime/runtime";
+  import { onMount, onDestroy } from "svelte";
   import { renderBrief } from "./markdown";
   import { redactSecrets } from "./redact";
   import { daysUntil } from "./pm";
+  import { toastError } from "./toasts";
 
   // The selected code repo. Chat resets when the path changes.
   export let project: any;
@@ -14,6 +20,99 @@
   let loading = false;
   let loadedPath = "";
   let genId = 0;
+
+  // Agentic deep-dive (drives the claude CLI with a live approval gate).
+  let agentic = false; // provider is Claude + CLI present and meets the v2.1 floor
+  let consent = false; // one-time consent given
+  let agentRunning = false;
+  let agentStream = ""; // streamed assistant text for the in-flight run
+  let activity: { tool: string; input: string }[] = [];
+  let pending: { id: string; toolName: string; toolInput: string } | null = null;
+  let cost: { costUsd: number; inputTokens: number; outputTokens: number } | null = null;
+  let unsubs: Array<() => void> = [];
+
+  function fmtInput(v: any): string {
+    if (typeof v === "string") return v;
+    try {
+      return JSON.stringify(v, null, 2);
+    } catch {
+      return String(v);
+    }
+  }
+
+  onMount(async () => {
+    try {
+      agentic = await AgentAvailable();
+      consent = await AgentConsent();
+    } catch {
+      agentic = false;
+    }
+    unsubs.push(EventsOn("agent:text", (t: any) => { agentStream += String(t ?? ""); }));
+    unsubs.push(EventsOn("agent:activity", (a: any) => {
+      activity = [...activity, { tool: a?.tool ?? "", input: fmtInput(a?.input) }];
+    }));
+    unsubs.push(EventsOn("agent:action", (a: any) => {
+      pending = { id: a?.id ?? "", toolName: a?.toolName ?? "", toolInput: fmtInput(a?.toolInput) };
+    }));
+    unsubs.push(EventsOn("agent:done", (d: any) => {
+      cost = { costUsd: d?.costUsd ?? 0, inputTokens: d?.inputTokens ?? 0, outputTokens: d?.outputTokens ?? 0 };
+      const answer = agentStream.trim() || String(d?.result ?? "(no answer)");
+      turns = [...turns, { role: "assistant", text: answer }];
+      saveChat();
+      agentStream = "";
+      activity = [];
+      pending = null;
+      agentRunning = false;
+    }));
+    unsubs.push(EventsOn("agent:error", (e: any) => {
+      const msg = String(e ?? "agent failed");
+      turns = [...turns, { role: "assistant", text: "error: " + msg }];
+      saveChat();
+      toastError("Agentic deep-dive: " + msg);
+      agentStream = "";
+      pending = null;
+      agentRunning = false;
+    }));
+  });
+
+  onDestroy(() => { unsubs.forEach((u) => u()); });
+
+  async function giveConsent() {
+    const msg = await GiveAgentConsent();
+    if (!msg) consent = true;
+    else toastError(msg);
+  }
+
+  async function askAgent(text: string) {
+    const q = text.trim();
+    if (!q || agentRunning) return;
+    question = "";
+    turns = [...turns, { role: "user", text: q }];
+    agentStream = "";
+    activity = [];
+    pending = null;
+    cost = null;
+    agentRunning = true;
+    const id = project.repoPath || project.path;
+    const err = await AgentAsk(id, q);
+    if (err) {
+      turns = [...turns, { role: "assistant", text: err }];
+      toastError(err);
+      agentRunning = false;
+    }
+  }
+
+  async function decide(approved: boolean) {
+    if (!pending) return;
+    await ApproveAction(pending.id, approved);
+    pending = null;
+  }
+
+  function cancelAgent() {
+    CancelAgent();
+    agentRunning = false;
+    pending = null;
+  }
 
   function cancelAsk() {
     genId++;
@@ -191,18 +290,78 @@
   function onKey(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      ask(question);
+      submit();
     }
+  }
+
+  // dispatch picks the agentic path when available + consented, else single-shot.
+  // Used by the input row (via submit) AND the starter buttons so both honor the
+  // agentic mode.
+  function dispatch(text: string) {
+    if (agentic && consent) askAgent(text);
+    else ask(text);
+  }
+
+  function submit() {
+    dispatch(question);
   }
 </script>
 
 <div class="rchat">
+  {#if agentic && !consent}
+    <div class="rchat-consent">
+      <p>
+        The agentic deep-dive lets Claude Code read files in this repo and send
+        them to Anthropic under your Claude login, and can propose edits or
+        commands (each one you approve here first).
+      </p>
+      <button class="btn btn-primary btn-sm" on:click={giveConsent}>Enable agentic deep-dive</button>
+    </div>
+  {/if}
+
+  {#if agentic && consent && (agentRunning || activity.length || agentStream || pending)}
+    <div class="rchat-agent">
+      {#if activity.length}
+        <div class="rchat-activity">
+          {#each activity as a}
+            <div class="rchat-act"><span class="rchat-tool-dot"></span><span class="mono">{a.tool}</span> {a.input}</div>
+          {/each}
+        </div>
+      {/if}
+      {#if agentStream}
+        <div class="rchat-a rchat-stream">{agentStream}</div>
+      {/if}
+      {#if pending}
+        <div class="rchat-approval">
+          <div class="rchat-approval-head">Approve <span class="mono">{pending.toolName}</span>?</div>
+          <pre class="rchat-approval-body">{pending.toolInput}</pre>
+          <div class="rchat-approval-btns">
+            <button class="btn btn-primary btn-sm" on:click={() => decide(true)}>Approve</button>
+            <button class="btn btn-sm rchat-reject" on:click={() => decide(false)}>Reject</button>
+          </div>
+        </div>
+      {/if}
+      {#if agentRunning}
+        <div class="rchat-loading">
+          <span class="spinner"></span> working in the repo...
+          <button class="rchat-clear" on:click={cancelAgent}>Cancel</button>
+        </div>
+      {/if}
+      {#if cost}
+        <div class="rchat-cost">cost ${cost.costUsd.toFixed(4)} - {cost.inputTokens} in / {cost.outputTokens} out tokens</div>
+      {/if}
+    </div>
+  {/if}
+
   {#if turns.length === 0}
     <div class="rchat-intro">
       <p class="rchat-hint">Ask about this repo - I read its recent commits, uncommitted diff, and exported symbols.</p>
+      {#if !agentic}
+        <p class="rchat-note">Agentic deep-dive (live activity, approvals, cost) needs the Claude (Claude Code) provider with the claude CLI installed - using single-shot mode for now.</p>
+      {/if}
       <div class="rchat-starters">
         {#each STARTERS as s}
-          <button class="rchat-starter" on:click={() => ask(s)} disabled={loading}>{s}</button>
+          <button class="rchat-starter" on:click={() => dispatch(s)} disabled={loading || agentRunning}>{s}</button>
         {/each}
       </div>
     </div>
@@ -237,10 +396,10 @@
       placeholder="Ask about this repo..."
       bind:value={question}
       on:keydown={onKey}
-      disabled={loading}
+      disabled={loading || agentRunning}
       aria-label="Ask about this repo"
     />
-    <button class="btn btn-primary btn-sm" on:click={() => ask(question)} disabled={loading || !question.trim()}>Ask</button>
+    <button class="btn btn-primary btn-sm" on:click={submit} disabled={(loading || agentRunning) || !question.trim()}>Ask</button>
   </div>
 </div>
 
@@ -313,4 +472,18 @@
   .rchat-loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
   .rchat-input { display: flex; gap: 8px; }
   .rchat-input .input { flex: 1; }
+  .rchat-note { font-size: 11.5px; color: var(--faint); margin: -6px 0 12px; line-height: 1.5; }
+  .rchat-consent { border: 1px solid var(--border); border-radius: var(--r-btn); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .rchat-consent p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .rchat-agent { display: flex; flex-direction: column; gap: 10px; }
+  .rchat-activity { display: flex; flex-direction: column; gap: 4px; }
+  .rchat-act { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--faint); }
+  .rchat-stream { white-space: pre-wrap; }
+  .rchat-approval { border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--r-btn); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .rchat-approval-head { font-size: 13px; color: var(--text); }
+  .rchat-approval-body { margin: 0; max-height: 240px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--raised); border-radius: 4px; padding: 8px; white-space: pre-wrap; }
+  .rchat-approval-btns { display: flex; gap: 8px; }
+  .rchat-reject { border: 1px solid var(--err-line); color: var(--err); background: transparent; }
+  .rchat-cost { font-size: 11px; color: var(--faint); }
+  .mono { font-family: var(--font-mono); }
 </style>

@@ -26,6 +26,22 @@ export function Agenda() {
   return window['go']['main']['App']['Agenda']();
 }
 
+export function AgentAsk(arg1, arg2) {
+  return window['go']['main']['App']['AgentAsk'](arg1, arg2);
+}
+
+export function AgentAvailable() {
+  return window['go']['main']['App']['AgentAvailable']();
+}
+
+export function AgentConsent() {
+  return window['go']['main']['App']['AgentConsent']();
+}
+
+export function ApproveAction(arg1, arg2) {
+  return window['go']['main']['App']['ApproveAction'](arg1, arg2);
+}
+
 export function AskAI(arg1) {
   return window['go']['main']['App']['AskAI'](arg1);
 }
@@ -44,6 +60,10 @@ export function Branches(arg1) {
 
 export function CancelAI() {
   return window['go']['main']['App']['CancelAI']();
+}
+
+export function CancelAgent() {
+  return window['go']['main']['App']['CancelAgent']();
 }
 
 export function Checkout(arg1, arg2) {
@@ -88,6 +108,10 @@ export function GitHubInfo(arg1) {
 
 export function GitHubURL(arg1) {
   return window['go']['main']['App']['GitHubURL'](arg1);
+}
+
+export function GiveAgentConsent() {
+  return window['go']['main']['App']['GiveAgentConsent']();
 }
 
 export function ListEdges() {
