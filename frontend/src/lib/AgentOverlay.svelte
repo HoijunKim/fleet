@@ -32,6 +32,8 @@
   }
 </script>
 
+<svelte:window on:keydown={onOverlayKey} />
+
 {#if $overlayOpen}
   <div
     class="ov-backdrop"
