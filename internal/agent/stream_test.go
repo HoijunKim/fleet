@@ -30,6 +30,18 @@ func TestParsePartialTextDelta(t *testing.T) {
 	if len(evs) != 1 || evs[0].Kind != KindText || evs[0].Text != "abc" || !evs[0].Partial {
 		t.Fatalf("delta parse = %+v", evs)
 	}
+
+	// The real CLI carries session_id as a sibling of the inner "event" object,
+	// not inside it. Parse must backfill SessionID from the outer envelope onto
+	// the partial delta produced by recursing into the inner event.
+	lineWithSession := `{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}},"session_id":"abc-123"}`
+	evsWithSession := Parse([]byte(lineWithSession))
+	if len(evsWithSession) != 1 || evsWithSession[0].Kind != KindText || evsWithSession[0].Text != "hi" || !evsWithSession[0].Partial {
+		t.Fatalf("delta parse with session = %+v", evsWithSession)
+	}
+	if evsWithSession[0].SessionID != "abc-123" {
+		t.Errorf("SessionID = %q, want %q", evsWithSession[0].SessionID, "abc-123")
+	}
 }
 
 func TestParseResult(t *testing.T) {

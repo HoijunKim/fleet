@@ -104,7 +104,16 @@ func Parse(line []byte) []Event {
 		return out
 	case "stream_event":
 		if len(e.Event) > 0 {
-			return Parse(e.Event)
+			out := Parse(e.Event)
+			for i := range out {
+				if out[i].SessionID == "" {
+					out[i].SessionID = e.Session
+				}
+				if out[i].Model == "" {
+					out[i].Model = e.Model
+				}
+			}
+			return out
 		}
 		return nil
 	case "content_block_delta":
