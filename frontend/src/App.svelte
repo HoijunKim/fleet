@@ -15,6 +15,8 @@
   import Graph from "./lib/Graph.svelte";
   import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
   import Toasts from "./lib/Toasts.svelte";
+  import AgentOverlay from "./lib/AgentOverlay.svelte";
+  import { setProject as agentSetProject } from "./lib/agentSession";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
   import { STATUS_ORDER, deadlineSort, daysUntil } from "./lib/pm";
 
@@ -145,6 +147,10 @@
   })();
 
   $: selected = projects.find((p) => p.id === selectedId) || null;
+  // Scope the shared agentic session to the current selection. Clearing or
+  // changing the selection cancels a live agentic run and rescopes the store
+  // (and its overlay) to the newly-selected repo (or none).
+  $: agentSetProject(selected);
   $: loadingCount = projects.filter((p) => p.type === "code" && !p.loaded && !p.errMsg).length;
   // Derived from the live list so removed rows never inflate the count.
   $: selectedCount = projects.filter((p) => selectedIds.has(p.id)).length;
@@ -758,6 +764,8 @@
 {/if}
 
 <Toasts />
+
+<AgentOverlay projectName={selected?.name ?? ""} />
 
 {#if paletteOpen}
   <CommandPalette

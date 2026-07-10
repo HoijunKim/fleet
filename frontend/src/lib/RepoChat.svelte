@@ -1,14 +1,14 @@
 <script lang="ts">
   import {
     AskAI, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles,
-    AgentAsk, ApproveAction, CancelAgent, AgentAvailable, AgentConsent, GiveAgentConsent,
   } from "../../wailsjs/go/main/App";
-  import { EventsOn } from "../../wailsjs/runtime/runtime";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import { renderBrief } from "./markdown";
   import { redactSecrets } from "./redact";
   import { daysUntil } from "./pm";
-  import { toastError } from "./toasts";
+  import {
+    available, consent, running, openOverlay, setProject as agentSetProject, initAgentSession,
+  } from "./agentSession";
 
   // The selected code repo. Chat resets when the path changes.
   export let project: any;
@@ -21,129 +21,12 @@
   let loadedPath = "";
   let genId = 0;
 
-  // Agentic deep-dive (drives the claude CLI with a live approval gate).
-  let agentic = false; // provider is Claude + CLI present and meets the v2.1 floor
-  let consent = false; // one-time consent given
-  let agentRunning = false;
-  let agentStream = ""; // streamed assistant text for the in-flight run
-  let activity: { tool: string; input: string }[] = [];
-  let pending: { id: string; toolName: string; toolInput: string } | null = null;
-  let cost: { costUsd: number; inputTokens: number; outputTokens: number } | null = null;
-  let deciding = false;
-  let unsubs: Array<() => void> = [];
-
-  // Identity of the in-flight agentic run, so late agent:* events from a run
-  // started on repo A never mutate repo B's turns after the selection changes
-  // (mirrors the path+genId "stale()" guard used by the single-shot ask()).
-  let agentGenId = 0;
-  let agentRunPath = "";
-  let agentRunGen = 0;
-  function agentStale(): boolean {
-    return agentRunPath !== project.path || agentRunGen !== agentGenId;
-  }
-
-  function fmtInput(v: any): string {
-    if (typeof v === "string") return v;
-    try {
-      return JSON.stringify(v, null, 2);
-    } catch {
-      return String(v);
-    }
-  }
-
+  // The agentic deep-dive now lives in the shared agentSession store and runs
+  // in <AgentOverlay/> (mounted once in App). This component only LAUNCHES it;
+  // the single-shot fallback below is used when agentic isn't available.
   onMount(async () => {
-    try {
-      agentic = await AgentAvailable();
-      consent = await AgentConsent();
-    } catch {
-      agentic = false;
-    }
-    unsubs.push(EventsOn("agent:text", (t: any) => {
-      if (agentStale()) return;
-      agentStream += String(t ?? "");
-    }));
-    unsubs.push(EventsOn("agent:activity", (a: any) => {
-      if (agentStale()) return;
-      activity = [...activity, { tool: a?.tool ?? "", input: fmtInput(a?.input) }];
-    }));
-    unsubs.push(EventsOn("agent:action", (a: any) => {
-      if (agentStale()) return;
-      pending = { id: a?.id ?? "", toolName: a?.toolName ?? "", toolInput: fmtInput(a?.toolInput) };
-    }));
-    unsubs.push(EventsOn("agent:done", (d: any) => {
-      if (agentStale()) return;
-      cost = { costUsd: d?.costUsd ?? 0, inputTokens: d?.inputTokens ?? 0, outputTokens: d?.outputTokens ?? 0 };
-      const answer = agentStream.trim() || String(d?.result ?? "(no answer)");
-      turns = [...turns, { role: "assistant", text: answer }];
-      saveChat();
-      agentStream = "";
-      activity = [];
-      pending = null;
-      agentRunning = false;
-    }));
-    unsubs.push(EventsOn("agent:error", (e: any) => {
-      if (agentStale()) return;
-      const msg = String(e ?? "agent failed");
-      turns = [...turns, { role: "assistant", text: "error: " + msg }];
-      saveChat();
-      toastError("Agentic deep-dive: " + msg);
-      agentStream = "";
-      pending = null;
-      agentRunning = false;
-    }));
+    await initAgentSession();
   });
-
-  onDestroy(() => { unsubs.forEach((u) => u()); });
-
-  async function giveConsent() {
-    const msg = await GiveAgentConsent();
-    if (!msg) consent = true;
-    else toastError(msg);
-  }
-
-  async function askAgent(text: string) {
-    const q = text.trim();
-    if (!q || agentRunning) return;
-    question = "";
-    turns = [...turns, { role: "user", text: q }];
-    agentStream = "";
-    activity = [];
-    pending = null;
-    cost = null;
-    agentRunning = true;
-    // Capture this run's identity: if the selected repo changes (or the run
-    // is cancelled) before/while AgentAsk resolves, agentStale() below - and
-    // every agent:* handler - will ignore anything that follows.
-    agentRunPath = project.path;
-    agentRunGen = ++agentGenId;
-    const id = project.repoPath || project.path;
-    const err = await AgentAsk(id, q);
-    if (agentStale()) return; // repo switched (or run cancelled) meanwhile
-    if (err) {
-      turns = [...turns, { role: "assistant", text: err }];
-      toastError(err);
-      agentRunning = false;
-    }
-  }
-
-  async function decide(approved: boolean) {
-    if (!pending || deciding) return;
-    const id = pending.id;
-    pending = null; // clear immediately so a second Approve/Reject click is a no-op
-    deciding = true;
-    try {
-      await ApproveAction(id, approved);
-    } finally {
-      deciding = false;
-    }
-  }
-
-  function cancelAgent() {
-    CancelAgent();
-    agentGenId++; // ignore any late agent:* events from the run being cancelled
-    agentRunning = false;
-    pending = null;
-  }
 
   function cancelAsk() {
     genId++;
@@ -169,18 +52,10 @@
     loadedPath = project.path;
     question = "";
     loading = false; // any in-flight answer for the old repo is dropped
-    if (agentRunning) {
-      // An agentic run for the OLD repo is still going: stop the real
-      // process (not just the UI) and drop its state so it can't leak into
-      // the newly-selected repo's turns or approval card.
-      CancelAgent();
-      agentGenId++; // ignore any late agent:* events from that run
-      agentRunning = false;
-      pending = null;
-      activity = [];
-      agentStream = "";
-      cost = null;
-    }
+    // Rescope the shared agentic store to this repo. If a live agentic run is
+    // still going for the OLD repo, setProject cancels the real process (not
+    // just the UI) so it can't leak into the newly-selected repo.
+    agentSetProject(project);
     turns = loadChat(project.path);
   }
 
@@ -339,9 +214,10 @@
 
   // dispatch picks the agentic path when available + consented, else single-shot.
   // Used by the input row (via submit) AND the starter buttons so both honor the
-  // agentic mode.
+  // agentic mode. The agentic path launches the shared overlay instead of
+  // running inline; the single-shot fallback still runs inline here.
   function dispatch(text: string) {
-    if (agentic && consent) askAgent(text);
+    if ($available && $consent) { agentSetProject(project); openOverlay(project); }
     else ask(text);
   }
 
@@ -351,60 +227,27 @@
 </script>
 
 <div class="rchat">
-  {#if agentic && !consent}
-    <div class="rchat-consent">
-      <p>
-        The agentic deep-dive lets Claude Code read files in this repo and send
-        them to Anthropic under your Claude login, and can propose edits or
-        commands (each one you approve here first).
-      </p>
-      <button class="btn btn-primary btn-sm" on:click={giveConsent}>Enable agentic deep-dive</button>
-    </div>
-  {/if}
-
-  {#if agentic && consent && (agentRunning || activity.length || agentStream || pending)}
-    <div class="rchat-agent">
-      {#if activity.length}
-        <div class="rchat-activity">
-          {#each activity as a}
-            <div class="rchat-act"><span class="rchat-tool-dot"></span><span class="mono">{a.tool}</span> {a.input}</div>
-          {/each}
-        </div>
+  {#if $available}
+    <div class="rchat-launch">
+      {#if !$consent}
+        <p class="rchat-hint">Agentic deep-dive - Claude Code reads this repo (you approve every edit/command). Opens in a focused view.</p>
       {/if}
-      {#if agentStream}
-        <div class="rchat-a rchat-stream">{agentStream}</div>
-      {/if}
-      {#if pending}
-        <div class="rchat-approval">
-          <div class="rchat-approval-head">Approve <span class="mono">{pending.toolName}</span>?</div>
-          <pre class="rchat-approval-body">{pending.toolInput}</pre>
-          <div class="rchat-approval-btns">
-            <button class="btn btn-primary btn-sm" on:click={() => decide(true)}>Approve</button>
-            <button class="btn btn-sm rchat-reject" on:click={() => decide(false)}>Reject</button>
-          </div>
-        </div>
-      {/if}
-      {#if agentRunning}
-        <div class="rchat-loading">
-          <span class="spinner"></span> working in the repo...
-          <button class="rchat-clear" on:click={cancelAgent}>Cancel</button>
-        </div>
-      {/if}
-      {#if cost}
-        <div class="rchat-cost">cost ${cost.costUsd.toFixed(4)} - {cost.inputTokens} in / {cost.outputTokens} out tokens</div>
-      {/if}
+      <button class="btn btn-primary btn-sm" on:click={() => { agentSetProject(project); openOverlay(project); }}>
+        {$running ? "Resume agentic deep-dive…" : "Open agentic deep-dive"}
+        {#if $running}<span class="rchat-run-dot"></span>{/if}
+      </button>
     </div>
   {/if}
 
   {#if turns.length === 0}
     <div class="rchat-intro">
       <p class="rchat-hint">Ask about this repo - I read its recent commits, uncommitted diff, and exported symbols.</p>
-      {#if !agentic}
+      {#if !$available}
         <p class="rchat-note">Agentic deep-dive (live activity, approvals, cost) needs the Claude (Claude Code) provider with the claude CLI installed - using single-shot mode for now.</p>
       {/if}
       <div class="rchat-starters">
         {#each STARTERS as s}
-          <button class="rchat-starter" on:click={() => dispatch(s)} disabled={loading || agentRunning}>{s}</button>
+          <button class="rchat-starter" on:click={() => dispatch(s)} disabled={loading || $running}>{s}</button>
         {/each}
       </div>
     </div>
@@ -439,10 +282,10 @@
       placeholder="Ask about this repo..."
       bind:value={question}
       on:keydown={onKey}
-      disabled={loading || agentRunning}
+      disabled={loading || $running}
       aria-label="Ask about this repo"
     />
-    <button class="btn btn-primary btn-sm" on:click={submit} disabled={(loading || agentRunning) || !question.trim()}>Ask</button>
+    <button class="btn btn-primary btn-sm" on:click={submit} disabled={(loading || $running) || !question.trim()}>Ask</button>
   </div>
 </div>
 
@@ -516,17 +359,15 @@
   .rchat-input { display: flex; gap: 8px; }
   .rchat-input .input { flex: 1; }
   .rchat-note { font-size: 11.5px; color: var(--faint); margin: -6px 0 12px; line-height: 1.5; }
-  .rchat-consent { border: 1px solid var(--border); border-radius: var(--r-btn); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .rchat-consent p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-  .rchat-agent { display: flex; flex-direction: column; gap: 10px; }
-  .rchat-activity { display: flex; flex-direction: column; gap: 4px; }
-  .rchat-act { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--faint); }
-  .rchat-stream { white-space: pre-wrap; }
-  .rchat-approval { border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--r-btn); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-  .rchat-approval-head { font-size: 13px; color: var(--text); }
-  .rchat-approval-body { margin: 0; max-height: 240px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--raised); border-radius: 4px; padding: 8px; white-space: pre-wrap; }
-  .rchat-approval-btns { display: flex; gap: 8px; }
-  .rchat-reject { border: 1px solid var(--err-line); color: var(--err); background: transparent; }
-  .rchat-cost { font-size: 11px; color: var(--faint); }
+  .rchat-launch { border: 1px solid var(--border); border-radius: var(--r-btn); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .rchat-launch .rchat-hint { margin: 0; }
+  .rchat-launch .btn { align-self: flex-start; }
+  .rchat-run-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); margin-left: 6px; vertical-align: middle;
+    animation: rchat-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes rchat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) { .rchat-run-dot { animation: none; } }
   .mono { font-family: var(--font-mono); }
 </style>
