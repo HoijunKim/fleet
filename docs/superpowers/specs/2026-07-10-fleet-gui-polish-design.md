@@ -108,10 +108,32 @@ Copy these verbatim into the plan's Global Constraints; every task inherits them
 
 ### Logo mark
 
-- **New `lib/Logo.svelte`** — the chosen inline-SVG mark (no dependency), sized by prop, colored via `currentColor` / accent token so it is theme-aware and matches the header text. Renders crisply at small sizes (header ~18px, modal headers ~14px).
-- Replace `.brand-dot` (CSS circle) with `<Logo/>` in `Toolbar.svelte` and in the three modal headers that reuse it (`AddProjectModal.svelte:49`, `DiffModal.svelte:60`, `SettingsModal.svelte:140`); remove the dead `.brand-dot` CSS once unused.
-- The header lockup = `<Logo/>` + "Fleet" wordmark, spacing/weight tuned so the mark and wordmark read as one unit.
-- **Chosen logo direction:** _selected from rendered candidates before planning (see selection below); the single chosen SVG is specified in the plan._
+- **New `lib/Logo.svelte`** — a self-contained inline SVG (no dependency), sized by a `size` prop (default 20). It is a **brand mark with fixed brand colors** — a blue gradient squircle with a white mark — **not** `currentColor`-driven; a logo keeps its identity in both themes (the theme-aware `currentColor` rule applies to the W3 `Icon` glyphs, not to the brand logo). Renders crisply from ~18px (header) down to ~14px (modal headers).
+- **Chosen direction — "Quiet orbit" (round-3 candidate A):** a bold geometric **F** anchored on a gradient squircle, with a single satellite node tracing a short arc off the top arm (the "many projects, one system" read from the Graph view, kept quiet so the F stays legible small). Canonical SVG (viewBox `0 0 96 96`, so `Logo.svelte` sets `width/height = size`):
+
+  ```svg
+  <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Fleet">
+    <defs>
+      <linearGradient id="fleetLogo" x1="0" y1="0" x2="0.35" y2="1">
+        <stop offset="0" stop-color="#7fb2ff"/>
+        <stop offset="1" stop-color="#3f5fd6"/>
+      </linearGradient>
+    </defs>
+    <rect width="96" height="96" rx="24" fill="url(#fleetLogo)"/>
+    <rect width="96" height="52" rx="24" fill="#ffffff" opacity="0.09"/>
+    <path d="M40 24 A 30 30 0 0 1 72 50" fill="none" stroke="#ffffff" stroke-width="2.4" opacity="0.38" stroke-linecap="round"/>
+    <circle cx="72" cy="50" r="5" fill="#ffffff"/>
+    <g fill="#ffffff">
+      <rect x="28" y="30" width="12" height="43" rx="6"/>
+      <rect x="28" y="30" width="31" height="12" rx="6"/>
+      <rect x="28" y="47" width="23" height="11" rx="5.5"/>
+    </g>
+  </svg>
+  ```
+
+  The gradient `id` must be unique per rendered instance (or use a scoped/namespaced id) so multiple `<Logo/>` on one page do not collide on `#fleetLogo`.
+- Replace `.brand-dot` (CSS circle) with `<Logo/>` in `Toolbar.svelte:54` and in the three modal headers that reuse it (`AddProjectModal.svelte:49`, `DiffModal.svelte:60`, `SettingsModal.svelte:140`); remove the dead `.brand-dot` CSS once unused.
+- The header lockup = `<Logo size={20}/>` + "Fleet" wordmark (`.brand-name`, weight 700), spacing/weight tuned so mark and wordmark read as one unit.
 
 ### App icon (stretch, optional)
 
