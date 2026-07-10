@@ -28,6 +28,10 @@
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
   }
   function onOverlayKey(e: KeyboardEvent) {
+    // Svelte 3 forbids <svelte:window> inside a block, so the tag itself must
+    // stay top-level; gate its effect here so Escape only closes the overlay
+    // while it's actually open (never app-wide).
+    if (!$overlayOpen) return;
     if (e.key === "Escape") { e.preventDefault(); closeOverlay(); }
   }
 </script>
@@ -35,11 +39,11 @@
 <svelte:window on:keydown={onOverlayKey} />
 
 {#if $overlayOpen}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div
     class="ov-backdrop"
     transition:fade={{ duration: 140 }}
     on:click|self={closeOverlay}
-    on:keydown={onOverlayKey}
     role="dialog"
     aria-modal="true"
     aria-label="Agentic deep-dive"

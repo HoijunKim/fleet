@@ -35,7 +35,10 @@ function fmtInput(v: any): string {
 function chatKey(p: string) { return "fleet.chat:" + p; }
 function loadChat(p: string): Turn[] {
   if (typeof localStorage === "undefined") return [];
-  try { const r = localStorage.getItem(chatKey(p)); const a = r ? JSON.parse(r) : []; return Array.isArray(a) ? a : []; }
+  try {
+    const r = localStorage.getItem(chatKey(p)); const a = r ? JSON.parse(r) : [];
+    return Array.isArray(a) ? a.filter((t) => t && (t.role === "user" || t.role === "assistant")) : [];
+  }
   catch { return []; }
 }
 function saveChat() {
@@ -69,6 +72,7 @@ export async function initAgentSession(): Promise<void> {
 export function setProject(p: Proj): void {
   if (p && project && p.path === project.path) return;
   if (get(running)) { CancelAgent(); gen++; running.set(false); pending.set(null); activity.set([]); stream.set(""); cost.set(null); }
+  overlayOpen.set(false);
   project = p;
   loadedPath = p ? p.path : "";
   turns.set(p ? loadChat(p.path) : []);
@@ -104,5 +108,12 @@ export function cancel(): void {
   CancelAgent(); gen++; running.set(false); pending.set(null);
 }
 
-export function openOverlay(p: Proj): void { setProject(p); overlayOpen.set(true); }
+export function openOverlay(p: Proj): void {
+  setProject(p);
+  // A single-shot session may have written fleet.chat:<path> since this repo
+  // was first scoped; reload so an agentic saveChat() can't clobber it. Skip
+  // while a run is live (its in-memory turns aren't on disk yet).
+  if (p && !get(running)) { loadedPath = p.path; turns.set(loadChat(p.path)); }
+  overlayOpen.set(true);
+}
 export function closeOverlay(): void { overlayOpen.set(false); } // does NOT cancel the run

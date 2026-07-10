@@ -365,9 +365,6 @@
   .rchat-run-dot {
     display: inline-block; width: 6px; height: 6px; border-radius: 50%;
     background: var(--accent); margin-left: 6px; vertical-align: middle;
-    animation: rchat-pulse 1.4s ease-in-out infinite;
   }
-  @keyframes rchat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-  @media (prefers-reduced-motion: reduce) { .rchat-run-dot { animation: none; } }
   .mono { font-family: var(--font-mono); }
 </style>

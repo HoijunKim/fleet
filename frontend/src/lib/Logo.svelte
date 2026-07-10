@@ -10,7 +10,7 @@
   const gid = "fleetLogo" + ++counter;
 </script>
 
-<svg width={size} height={size} viewBox="0 0 96 96" role="img" aria-label="Fleet">
+<svg width={size} height={size} viewBox="0 0 96 96" aria-hidden="true">
   <defs>
     <linearGradient id={gid} x1="0" y1="0" x2="0.35" y2="1">
       <stop offset="0" stop-color="#7fb2ff" />
