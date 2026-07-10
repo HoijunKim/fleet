@@ -29,7 +29,18 @@
   let activity: { tool: string; input: string }[] = [];
   let pending: { id: string; toolName: string; toolInput: string } | null = null;
   let cost: { costUsd: number; inputTokens: number; outputTokens: number } | null = null;
+  let deciding = false;
   let unsubs: Array<() => void> = [];
+
+  // Identity of the in-flight agentic run, so late agent:* events from a run
+  // started on repo A never mutate repo B's turns after the selection changes
+  // (mirrors the path+genId "stale()" guard used by the single-shot ask()).
+  let agentGenId = 0;
+  let agentRunPath = "";
+  let agentRunGen = 0;
+  function agentStale(): boolean {
+    return agentRunPath !== project.path || agentRunGen !== agentGenId;
+  }
 
   function fmtInput(v: any): string {
     if (typeof v === "string") return v;
@@ -47,14 +58,20 @@
     } catch {
       agentic = false;
     }
-    unsubs.push(EventsOn("agent:text", (t: any) => { agentStream += String(t ?? ""); }));
+    unsubs.push(EventsOn("agent:text", (t: any) => {
+      if (agentStale()) return;
+      agentStream += String(t ?? "");
+    }));
     unsubs.push(EventsOn("agent:activity", (a: any) => {
+      if (agentStale()) return;
       activity = [...activity, { tool: a?.tool ?? "", input: fmtInput(a?.input) }];
     }));
     unsubs.push(EventsOn("agent:action", (a: any) => {
+      if (agentStale()) return;
       pending = { id: a?.id ?? "", toolName: a?.toolName ?? "", toolInput: fmtInput(a?.toolInput) };
     }));
     unsubs.push(EventsOn("agent:done", (d: any) => {
+      if (agentStale()) return;
       cost = { costUsd: d?.costUsd ?? 0, inputTokens: d?.inputTokens ?? 0, outputTokens: d?.outputTokens ?? 0 };
       const answer = agentStream.trim() || String(d?.result ?? "(no answer)");
       turns = [...turns, { role: "assistant", text: answer }];
@@ -65,6 +82,7 @@
       agentRunning = false;
     }));
     unsubs.push(EventsOn("agent:error", (e: any) => {
+      if (agentStale()) return;
       const msg = String(e ?? "agent failed");
       turns = [...turns, { role: "assistant", text: "error: " + msg }];
       saveChat();
@@ -93,8 +111,14 @@
     pending = null;
     cost = null;
     agentRunning = true;
+    // Capture this run's identity: if the selected repo changes (or the run
+    // is cancelled) before/while AgentAsk resolves, agentStale() below - and
+    // every agent:* handler - will ignore anything that follows.
+    agentRunPath = project.path;
+    agentRunGen = ++agentGenId;
     const id = project.repoPath || project.path;
     const err = await AgentAsk(id, q);
+    if (agentStale()) return; // repo switched (or run cancelled) meanwhile
     if (err) {
       turns = [...turns, { role: "assistant", text: err }];
       toastError(err);
@@ -103,13 +127,20 @@
   }
 
   async function decide(approved: boolean) {
-    if (!pending) return;
-    await ApproveAction(pending.id, approved);
-    pending = null;
+    if (!pending || deciding) return;
+    const id = pending.id;
+    pending = null; // clear immediately so a second Approve/Reject click is a no-op
+    deciding = true;
+    try {
+      await ApproveAction(id, approved);
+    } finally {
+      deciding = false;
+    }
   }
 
   function cancelAgent() {
     CancelAgent();
+    agentGenId++; // ignore any late agent:* events from the run being cancelled
     agentRunning = false;
     pending = null;
   }
@@ -138,6 +169,18 @@
     loadedPath = project.path;
     question = "";
     loading = false; // any in-flight answer for the old repo is dropped
+    if (agentRunning) {
+      // An agentic run for the OLD repo is still going: stop the real
+      // process (not just the UI) and drop its state so it can't leak into
+      // the newly-selected repo's turns or approval card.
+      CancelAgent();
+      agentGenId++; // ignore any late agent:* events from that run
+      agentRunning = false;
+      pending = null;
+      activity = [];
+      agentStream = "";
+      cost = null;
+    }
     turns = loadChat(project.path);
   }
 
