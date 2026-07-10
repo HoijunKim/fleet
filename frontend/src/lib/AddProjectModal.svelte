@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { AddProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
+  import Logo from "./Logo.svelte";
 
   export let onClose: () => void;
   // Called with the new project id after a successful add.
@@ -46,7 +47,7 @@
 <div class="overlay" on:click={onClose}>
   <div class="modal add-modal" on:click|stopPropagation>
     <div class="modal-head">
-      <span class="brand-dot"></span>
+      <Logo size={16} />
       <h3 class="modal-title">New project</h3>
       <button class="btn btn-secondary btn-sm modal-close" on:click={onClose} aria-label="Close">x</button>
     </div>

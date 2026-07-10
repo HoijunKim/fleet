@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { DiffFile } from "../../wailsjs/go/main/App";
+  import Logo from "./Logo.svelte";
 
   export let path: string;
   export let file: string;
@@ -57,7 +58,7 @@
 <div class="overlay" on:click={onClose}>
   <div class="modal diff-modal" on:click|stopPropagation>
     <div class="modal-head">
-      <span class="brand-dot"></span>
+      <Logo size={16} />
       <h3 class="modal-title diff-title">{file}</h3>
       <button class="btn btn-secondary btn-sm modal-close" on:click={onClose} aria-label="Close">x</button>
     </div>

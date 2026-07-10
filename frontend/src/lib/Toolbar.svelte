@@ -3,6 +3,7 @@
   import AccountChip from "./AccountChip.svelte";
   import SignIn from "./SignIn.svelte";
   import Icon from "./Icon.svelte";
+  import Logo from "./Logo.svelte";
 
   export let loadingCount: number = 0;
   // Count of code projects with unfetched upstream commits (behind > 0).
@@ -52,8 +53,8 @@
 
 <header class="toolbar">
   <div class="brand">
-    <span class="brand-dot"></span>
-    <span class="brand-name">fleet</span>
+    <Logo size={20} />
+    <span class="brand-name">Fleet</span>
   </div>
 
   <div class="view-tabs">

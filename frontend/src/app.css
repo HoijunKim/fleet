@@ -260,13 +260,6 @@ select.input option { background: var(--surface); color: var(--text); }
   gap: 8px;
   padding-right: 4px;
 }
-.brand-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  box-shadow: 0 0 10px rgba(110, 168, 254, 0.7);
-}
 .brand-name {
   font-size: 15px;
   font-weight: 700;

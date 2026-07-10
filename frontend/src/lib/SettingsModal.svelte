@@ -2,6 +2,7 @@
   import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases } from "../../wailsjs/go/main/App";
   import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
+  import Logo from "./Logo.svelte";
 
   export let onClose: () => void;
   // Called after a successful save so the parent can rescan / reset auto-fetch.
@@ -137,7 +138,7 @@
 <div class="overlay" on:click={onClose}>
   <div class="modal set-modal" on:click|stopPropagation>
     <div class="modal-head">
-      <span class="brand-dot"></span>
+      <Logo size={16} />
       <h3 class="modal-title">Settings</h3>
       <button class="btn btn-secondary btn-sm modal-close" on:click={onClose} aria-label="Close">x</button>
     </div>
