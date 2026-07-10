@@ -131,7 +131,7 @@
 
     <!-- Global utility: jump, search, settings - always at the far right -->
     <button class="icon-btn" on:click={onOpenPalette} title="Command palette (Ctrl K)" aria-label="Command palette">
-      <Icon name="external" />
+      <span class="ic-jump">K</span>
     </button>
     <button class="icon-btn" on:click={onOpenSearch} title="Search across repos (Ctrl Shift F)" aria-label="Search">
       <Icon name="search" />

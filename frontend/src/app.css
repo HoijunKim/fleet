@@ -809,6 +809,18 @@ select.input option { background: var(--surface); color: var(--text); }
 }
 .icon-btn:hover { background: var(--raised); color: var(--text); border-color: var(--border-hover); }
 
+.ic-jump {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.2;
+}
+.icon-btn:hover .ic-jump { border-color: var(--text); color: var(--text); }
+
 /* =========================================================================
    Stats header - slim summary tiles (Projects view)
    ========================================================================= */
