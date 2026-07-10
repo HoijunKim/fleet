@@ -53,11 +53,19 @@ func BuildArgs(o Options) []string {
 	return args
 }
 
+// HookFlag is the sentinel argument that makes the fleet executable run as its
+// own PreToolUse hook instead of launching the GUI. WriteHookSettings appends
+// it to the fleet executable path, and the app's main() dispatches on it.
+const HookFlag = "--agent-hook"
+
 // WriteHookSettings writes a run-scoped claude settings file at path that
-// registers fleet's PreToolUse hook (hookBin) for the mutating tools. The CLI
-// is pointed at it with --settings so no project .claude/ is touched. The hook
-// timeout is generous (human-scale) so a person has time to approve.
-func WriteHookSettings(path, hookBin string) error {
+// registers fleet's PreToolUse hook for the mutating tools. The hook command is
+// the current fleet executable (fleetExe, resolved via os.Executable) invoked
+// with HookFlag, so there is no separate hook binary to ship - fleet.exe self-
+// invokes as its own hook. The CLI is pointed at the settings with --settings
+// so no project .claude/ is touched. The hook timeout is generous (human-scale)
+// so a person has time to approve.
+func WriteHookSettings(path, fleetExe string) error {
 	cfg := map[string]any{
 		"hooks": map[string]any{
 			"PreToolUse": []any{
@@ -66,7 +74,7 @@ func WriteHookSettings(path, hookBin string) error {
 					"hooks": []any{
 						map[string]any{
 							"type":    "command",
-							"command": hookBin,
+							"command": hookCommand(fleetExe),
 							"timeout": 900,
 						},
 					},
@@ -79,6 +87,14 @@ func WriteHookSettings(path, hookBin string) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// hookCommand builds the shell command string that invokes fleetExe as the
+// PreToolUse hook. The executable path is wrapped in double quotes because on
+// Windows it commonly contains spaces (e.g. under "Program Files"), and the
+// claude CLI runs the command through a shell.
+func hookCommand(fleetExe string) string {
+	return `"` + fleetExe + `" ` + HookFlag
 }
 
 // Driver spawns the claude CLI and streams its events. Bin defaults to "claude"

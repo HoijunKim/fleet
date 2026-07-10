@@ -2,7 +2,11 @@ package main
 
 import (
 	"embed"
+	"net/http"
+	"os"
+	"time"
 
+	"github.com/hoijun/fleet/internal/agent"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -12,6 +16,15 @@ import (
 var assets embed.FS
 
 func main() {
+	// Hook dispatch MUST come before any Wails init: when claude invokes the
+	// PreToolUse hook it runs this same executable with the sentinel (or with
+	// FLEET_AGENT_HOOK=1). Handle it and exit without starting the GUI.
+	if isAgentHook() {
+		client := &http.Client{Timeout: 15 * time.Minute}
+		agent.RunHook(os.Stdin, os.Stdout, os.Getenv("FLEET_HOOK_URL"), client)
+		return
+	}
+
 	app := NewApp()
 	err := wails.Run(&options.App{
 		Title:  "fleet",
@@ -26,4 +39,14 @@ func main() {
 	if err != nil {
 		println("error:", err.Error())
 	}
+}
+
+// isAgentHook reports whether this process was launched as the PreToolUse hook
+// rather than as the GUI: either the first argument is the sentinel flag or
+// FLEET_AGENT_HOOK is set. Normal launch (no flag, no env) is unaffected.
+func isAgentHook() bool {
+	if len(os.Args) > 1 && os.Args[1] == agent.HookFlag {
+		return true
+	}
+	return os.Getenv("FLEET_AGENT_HOOK") == "1"
 }

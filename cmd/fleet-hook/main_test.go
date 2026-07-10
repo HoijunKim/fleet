@@ -7,7 +7,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/hoijun/fleet/internal/agent"
 )
+
+// hookSpecific / hookOutput mirror the JSON agent.RunHook writes, so the
+// standalone-wrapper test can assert the decision shape without reaching into
+// the agent package's unexported types.
+type hookSpecific struct {
+	HookEventName            string `json:"hookEventName"`
+	PermissionDecision       string `json:"permissionDecision"`
+	PermissionDecisionReason string `json:"permissionDecisionReason"`
+}
+
+type hookOutput struct {
+	HookSpecificOutput hookSpecific `json:"hookSpecificOutput"`
+}
 
 func decode(t *testing.T, b []byte) hookOutput {
 	t.Helper()
@@ -29,7 +44,7 @@ func TestRunApprove(t *testing.T) {
 
 	var out bytes.Buffer
 	in := bytes.NewBufferString(`{"tool_name":"Edit","tool_input":{"file_path":"x"},"cwd":"/repo"}`)
-	run(in, &out, srv.URL, srv.Client())
+	agent.RunHook(in, &out, srv.URL, srv.Client())
 
 	o := decode(t, out.Bytes())
 	if o.HookSpecificOutput.PermissionDecision != "allow" || o.HookSpecificOutput.PermissionDecisionReason != "ok" {
@@ -49,7 +64,7 @@ func TestRunDeny(t *testing.T) {
 	}))
 	defer srv.Close()
 	var out bytes.Buffer
-	run(bytes.NewBufferString(`{}`), &out, srv.URL, srv.Client())
+	agent.RunHook(bytes.NewBufferString(`{}`), &out, srv.URL, srv.Client())
 	o := decode(t, out.Bytes())
 	if o.HookSpecificOutput.PermissionDecision != "deny" || o.HookSpecificOutput.PermissionDecisionReason != "blocked" {
 		t.Errorf("decision = %+v", o.HookSpecificOutput)
@@ -58,7 +73,7 @@ func TestRunDeny(t *testing.T) {
 
 func TestRunNoURLDenies(t *testing.T) {
 	var out bytes.Buffer
-	run(bytes.NewBufferString(`{}`), &out, "", http.DefaultClient)
+	agent.RunHook(bytes.NewBufferString(`{}`), &out, "", http.DefaultClient)
 	if decode(t, out.Bytes()).HookSpecificOutput.PermissionDecision != "deny" {
 		t.Error("missing FLEET_HOOK_URL must deny")
 	}
@@ -70,7 +85,7 @@ func TestRunServerErrorDenies(t *testing.T) {
 	}))
 	defer srv.Close()
 	var out bytes.Buffer
-	run(bytes.NewBufferString(`{}`), &out, srv.URL, srv.Client())
+	agent.RunHook(bytes.NewBufferString(`{}`), &out, srv.URL, srv.Client())
 	if decode(t, out.Bytes()).HookSpecificOutput.PermissionDecision != "deny" {
 		t.Error("5xx must deny")
 	}

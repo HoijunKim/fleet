@@ -659,6 +659,18 @@ func TestAgentConsentMarker(t *testing.T) {
 	}
 }
 
+// TestAgentAskRefusesWithoutConsent guards the consent gate: AgentAsk must
+// refuse (before spawning anything or touching the store) when the one-time
+// agentic consent has not been given.
+func TestAgentAskRefusesWithoutConsent(t *testing.T) {
+	dir := t.TempDir() // no agent_consent marker written
+	a := &App{dataDir: dir}
+	got := a.AgentAsk(dir, "why is CI red?")
+	if !strings.Contains(got, "consent") {
+		t.Errorf("AgentAsk without consent = %q, want a consent error", got)
+	}
+}
+
 func TestAgenda(t *testing.T) {
 	a := newTestApp(t)
 	p := a.AddProject("proj")

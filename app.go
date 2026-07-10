@@ -1045,20 +1045,18 @@ func (a *App) GiveAgentConsent() string {
 	return errMsg(os.WriteFile(a.consentPath(), []byte("1"), 0o644))
 }
 
-// agentHookBinary resolves fleet-hook: a sibling of the running executable if
-// present, else the bare name (relying on PATH).
-func agentHookBinary() string {
-	name := "fleet-hook"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
+// fleetExecutable resolves the path of the running fleet executable, which
+// WriteHookSettings registers (with agent.HookFlag) as the PreToolUse hook
+// command. fleet.exe self-invokes as its own hook, so no separate hook binary
+// is shipped. Falls back to os.Args[0] if os.Executable fails.
+func fleetExecutable() string {
 	if exe, err := os.Executable(); err == nil {
-		cand := filepath.Join(filepath.Dir(exe), name)
-		if _, err := os.Stat(cand); err == nil {
-			return cand
-		}
+		return exe
 	}
-	return name
+	if len(os.Args) > 0 {
+		return os.Args[0]
+	}
+	return "fleet"
 }
 
 // AgentAsk starts an agentic deep-dive on projectID's repo for question. It
@@ -1066,6 +1064,9 @@ func agentHookBinary() string {
 // done/error), and gates mutating tool calls through agent:action. Returns ""
 // on a successful start, or an "error: ..." string.
 func (a *App) AgentAsk(projectID, question string) string {
+	if !a.AgentConsent() {
+		return "error: agentic deep-dive requires consent"
+	}
 	if !a.AgentAvailable() {
 		return "error: agentic deep-dive requires the Claude (Claude Code) provider"
 	}
@@ -1081,7 +1082,7 @@ func (a *App) AgentAsk(projectID, question string) string {
 		return "error: " + err.Error()
 	}
 	settings := filepath.Join(tmpDir, "settings.json")
-	if err := agent.WriteHookSettings(settings, agentHookBinary()); err != nil {
+	if err := agent.WriteHookSettings(settings, fleetExecutable()); err != nil {
 		os.RemoveAll(tmpDir)
 		return "error: " + err.Error()
 	}
@@ -1119,6 +1120,11 @@ func (a *App) AgentAsk(projectID, question string) string {
 		MaxTurns:     24,
 	}
 	go func() {
+		// Stop the loopback approval server when the run ends so it doesn't
+		// leak on normal completion (not just on the next AgentAsk/CancelAgent).
+		// Registered first so it runs last (after cancel unblocks any pending
+		// Await), letting Shutdown drain cleanly.
+		defer srv.Stop(nil)
 		defer os.RemoveAll(tmpDir)
 		defer cancel()
 		err := agent.Driver{}.Run(ctx, opts, func(ev agent.Event) {

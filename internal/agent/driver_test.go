@@ -51,7 +51,10 @@ func TestBuildArgsMinimal(t *testing.T) {
 
 func TestWriteHookSettings(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "settings.json")
-	if err := WriteHookSettings(p, "C:/fleet/fleet-hook.exe"); err != nil {
+	// A path with a space exercises the double-quote wrapping (Windows exes
+	// commonly live under "Program Files").
+	exe := `C:/Program Files/fleet/fleet.exe`
+	if err := WriteHookSettings(p, exe); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(p)
@@ -60,10 +63,20 @@ func TestWriteHookSettings(t *testing.T) {
 		t.Fatalf("settings not valid JSON: %v", err)
 	}
 	s := string(data)
-	for _, want := range []string{`"PreToolUse"`, `"Edit|Write|Bash"`, "fleet-hook", `"command"`} {
+	for _, want := range []string{`"PreToolUse"`, `"Edit|Write|Bash"`, `"command"`, HookFlag} {
 		if !strings.Contains(s, want) {
 			t.Errorf("settings missing %q\n%s", want, s)
 		}
+	}
+	// The command must be the fleet exe (double-quoted, so spaces survive)
+	// self-invoking with the hook sentinel - no separate fleet-hook binary.
+	wantCmd := `"` + exe + `" ` + HookFlag
+	enc, _ := json.Marshal(wantCmd)
+	if !strings.Contains(s, string(enc)) {
+		t.Errorf("hook command = not %q\n%s", wantCmd, s)
+	}
+	if strings.Contains(s, "fleet-hook") {
+		t.Errorf("settings must no longer reference a separate fleet-hook binary\n%s", s)
 	}
 }
 
