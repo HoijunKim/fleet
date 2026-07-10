@@ -23,7 +23,7 @@ Raise the fleet desktop UI from "solid, uneven" to "polished and coherent" by fi
 Copy these verbatim into the plan's Global Constraints; every task inherits them.
 
 - **No new runtime dependencies.** Icons are hand-authored inline SVG; motion uses Svelte's built-in `svelte/transition` + `svelte/animate` (already in the toolchain) and the existing `motion.ts`. No icon library, no animation library. `frontend/package.json` dependencies must not change.
-- **No backend / Go change.** No edits to `app.go`, `internal/agent/*`, or any `.go` file. No new/changed Wails bindings or event names. The three existing agent event names (`agent:text`, `agent:activity`, `agent:action`, `agent:done`, `agent:error`) and bindings (`AgentAvailable`, `AgentConsent`, `GiveAgentConsent`, `AgentAsk(id, q)`, `ApproveAction(id, approved)`, `CancelAgent`) are consumed unchanged.
+- **No backend logic change.** No edits to `app.go`, `internal/**`, or any `.go` logic. No new/changed Wails bindings or event names. The existing agent events (`agent:text`, `agent:activity`, `agent:action`, `agent:done`, `agent:error`) and bindings (`AgentAvailable`, `AgentConsent`, `GiveAgentConsent`, `AgentAsk(id, q)`, `ApproveAction(id, approved)`, `CancelAgent`) are consumed unchanged. **Sole permitted non-frontend edit (W4 branding):** the visible app-name strings — the window `Title` literal in `main.go:30` and `name` in `wails.json` — changed from `fleet` to `Fleet`. String-only; no logic, no signatures.
 - **`prefers-reduced-motion: reduce` is honored for every animation added.** Route all new enter/stagger motion through `motion.ts` helpers (or an equivalent guard) so reduced-motion users get instant, motionless rendering. No un-guarded transitions.
 - **Enter-only discipline.** New motion is entrance/state-change only: no looping, bouncing, or continuous movement except the single existing SyncPill spinner. Durations stay short (micro ≈130ms via `--t`; enter ≈180ms). Staggered lists are capped so large lists never feel slow.
 - **Preserve existing behavior and guards.** The agentic run's project-scoping (`agentStale()` / `agentGenId`), consent gate (server + UI), fail-safe approval, and single-run mutex are not weakened by the re-housing.
@@ -96,6 +96,27 @@ Copy these verbatim into the plan's Global Constraints; every task inherits them
 - **Status dots stay CSS** (`.dot` variants) — they are semantic color indicators, not glyph icons; not in scope for SVG conversion.
 - New agentic icons are used by the AgentOverlay (activity feed marker, approve/deny/cancel buttons, AI header mark).
 
+## Workstream 4 — Branding & Logo
+
+**Problem:** the product is shown lowercase ("fleet") with a plain CSS dot as its only mark. The user wants the capitalized name **Fleet** and a designed logo.
+
+**Approach:** capitalize the visible name everywhere and replace the CSS `.brand-dot` with a designed inline-SVG logo mark, used in the header wordmark and the modal headers.
+
+### Name
+
+- Change the visible product name from `fleet` to **`Fleet`** (capital F): header wordmark (`Toolbar.svelte:55` `.brand-name`), window `Title` (`main.go:30`), `wails.json` `name`. `outputfilename` stays `fleet` (exe name unchanged — `fleet.exe`) unless the user asks otherwise.
+
+### Logo mark
+
+- **New `lib/Logo.svelte`** — the chosen inline-SVG mark (no dependency), sized by prop, colored via `currentColor` / accent token so it is theme-aware and matches the header text. Renders crisply at small sizes (header ~18px, modal headers ~14px).
+- Replace `.brand-dot` (CSS circle) with `<Logo/>` in `Toolbar.svelte` and in the three modal headers that reuse it (`AddProjectModal.svelte:49`, `DiffModal.svelte:60`, `SettingsModal.svelte:140`); remove the dead `.brand-dot` CSS once unused.
+- The header lockup = `<Logo/>` + "Fleet" wordmark, spacing/weight tuned so the mark and wordmark read as one unit.
+- **Chosen logo direction:** _selected from rendered candidates before planning (see selection below); the single chosen SVG is specified in the plan._
+
+### App icon (stretch, optional)
+
+- Regenerating `build/appicon.png` and `build/windows/icon.ico` from the new mark is nice-to-have. It requires image tooling outside the frontend build and is **not required** for this slice; if not done, the taskbar/window icon keeps the current asset. Called out so it is a conscious deferral, not an oversight.
+
 ## Data Flow
 
 Unchanged from today. Frontend only: components subscribe to existing `agent:*` events and call existing bindings; the overlay is a re-housing of state that already flows through `RepoChat`. No new IPC, no new persisted state beyond what `RepoChat` already saves per repo.
@@ -126,5 +147,6 @@ Unchanged from today. Frontend only: components subscribe to existing `agent:*` 
 
 ## File Structure
 
-- **Create:** `frontend/src/lib/AgentOverlay.svelte`, `frontend/src/lib/agentSession.ts`, `frontend/src/lib/Icon.svelte`, and tests `frontend/src/lib/Icon.test.ts`, `frontend/src/lib/motion.test.ts` (motion guards), `frontend/src/lib/AgentOverlay.test.ts`.
-- **Modify:** `frontend/src/lib/RepoChat.svelte` (launcher + fallback; extract agentic logic to `agentSession.ts`), `frontend/src/lib/SyncPill.svelte` (state cross-fade), `frontend/src/lib/ProjectTable.svelte` (row stagger), `frontend/src/lib/DetailPanel.svelte` (panel enter + Ask AI launcher wiring), `frontend/src/lib/Graph.svelte` (fade-in), `frontend/src/lib/motion.ts` (add `fadeScaleIn`, `staggerCap`), `frontend/src/app.css` (add `--t-enter`; swap `.ic-*`/`.gear` for `<Icon>`; remove dead icon CSS), and any component using `.ic-search`/`.ic-jump`/`.gear` (e.g. `Toolbar.svelte`).
+- **Create:** `frontend/src/lib/AgentOverlay.svelte`, `frontend/src/lib/agentSession.ts`, `frontend/src/lib/Icon.svelte`, `frontend/src/lib/Logo.svelte`, and tests `frontend/src/lib/Icon.test.ts`, `frontend/src/lib/motion.test.ts` (motion guards), `frontend/src/lib/AgentOverlay.test.ts`.
+- **Modify:** `frontend/src/lib/RepoChat.svelte` (launcher + fallback; extract agentic logic to `agentSession.ts`), `frontend/src/lib/SyncPill.svelte` (state cross-fade), `frontend/src/lib/ProjectTable.svelte` (row stagger), `frontend/src/lib/DetailPanel.svelte` (panel enter + Ask AI launcher wiring), `frontend/src/lib/Graph.svelte` (fade-in), `frontend/src/lib/motion.ts` (add `fadeScaleIn`, `staggerCap`), `frontend/src/app.css` (add `--t-enter`; swap `.ic-*`/`.gear` for `<Icon>`; remove dead icon CSS and `.brand-dot`), `frontend/src/lib/Toolbar.svelte` (icons + `<Logo/>` + "Fleet" wordmark), `frontend/src/lib/AddProjectModal.svelte`, `frontend/src/lib/DiffModal.svelte`, `frontend/src/lib/SettingsModal.svelte` (brand-dot → `<Logo/>`).
+- **Modify (W4 branding strings only, documented exception):** `main.go:30` (`Title: "fleet"` → `"Fleet"`), `wails.json` (`name: "fleet"` → `"Fleet"`).
