@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Fetch, Pull, OpenEditor, OpenTerminal } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
+  import { scale } from "svelte/transition";
   import { ddayLabel } from "./pm";
+  import { fadeScaleIn } from "./motion";
   import BranchMenu from "./BranchMenu.svelte";
   import CommitBox from "./CommitBox.svelte";
   import DiffModal from "./DiffModal.svelte";
@@ -101,7 +103,7 @@
 </script>
 
 {#if project}
-  <aside class="detail">
+  <aside class="detail" transition:scale={fadeScaleIn()}>
     <div class="detail-card">
       <div class="detail-head">
         <span class="dot {dotClass}"></span>

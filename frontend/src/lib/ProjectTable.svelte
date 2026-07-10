@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { fly } from "svelte/transition";
   import { ddayLabel } from "./pm";
+  import { flyUp } from "./motion";
 
   export let projects: any[] = [];
   export let selectedId: string = "";
@@ -97,10 +99,11 @@
         </tr>
       </thead>
       <tbody>
-        {#each projects as p (p.id)}
+        {#each projects as p, i (p.id)}
           <tr
             class="repo-row"
             class:selected={p.id === selectedId}
+            in:fly|local={flyUp(i)}
             on:click={() => onSelect(p)}
             on:contextmenu={(e) => onContext(p, e)}
           >

@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { fade } from "svelte/transition";
   import { RepoGraph, AddEdge, RemoveEdge, ListEdges } from "../../wailsjs/go/main/App";
   import { daysUntil } from "./pm";
   import { toastError } from "./toasts";
+  import { reducedMotion } from "./motion";
 
   // Select a repo and switch to the Projects view (opens its detail). For code
   // projects the backend uses id == repo path, and a GraphNode.id is that same
@@ -567,7 +569,7 @@
 
 <svelte:window on:keydown={onKeyDown} />
 
-<div class="graph" bind:this={containerEl}>
+<div class="graph" bind:this={containerEl} in:fade={{ duration: reducedMotion() ? 0 : 200 }}>
   {#if loading}
     <div class="graph-empty">
       <span class="spinner"></span>
