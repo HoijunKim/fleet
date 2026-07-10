@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { fade } from "svelte/transition";
+  import { reducedMotion } from "./motion";
 
   // State: offline | syncing | synced | error | signedout
   export let state: string = "signedout";
@@ -24,29 +26,34 @@
     const h = Math.floor(m / 60);
     return h + "h ago";
   }
+
+  $: fadeMs = reducedMotion() ? 0 : 140;
 </script>
 
 <div class="pill pill-{state}" title={error || state}>
-  {#if state === "syncing"}
-    <span class="spinner"></span><span class="pill-text">Syncing...</span>
-  {:else if state === "synced"}
-    <span class="dot dot-ok"></span><span class="pill-text">Synced {ago(lastSyncedUnix)}</span>
-  {:else if state === "offline"}
-    <span class="dot dot-warn"></span><span class="pill-text">Offline</span>
-  {:else if state === "error"}
-    <span class="dot dot-err"></span><span class="pill-text">Sync error</span>
-    <button class="pill-action" on:click={onRetry}>Retry</button>
-  {:else}
-    <span class="dot dot-idle"></span>
-    <button class="pill-action" on:click={onSignIn}>Sign in to sync</button>
-  {/if}
+  {#key state}
+    <span class="pill-inner" in:fade={{ duration: fadeMs }}>
+      {#if state === "syncing"}
+        <span class="spinner"></span><span class="pill-text">Syncing…</span>
+      {:else if state === "synced"}
+        <span class="dot dot-ok"></span><span class="pill-text">Synced {ago(lastSyncedUnix)}</span>
+      {:else if state === "offline"}
+        <span class="dot dot-warn"></span><span class="pill-text">Offline</span>
+      {:else if state === "error"}
+        <span class="dot dot-err"></span><span class="pill-text">Sync error</span>
+        <button class="pill-action" on:click={onRetry}>Retry</button>
+      {:else}
+        <span class="dot dot-idle"></span>
+        <button class="pill-action" on:click={onSignIn}>Sign in to sync</button>
+      {/if}
+    </span>
+  {/key}
 </div>
 
 <style>
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
     height: 28px;
     min-width: 140px; /* stable width: no layout shift across states */
     padding: 0 10px;
@@ -56,6 +63,11 @@
     font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
+  }
+  .pill-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
   }
   .pill-text { font-variant-numeric: tabular-nums; }
   .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
