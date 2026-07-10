@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hoijun/fleet/internal/action"
+	"github.com/hoijun/fleet/internal/agent"
 	"github.com/hoijun/fleet/internal/ai"
 	"github.com/hoijun/fleet/internal/cloud"
 	"github.com/hoijun/fleet/internal/config"
@@ -27,6 +29,7 @@ import (
 	"github.com/hoijun/fleet/internal/store"
 	"github.com/hoijun/fleet/internal/symbols"
 	"github.com/hoijun/fleet/internal/syncengine"
+	"github.com/hoijun/fleet/internal/winhide"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -47,6 +50,14 @@ type App struct {
 	aiMu     sync.Mutex
 	aiCancel context.CancelFunc
 	aiGen    int
+
+	// agentic deep-dive (drives the claude CLI + PreToolUse approval gate)
+	dataDir      string
+	agentCoord   *agent.Coordinator
+	agentSrv     *agent.ApprovalServer
+	agentMu      sync.Mutex
+	agentCancel  context.CancelFunc
+	agentSession map[string]string
 
 	// cloud sync + auth
 	cloudClient *cloud.Client
@@ -105,9 +116,12 @@ func NewApp() *App {
 	return &App{
 		cfg: cfg, runner: git.ExecRunner{}, store: st,
 		ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed,
-		symCache:    map[string]symEntry{},
-		aiRunner:    ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey),
-		cloudClient: cl, creds: creds, engine: eng,
+		symCache:     map[string]symEntry{},
+		aiRunner:     ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey),
+		dataDir:      dir,
+		agentCoord:   agent.NewCoordinator(),
+		agentSession: map[string]string{},
+		cloudClient:  cl, creds: creds, engine: eng,
 		syncTrigger: make(chan struct{}, 1),
 		syncView:    SyncStateView{State: "signedout"},
 	}
@@ -986,4 +1000,177 @@ func (a *App) RemoveEdge(id string) string {
 		return "edges unavailable"
 	}
 	return errMsg(a.edges.Remove(id))
+}
+
+// AgentAvailable reports whether the agentic deep-dive can run: the provider
+// must be Claude (Claude Code), the claude CLI must be on PATH, and it must meet
+// the v2.1 floor (stream-json + PreToolUse JSON decisions). Below the floor the
+// UI degrades to the single-shot deep-dive.
+func (a *App) AgentAvailable() bool {
+	c := a.cfgSnapshot()
+	if c.AIProvider != "" && c.AIProvider != "claude" {
+		return false
+	}
+	path, err := exec.LookPath("claude")
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "--version")
+	winhide.Apply(cmd)
+	cmd.WaitDelay = 5 * time.Second
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	maj, min, ok := agent.ParseVersion(string(out))
+	return ok && agent.MinVersionMet(maj, min)
+}
+
+// consentPath is the marker file recording one-time agentic consent.
+func (a *App) consentPath() string { return filepath.Join(a.dataDir, "agent_consent") }
+
+// AgentConsent reports whether the one-time agentic consent was given.
+func (a *App) AgentConsent() bool {
+	_, err := os.Stat(a.consentPath())
+	return err == nil
+}
+
+// GiveAgentConsent records the one-time consent. Returns "" on success.
+func (a *App) GiveAgentConsent() string {
+	if err := os.MkdirAll(a.dataDir, 0o755); err != nil {
+		return err.Error()
+	}
+	return errMsg(os.WriteFile(a.consentPath(), []byte("1"), 0o644))
+}
+
+// agentHookBinary resolves fleet-hook: a sibling of the running executable if
+// present, else the bare name (relying on PATH).
+func agentHookBinary() string {
+	name := "fleet-hook"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if exe, err := os.Executable(); err == nil {
+		cand := filepath.Join(filepath.Dir(exe), name)
+		if _, err := os.Stat(cand); err == nil {
+			return cand
+		}
+	}
+	return name
+}
+
+// AgentAsk starts an agentic deep-dive on projectID's repo for question. It
+// spawns the claude CLI, streams events to the front end (agent:text/activity/
+// done/error), and gates mutating tool calls through agent:action. Returns ""
+// on a successful start, or an "error: ..." string.
+func (a *App) AgentAsk(projectID, question string) string {
+	if !a.AgentAvailable() {
+		return "error: agentic deep-dive requires the Claude (Claude Code) provider"
+	}
+	repoDir := projectID // a code project's id is its repo path
+	rec, _ := a.store.Get(projectID)
+	name := rec.Name
+	if name == "" {
+		name = filepath.Base(projectID)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "fleet-agent-")
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	settings := filepath.Join(tmpDir, "settings.json")
+	if err := agent.WriteHookSettings(settings, agentHookBinary()); err != nil {
+		os.RemoveAll(tmpDir)
+		return "error: " + err.Error()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.agentMu.Lock()
+	if a.agentCancel != nil {
+		a.agentCancel() // supersede any earlier run
+	}
+	a.agentCancel = cancel
+	if a.agentSrv != nil {
+		a.agentSrv.Stop(nil)
+	}
+	srv := agent.NewApprovalServer(ctx, a.agentCoord, 10*time.Minute, func(req agent.ActionRequest) {
+		wruntime.EventsEmit(a.ctx, "agent:action", req)
+	})
+	if err := srv.Start(); err != nil {
+		a.agentMu.Unlock()
+		cancel()
+		os.RemoveAll(tmpDir)
+		return "error: " + err.Error()
+	}
+	a.agentSrv = srv
+	resume := a.agentSession[projectID]
+	a.agentMu.Unlock()
+
+	opts := agent.Options{
+		RepoDir:      repoDir,
+		Prompt:       question,
+		SystemPrompt: agent.BuildSystemPrompt(name, rec),
+		Policy:       agent.DefaultPolicy(),
+		SettingsPath: settings,
+		HookURL:      srv.URL(),
+		ResumeID:     resume,
+		MaxTurns:     24,
+	}
+	go func() {
+		defer os.RemoveAll(tmpDir)
+		defer cancel()
+		err := agent.Driver{}.Run(ctx, opts, func(ev agent.Event) {
+			switch ev.Kind {
+			case agent.KindInit:
+				if ev.SessionID != "" {
+					a.agentMu.Lock()
+					a.agentSession[projectID] = ev.SessionID
+					a.agentMu.Unlock()
+				}
+			case agent.KindText:
+				// Stream only the partial text_delta chunks; the CLI repeats the
+				// same text as a complete assistant block when partial messages
+				// are on, so emitting both would double the answer.
+				if ev.Partial {
+					wruntime.EventsEmit(a.ctx, "agent:text", ev.Text)
+				}
+			case agent.KindTool:
+				wruntime.EventsEmit(a.ctx, "agent:activity", map[string]any{
+					"tool": ev.ToolName, "input": string(ev.ToolInput),
+				})
+			case agent.KindResult:
+				wruntime.EventsEmit(a.ctx, "agent:done", map[string]any{
+					"result": ev.Result, "costUsd": ev.CostUSD,
+					"inputTokens": ev.InputTokens, "outputTokens": ev.OutputTokens,
+				})
+			}
+		})
+		if err != nil {
+			wruntime.EventsEmit(a.ctx, "agent:error", err.Error())
+		}
+	}()
+	return ""
+}
+
+// ApproveAction resolves the outstanding gated tool call id with the user's
+// decision, unblocking the waiting fleet-hook request.
+func (a *App) ApproveAction(id string, approved bool) {
+	reason := "approved in fleet"
+	if !approved {
+		reason = "rejected in fleet"
+	}
+	a.agentCoord.Decide(id, approved, reason)
+}
+
+// CancelAgent kills the in-flight agentic run (context cancel + WaitDelay) and
+// unblocks any pending approval as a deny.
+func (a *App) CancelAgent() {
+	a.agentMu.Lock()
+	c := a.agentCancel
+	a.agentMu.Unlock()
+	if c != nil {
+		c()
+	}
 }

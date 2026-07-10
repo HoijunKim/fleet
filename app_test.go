@@ -642,6 +642,23 @@ func containsString(list []string, want string) bool {
 	return false
 }
 
+func TestAgentConsentMarker(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{dataDir: dir}
+	if a.AgentConsent() {
+		t.Fatal("consent must be false before it is given")
+	}
+	if msg := a.GiveAgentConsent(); msg != "" {
+		t.Fatalf("GiveAgentConsent error: %s", msg)
+	}
+	if !a.AgentConsent() {
+		t.Error("consent must be true after GiveAgentConsent")
+	}
+	if a.consentPath() != filepath.Join(dir, "agent_consent") {
+		t.Errorf("consentPath = %q", a.consentPath())
+	}
+}
+
 func TestAgenda(t *testing.T) {
 	a := newTestApp(t)
 	p := a.AddProject("proj")
