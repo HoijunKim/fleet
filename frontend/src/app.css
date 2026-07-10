@@ -254,48 +254,6 @@ select.input option { background: var(--surface); color: var(--text); }
 .tb-menu-item:hover { background: var(--surface); }
 .tb-menu-div { height: 1px; background: var(--border); margin: 4px 6px; }
 
-/* Compact utility icons */
-.ic-jump {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 5px;
-  line-height: 1.2;
-}
-.ic-search {
-  position: relative;
-  display: inline-block;
-  width: 13px;
-  height: 13px;
-}
-.ic-search::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 9px;
-  height: 9px;
-  border: 1.6px solid var(--muted);
-  border-radius: 50%;
-}
-.ic-search::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 5px;
-  height: 1.6px;
-  background: var(--muted);
-  transform: rotate(45deg);
-  transform-origin: right center;
-}
-.icon-btn:hover .ic-jump { border-color: var(--text); color: var(--text); }
-.icon-btn:hover .ic-search::before { border-color: var(--text); }
-.icon-btn:hover .ic-search::after { background: var(--text); }
-
 .brand {
   display: flex;
   align-items: center;
@@ -755,7 +713,7 @@ select.input option { background: var(--surface); color: var(--text); }
 }
 
 /* =========================================================================
-   Toolbar additions - status filter chips, palette button, gear
+   Toolbar additions - status filter chips, palette button
    ========================================================================= */
 .filter-chips {
   display: flex;
@@ -850,20 +808,6 @@ select.input option { background: var(--surface); color: var(--text); }
   transition: background var(--t), border-color var(--t), color var(--t);
 }
 .icon-btn:hover { background: var(--raised); color: var(--text); border-color: var(--border-hover); }
-.gear {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  position: relative;
-}
-.gear::before {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-}
 
 /* =========================================================================
    Stats header - slim summary tiles (Projects view)

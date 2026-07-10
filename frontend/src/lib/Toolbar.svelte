@@ -2,6 +2,7 @@
   import SyncPill from "./SyncPill.svelte";
   import AccountChip from "./AccountChip.svelte";
   import SignIn from "./SignIn.svelte";
+  import Icon from "./Icon.svelte";
 
   export let loadingCount: number = 0;
   // Count of code projects with unfetched upstream commits (behind > 0).
@@ -130,13 +131,13 @@
 
     <!-- Global utility: jump, search, settings - always at the far right -->
     <button class="icon-btn" on:click={onOpenPalette} title="Command palette (Ctrl K)" aria-label="Command palette">
-      <span class="ic-jump">K</span>
+      <Icon name="external" />
     </button>
     <button class="icon-btn" on:click={onOpenSearch} title="Search across repos (Ctrl Shift F)" aria-label="Search">
-      <span class="ic-search"></span>
+      <Icon name="search" />
     </button>
     <button class="icon-btn" on:click={onOpenSettings} title="Settings" aria-label="Settings">
-      <span class="gear"></span>
+      <Icon name="settings" />
     </button>
   </div>
 </header>
