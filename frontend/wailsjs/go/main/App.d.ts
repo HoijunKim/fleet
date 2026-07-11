@@ -115,6 +115,8 @@ export function ScanRepos():Promise<Array<main.RepoView>>;
 
 export function SearchAll(arg1:string):Promise<Array<main.SearchHit>>;
 
+export function SearchFiles(arg1:string):Promise<Array<main.FileHit>>;
+
 export function SetTags(arg1:string,arg2:Array<string>):Promise<string>;
 
 export function SetTaskStatus(arg1:string,arg2:string,arg3:string):Promise<string>;

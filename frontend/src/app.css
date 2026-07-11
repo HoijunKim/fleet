@@ -1154,6 +1154,73 @@ select.input option { background: var(--surface); color: var(--text); }
   white-space: nowrap;
 }
 
+/* Content / Files segmented toggle, sits inside the search row */
+.search-mode {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+}
+.search-mode-btn {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t), color var(--t);
+}
+.search-mode-btn:hover { color: var(--text); }
+.search-mode-btn.active { background: var(--accent-soft); color: var(--accent); }
+.search-mode-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Per-project filter chips, one row under the count line */
+.search-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--t), color var(--t), border-color var(--t), opacity var(--t);
+}
+.search-chip:hover { color: var(--text); border-color: var(--border-hover); }
+.search-chip-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+}
+/* Filtered-out repo: dimmed and de-emphasized (no strikethrough) */
+.search-chip.off {
+  color: var(--faint);
+  background: transparent;
+  opacity: 0.6;
+}
+.search-chip.off .search-chip-n { color: var(--faint); }
+
 /* =========================================================================
    Settings modal
    ========================================================================= */

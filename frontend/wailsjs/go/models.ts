@@ -145,6 +145,22 @@ export namespace main {
 	        this.note = source["note"];
 	    }
 	}
+	export class FileHit {
+	    repo: string;
+	    repoPath: string;
+	    file: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileHit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repo = source["repo"];
+	        this.repoPath = source["repoPath"];
+	        this.file = source["file"];
+	    }
+	}
 	export class GitHubView {
 	    ci: string;
 	    prs: number;

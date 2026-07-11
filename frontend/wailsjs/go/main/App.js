@@ -226,6 +226,10 @@ export function SearchAll(arg1) {
   return window['go']['main']['App']['SearchAll'](arg1);
 }
 
+export function SearchFiles(arg1) {
+  return window['go']['main']['App']['SearchFiles'](arg1);
+}
+
 export function SetTags(arg1, arg2) {
   return window['go']['main']['App']['SetTags'](arg1, arg2);
 }
