@@ -74,34 +74,104 @@ func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) V
 	}
 }
 
+// shellSepRe splits a command line on shell separators. The `||` alternative is
+// listed before `|` so a logical-OR is consumed whole, not as two empty pipes.
+var shellSepRe = regexp.MustCompile(`&&|\|\||;|\||\n|\r`)
+
+// splitSegments breaks a command line into the sub-commands the shell would run.
+// Splitting is deliberately quote-unaware: over-splitting can only produce more
+// segments to inspect (fail-closed), never hide one. Returns a single-element
+// slice when no separator is present.
+func splitSegments(c string) []string {
+	if !shellSepRe.MatchString(c) {
+		return []string{c}
+	}
+	var segs []string
+	for _, p := range shellSepRe.Split(c, -1) {
+		if p = strings.TrimSpace(p); p != "" {
+			segs = append(segs, p)
+		}
+	}
+	if len(segs) == 0 {
+		return []string{c}
+	}
+	return segs
+}
+
 func classifyBash(cmd string, ctx ClassifyContext) Verdict {
 	c := strings.TrimSpace(cmd)
 	if c == "" {
 		return Verdict{Decision: "gate", Category: CatShell, Severity: SevLow, Summary: "Run a command"}
 	}
-	// Secret-read guard (best-effort): cat/less/head/... on a secret path.
+	// Secret-read guard runs on the WHOLE command (unsplit), so a secret path in
+	// any position is caught regardless of the reading command's name.
 	if readsSecret(c) {
 		return deny("reading a secret file is blocked")
 	}
-	sub, args := gitSubcommand(c)
+	// Compound commands (`a && b`, `a; b`, `a | b`, newline, ...) are classified
+	// per segment; the verdict is deny if ANY segment denies, else a single gate
+	// whose Summary shows the whole command (never a per-segment summary that
+	// could conceal a later push). splitSegments only splits when a separator is
+	// present, so classifySegment does not recurse.
+	segs := splitSegments(c)
+	if len(segs) > 1 {
+		for _, seg := range segs {
+			if v := classifySegment(seg, ctx); v.Decision == "deny" {
+				return v
+			}
+		}
+		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Run: " + truncate(c, 80)}
+	}
+	return classifySegment(c, ctx)
+}
+
+// classifySegment classifies a single command with no shell separators.
+func classifySegment(seg string, ctx ClassifyContext) Verdict {
+	sub, args := gitSubcommand(seg)
+	sub = strings.ToLower(sub) // subcommand match is case-insensitive
 	switch {
 	case sub == "push":
 		return classifyPush(args, ctx)
 	case sub == "commit":
-		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Commit: " + commitMessage(c)}
-	case isPRCreate(c):
+		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Commit: " + commitMessage(seg)}
+	case sub != "" && hasPushToken(seg):
+		// Fail-closed backstop: a git command carries a `push` token but the
+		// parser did not classify it as a push (e.g. an unknown value-taking
+		// global flag desynced the token stream). Never fall through to a
+		// generic gate that could let the push run unseen.
+		return deny("push present but not parsed as a push; blocked")
+	case isPRCreate(seg):
 		return Verdict{Decision: "gate", Category: CatRemote, Severity: SevMedium, Summary: "Open a pull request"}
 	default:
-		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Run: " + truncate(c, 80)}
+		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Run: " + truncate(seg, 80)}
 	}
+}
+
+// hasPushToken reports whether any bare token equals `push`. Quoted tokens (e.g.
+// a commit message "push it") keep their quotes and so do not match.
+func hasPushToken(cmd string) bool {
+	for _, t := range strings.Fields(cmd) {
+		if strings.ToLower(t) == "push" {
+			return true
+		}
+	}
+	return false
 }
 
 // classifyPush resolves the push destination(s) and denies any that hit a
 // protected branch or that cannot be determined.
 func classifyPush(args []string, ctx ClassifyContext) Verdict {
+	// --all / --mirror push (or mirror) every local branch, including the
+	// default branch, so they can never resolve to a safe bare-branch gate.
+	for _, a := range args {
+		switch strings.ToLower(a) {
+		case "--all", "--mirror":
+			return deny("push --all/--mirror can hit the default branch")
+		}
+	}
 	protected := map[string]bool{}
 	for _, b := range ctx.ProtectedBranches {
-		protected[b] = true
+		protected[strings.ToLower(b)] = true
 	}
 	var refspecs []string
 	for _, a := range args {
@@ -120,7 +190,7 @@ func classifyPush(args []string, ctx ClassifyContext) Verdict {
 		if ctx.CurrentBranch == "" {
 			return deny("cannot determine push target")
 		}
-		if protected[ctx.CurrentBranch] {
+		if protected[strings.ToLower(ctx.CurrentBranch)] {
 			return deny("push to the default branch is blocked")
 		}
 		return Verdict{Decision: "gate", Category: CatRemote, Severity: SevHigh, Summary: "Push branch " + ctx.CurrentBranch + " to " + remoteOf(refspecs)}
@@ -130,7 +200,7 @@ func classifyPush(args []string, ctx ClassifyContext) Verdict {
 		if dest == "" {
 			return deny("cannot determine push target")
 		}
-		if protected[dest] {
+		if protected[strings.ToLower(dest)] {
 			return deny("push to the default branch is blocked")
 		}
 	}
@@ -156,8 +226,21 @@ func remoteOf(refspecs []string) string {
 	return "origin"
 }
 
+// consumesValue reports whether a git global flag takes a separate value token
+// (the space form, e.g. `--git-dir /x`). The attached form (`--git-dir=/x`) is a
+// single flag token and needs no special handling.
+func consumesValue(flag string) bool {
+	switch flag {
+	case "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path":
+		return true
+	}
+	return false
+}
+
 // gitSubcommand returns the git subcommand and its args if cmd is a git
-// invocation, else ("", nil). Handles `git -C dir push …`.
+// invocation, else ("", nil). Handles global flags including the value-taking
+// ones (`git --git-dir /x push …`) so the value token is not mistaken for the
+// subcommand.
 func gitSubcommand(cmd string) (string, []string) {
 	toks := strings.Fields(cmd)
 	i := 0
@@ -169,9 +252,8 @@ func gitSubcommand(cmd string) (string, []string) {
 	}
 	i++ // past "git"
 	for i < len(toks) && strings.HasPrefix(toks[i], "-") {
-		// skip global flags; -C and -c take a value
-		if toks[i] == "-C" || toks[i] == "-c" {
-			i++
+		if consumesValue(toks[i]) {
+			i++ // skip this flag's value token
 		}
 		i++
 	}
@@ -186,11 +268,28 @@ func isPRCreate(cmd string) bool {
 		regexp.MustCompile(`\bgit\s+request-pull\b`).MatchString(cmd)
 }
 
+// secretPathRe matches a token/substring naming a secret file or path.
 var secretPathRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|credentials|secret|\.ssh/)`)
-var readCmdRe = regexp.MustCompile(`^\s*(cat|less|more|head|tail|xxd|base64|strings|od|nl)\b`)
+
+// secretArgRe matches a secret path at an argument boundary (start-of-string, a
+// path separator, whitespace, or a shell operator), so ANY reading command hits
+// it — cat, /bin/cat, `command cat`, sed, awk, dd, cp, `grep -r … .env`, … —
+// rather than a fixed command allowlist.
+var secretArgRe = regexp.MustCompile(`(?i)(^|/|\s|&&|;|\|)[^\s/]*(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|credentials|secret|\.ssh/)`)
+
+// gitShowSecretRe matches git plumbing that can print a file's contents from a
+// revision (`git show HEAD:.env`, `git cat-file -p HEAD:.env`, `git diff … .env`)
+// where the secret path may be attached to a rev by ':' (not an arg boundary).
+var gitShowSecretRe = regexp.MustCompile(`(?i)\bgit\s+(show|diff|cat-file)\b`)
 
 func readsSecret(cmd string) bool {
-	return readCmdRe.MatchString(cmd) && secretPathRe.MatchString(cmd)
+	if secretArgRe.MatchString(cmd) {
+		return true
+	}
+	if gitShowSecretRe.MatchString(cmd) && secretPathRe.MatchString(cmd) {
+		return true
+	}
+	return false
 }
 
 var commitMsgRe = regexp.MustCompile(`-m\s+("([^"]*)"|'([^']*)'|(\S+))`)
@@ -219,10 +318,16 @@ func baseOr(path, fallback string) string {
 	return path
 }
 
+// truncate shortens s to at most n runes (rune-aware so a multibyte rune near
+// the limit is never cut mid-encoding), appending "..." when it trims.
 func truncate(s string, n int) string {
 	s = strings.TrimSpace(s)
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n-3] + "..."
+	if n <= 3 {
+		return string(r[:n])
+	}
+	return string(r[:n-3]) + "..."
 }
