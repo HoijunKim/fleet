@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors } from "../../wailsjs/go/main/App";
   import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
+  import { editorSelection } from "./editorSelection";
   import Logo from "./Logo.svelte";
 
   export let onClose: () => void;
@@ -25,11 +26,41 @@
       if (!cfg.Roots) cfg.Roots = [];
       if (!cfg.AIProvider) cfg.AIProvider = "claude";
       refreshAiOk();
+      syncEditorChoice();
     } catch (e) {
       toastError("Load failed: " + String(e));
     } finally {
       loading = false;
     }
+  }
+
+  // ---- Editor picker: known editors detected on PATH, plus a Custom fallback ----
+  let editors: { name: string; command: string; installed: boolean }[] = [];
+  let editorChoice = "custom";
+
+  // Non-blocking: a failed detection just leaves the picker with only "Custom...".
+  async function loadEditors() {
+    try {
+      editors = await DetectEditors();
+    } catch {
+      editors = [];
+    }
+    syncEditorChoice();
+  }
+
+  // Re-derive the dropdown selection from the saved config. Only called right
+  // after cfg/editors finish loading - never while the user is actively
+  // picking or typing - so the picker stays non-destructive. Computed
+  // directly (not via a reactive `$:` value) so it can't read a stale
+  // pre-invalidation snapshot when called synchronously after `cfg` loads.
+  function syncEditorChoice() {
+    if (!cfg) return;
+    editorChoice = editorSelection(cfg.Editor, editors).selected;
+  }
+
+  function onEditorChoice() {
+    if (!cfg || editorChoice === "custom") return;
+    cfg.Editor = editorChoice;
   }
 
   function refreshAiOk() {
@@ -89,6 +120,7 @@
   }
 
   load();
+  loadEditors();
 
   function addRoot() {
     const v = newRoot.trim();
@@ -184,7 +216,15 @@
         <div class="field-grid">
           <div class="field">
             <label class="field-label" for="set-editor">Editor</label>
-            <input id="set-editor" class="input" type="text" placeholder="code" bind:value={cfg.Editor} />
+            <select id="set-editor" class="input" bind:value={editorChoice} on:change={onEditorChoice}>
+              {#each editors as e (e.command)}
+                <option value={e.command}>{e.name}{e.installed ? " (installed)" : ""}</option>
+              {/each}
+              <option value="custom">Custom...</option>
+            </select>
+            {#if editorChoice === "custom"}
+              <input class="input" type="text" placeholder="code" bind:value={cfg.Editor} />
+            {/if}
           </div>
           <div class="field">
             <label class="field-label" for="set-terminal">Terminal</label>

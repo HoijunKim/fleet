@@ -145,6 +145,22 @@ export namespace main {
 	        this.note = source["note"];
 	    }
 	}
+	export class EditorOption {
+	    name: string;
+	    command: string;
+	    installed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new EditorOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.command = source["command"];
+	        this.installed = source["installed"];
+	    }
+	}
 	export class FileHit {
 	    repo: string;
 	    repoPath: string;

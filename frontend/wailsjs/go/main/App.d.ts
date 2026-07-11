@@ -45,6 +45,8 @@ export function DeleteProject(arg1:string):Promise<string>;
 
 export function DeleteTask(arg1:string,arg2:string):Promise<string>;
 
+export function DetectEditors():Promise<Array<main.EditorOption>>;
+
 export function DiffFile(arg1:string,arg2:string):Promise<string>;
 
 export function Fetch(arg1:string):Promise<string>;

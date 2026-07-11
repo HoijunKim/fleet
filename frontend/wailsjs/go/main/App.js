@@ -86,6 +86,10 @@ export function DeleteTask(arg1, arg2) {
   return window['go']['main']['App']['DeleteTask'](arg1, arg2);
 }
 
+export function DetectEditors() {
+  return window['go']['main']['App']['DetectEditors']();
+}
+
 export function DiffFile(arg1, arg2) {
   return window['go']['main']['App']['DiffFile'](arg1, arg2);
 }
