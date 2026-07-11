@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1096,9 +1097,21 @@ func (a *App) AgentAsk(projectID, question string) string {
 	if a.agentSrv != nil {
 		a.agentSrv.Stop(nil)
 	}
-	srv := agent.NewApprovalServer(ctx, a.agentCoord, 10*time.Minute, func(req agent.ActionRequest) {
-		wruntime.EventsEmit(a.ctx, "agent:action", req)
-	})
+	srv := agent.NewApprovalServer(ctx, a.agentCoord, 10*time.Minute,
+		func(req agent.ActionRequest) {
+			wruntime.EventsEmit(a.ctx, "agent:action", req)
+		},
+		func(tool string, input json.RawMessage, cwd string) agent.Verdict {
+			// The branch can change mid-run via checkout, so it is resolved
+			// live from the tool call's cwd rather than cached at run start.
+			if cwd == "" {
+				cwd = repoDir
+			}
+			return agent.Classify(tool, input, agent.ClassifyContext{
+				CurrentBranch:     git.CurrentBranch(cwd),
+				ProtectedBranches: agent.DefaultProtectedBranches(),
+			})
+		})
 	if err := srv.Start(); err != nil {
 		a.agentMu.Unlock()
 		cancel()

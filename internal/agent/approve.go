@@ -16,6 +16,9 @@ type ActionRequest struct {
 	ToolInput json.RawMessage `json:"toolInput"`
 	Cwd       string          `json:"cwd"`
 	SessionID string          `json:"sessionId"`
+	Category  Category        `json:"category"`
+	Severity  Severity        `json:"severity"`
+	Summary   string          `json:"summary"`
 }
 
 // hookPost is the JSON the fleet-hook helper POSTs to /approve.
@@ -33,6 +36,7 @@ type hookPost struct {
 type ApprovalServer struct {
 	coord    *Coordinator
 	onAction func(ActionRequest)
+	classify func(toolName string, toolInput json.RawMessage, cwd string) Verdict
 	timeout  time.Duration
 	ctx      context.Context
 	srv      *http.Server
@@ -41,8 +45,13 @@ type ApprovalServer struct {
 
 // NewApprovalServer builds the server. ctx (may be nil) cancels any in-flight
 // Await so CancelAgent unblocks a waiting hook. onAction emits to the GUI.
-func NewApprovalServer(ctx context.Context, coord *Coordinator, timeout time.Duration, onAction func(ActionRequest)) *ApprovalServer {
-	return &ApprovalServer{coord: coord, onAction: onAction, timeout: timeout, ctx: ctx}
+// classify decides each gated tool call before it is registered; a nil
+// classify defaults to a gate-everything shim (fail-safe: never allow).
+func NewApprovalServer(ctx context.Context, coord *Coordinator, timeout time.Duration, onAction func(ActionRequest), classify func(toolName string, toolInput json.RawMessage, cwd string) Verdict) *ApprovalServer {
+	if classify == nil {
+		classify = func(string, json.RawMessage, string) Verdict { return Verdict{Decision: "gate"} }
+	}
+	return &ApprovalServer{coord: coord, onAction: onAction, classify: classify, timeout: timeout, ctx: ctx}
 }
 
 // Start binds an ephemeral loopback port and serves in the background.
@@ -81,9 +90,19 @@ func (s *ApprovalServer) handleApprove(w http.ResponseWriter, r *http.Request) {
 		writeDecision(w, false, "malformed hook request")
 		return
 	}
+	v := s.classify(p.ToolName, p.ToolInput, p.Cwd)
+	if v.Decision == "deny" {
+		// Auto-deny: never register a pending decision or notify the GUI, so
+		// the user is never asked to approve something already blocked.
+		writeDecision(w, false, v.Reason)
+		return
+	}
 	id := s.coord.Register()
 	if s.onAction != nil {
-		s.onAction(ActionRequest{ID: id, ToolName: p.ToolName, ToolInput: p.ToolInput, Cwd: p.Cwd, SessionID: p.SessionID})
+		s.onAction(ActionRequest{
+			ID: id, ToolName: p.ToolName, ToolInput: p.ToolInput, Cwd: p.Cwd, SessionID: p.SessionID,
+			Category: v.Category, Severity: v.Severity, Summary: v.Summary,
+		})
 	}
 	ctx := s.ctx
 	if ctx == nil {

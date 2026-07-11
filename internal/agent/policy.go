@@ -25,7 +25,9 @@ func DefaultPolicy() Policy {
 			"Read(**/id_rsa)", "Read(**/id_ed25519)", "Read(**/*.pem)",
 			"Read(**/*.key)", "Read(**/.ssh/**)",
 			"Read(**/credentials)", "Read(**/credentials*)", "Read(**/.aws/**)",
-			"Bash(rm:*)", "Bash(git push:*)", "Bash(sudo:*)", "Bash(curl:*)",
+			"Read(**/*token*)", "Read(**/*.p12)", "Read(**/*.pfx)",
+			"Read(**/.netrc)", "Read(**/*.keystore)", "Read(**/*.ovpn)",
+			"Bash(rm:*)", "Bash(sudo:*)", "Bash(curl:*)",
 		},
 	}
 }

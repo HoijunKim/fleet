@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,7 +27,10 @@ func postApprove(t *testing.T, url, body string) map[string]any {
 func TestApprovalServerAllow(t *testing.T) {
 	coord := NewCoordinator()
 	gotCh := make(chan ActionRequest, 1)
-	srv := NewApprovalServer(nil, coord, time.Second, func(a ActionRequest) { gotCh <- a })
+	classify := func(string, json.RawMessage, string) Verdict {
+		return Verdict{Decision: "gate", Category: CatEdit, Severity: SevLow, Summary: "Edit x"}
+	}
+	srv := NewApprovalServer(nil, coord, time.Second, func(a ActionRequest) { gotCh <- a }, classify)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +45,9 @@ func TestApprovalServerAllow(t *testing.T) {
 	if req.ToolName != "Edit" || req.Cwd != "/r" || req.SessionID != "s" || req.ID == "" {
 		t.Fatalf("action req = %+v", req)
 	}
+	if req.Category != CatEdit || req.Severity != SevLow || req.Summary != "Edit x" {
+		t.Fatalf("classification metadata not populated on gate: %+v", req)
+	}
 	if !coord.Decide(req.ID, true, "yes") {
 		t.Fatal("Decide failed")
 	}
@@ -52,7 +59,7 @@ func TestApprovalServerAllow(t *testing.T) {
 
 func TestApprovalServerTimeout(t *testing.T) {
 	coord := NewCoordinator()
-	srv := NewApprovalServer(nil, coord, 20*time.Millisecond, func(a ActionRequest) {})
+	srv := NewApprovalServer(nil, coord, 20*time.Millisecond, func(a ActionRequest) {}, nil)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -60,6 +67,37 @@ func TestApprovalServerTimeout(t *testing.T) {
 	res := postApprove(t, srv.URL(), `{"tool_name":"Bash"}`)
 	if res["approved"] != false {
 		t.Errorf("timeout must deny: %+v", res)
+	}
+}
+
+func TestApprovalServerAutoDeniesWithoutAsking(t *testing.T) {
+	coord := NewCoordinator()
+	fired := false
+	classify := func(tool string, _ json.RawMessage, _ string) Verdict {
+		if tool == "Bash" {
+			return Verdict{Decision: "deny", Reason: "blocked"}
+		}
+		return Verdict{Decision: "gate", Category: CatEdit, Summary: "Edit x"}
+	}
+	s := NewApprovalServer(context.Background(), coord, time.Second, func(ActionRequest) { fired = true }, classify)
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop(nil)
+
+	body := `{"tool_name":"Bash","tool_input":{"command":"git push origin main"},"cwd":"/r"}`
+	resp, err := http.Post(s.URL(), "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	if out["approved"] != false {
+		t.Fatalf("auto-deny should answer approved=false, got %v", out)
+	}
+	if fired {
+		t.Fatal("onAction must NOT fire for an auto-denied action")
 	}
 }
 
@@ -93,7 +131,7 @@ func TestDriverGateEndToEnd(t *testing.T) {
 	coord := NewCoordinator()
 	srv := NewApprovalServer(nil, coord, 2*time.Second, func(a ActionRequest) {
 		coord.Decide(a.ID, true, "approved in test") // stand in for the GUI approving
-	})
+	}, nil)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}

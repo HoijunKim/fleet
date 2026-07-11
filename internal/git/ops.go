@@ -63,6 +63,17 @@ func Branches(r Runner, dir string) (current string, all []string, err error) {
 	return current, all, nil
 }
 
+// CurrentBranch returns dir's current branch, resolved live via the real git
+// binary. Returns "" on error or detached HEAD (git prints nothing for
+// `branch --show-current` in that case).
+func CurrentBranch(dir string) string {
+	out, err := (ExecRunner{}).Run(dir, "branch", "--show-current")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
 // Checkout switches to branch.
 func Checkout(r Runner, dir, branch string) error { _, err := r.Run(dir, "checkout", branch); return err }
 
