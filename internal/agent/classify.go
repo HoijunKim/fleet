@@ -115,11 +115,10 @@ func classifyBash(cmd string, ctx ClassifyContext) Verdict {
 	// the next line (`git push \<newline>origin main`) is not orphaned onto its
 	// own pseudo-segment by the newline separator.
 	c = lineContinuationRe.ReplaceAllString(c, " ")
-	// Secret-read guard runs on the WHOLE command (unsplit), so a secret path in
-	// any position is caught regardless of the reading command's name.
-	if readsSecret(c) {
-		return deny("reading a secret file is blocked")
-	}
+	// The secret-read guard is applied PER SEGMENT inside classifySegment (after
+	// the git subcommand is known), not here on the whole command: a commit/push/
+	// PR message is text, not a file read, and must never trip it. See
+	// classifySegment for the guard itself.
 	// Compound commands (`a && b`, `a & b`, `a; b`, `a | b`, newline, ...) are
 	// classified per segment: deny if ANY segment denies, else a single gate whose
 	// Summary shows the WHOLE command. Because splitting is quote-unaware the
@@ -140,12 +139,19 @@ func classifyBash(cmd string, ctx ClassifyContext) Verdict {
 	return classifySegment(segs[0], ctx)
 }
 
-// classifySegment classifies a single command with no shell separators.
+// classifySegment classifies a single command with no shell separators. The
+// git subcommand (if any) is identified FIRST so commit/push/PR-create can be
+// gated on their own terms; the secret-read guard only reaches commands that
+// are none of those, so a commit/push/PR message that merely MENTIONS a
+// secret keyword (e.g. `git commit -m "harden .env parsing"`) is never
+// treated as a secret read. An actual secret read - `cat .env`, `grep
+// password .env`, `git show HEAD:.env`, etc. - still denies via readsSecret.
 func classifySegment(seg string, ctx ClassifyContext) Verdict {
 	sub, args := gitSubcommand(seg)
 	sub = strings.ToLower(sub) // subcommand match is case-insensitive
 	// A cleanly-parsed git push is the ONLY safe push form; classifyPush decides
-	// gate (feature branch) vs deny (protected / unresolvable).
+	// gate (feature branch) vs deny (protected / unresolvable). It never reads
+	// the secret guard - a refspec is not a secret.
 	if sub == "push" {
 		return classifyPush(args, ctx)
 	}
@@ -164,9 +170,19 @@ func classifySegment(seg string, ctx ClassifyContext) Verdict {
 	}
 	switch {
 	case sub == "commit":
+		// A commit MESSAGE is text the agent wrote, not a file read - it must
+		// never be run through the secret-read guard, or a message that simply
+		// mentions "secret"/".env"/"credentials" (e.g. describing a hardening
+		// fix) would be wrongly denied.
 		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Commit: " + commitMessage(seg)}
 	case isPRCreate(seg):
+		// Same reasoning as commit: a PR title/body is text, not a file read.
 		return Verdict{Decision: "gate", Category: CatRemote, Severity: SevMedium, Summary: "Open a pull request"}
+	case readsSecret(seg):
+		// Everything else that touches a secret-shaped path is a real read:
+		// cat/less/more/head/tail/xxd/base64/strings/od/nl/sed/awk/dd/cp/grep …
+		// on a secret path, or git show/diff/cat-file targeting one.
+		return deny("reading a secret file is blocked")
 	default:
 		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Run: " + truncate(seg, 80)}
 	}

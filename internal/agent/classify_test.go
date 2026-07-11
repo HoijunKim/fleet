@@ -277,6 +277,54 @@ func TestTruncateRuneSafe(t *testing.T) {
 	}
 }
 
+// --- Final-review fix: secret-read guard must not read commit/PR MESSAGES ---
+
+// TestClassifyCommitMessageMentioningSecretGates covers the over-denial found
+// in final review: classifyBash used to run readsSecret on the WHOLE command
+// before classifying the git subcommand, so a commit message that merely
+// MENTIONS a secret keyword ("secrets", ".env", "credentials", ...) was
+// wrongly auto-denied with "reading a secret file is blocked" - silently
+// breaking commit -> push -> PR. A commit message is text the agent wrote,
+// not a file read, and must gate like any other commit.
+func TestClassifyCommitMessageMentioningSecretGates(t *testing.T) {
+	gate := []struct{ name, cmd string }{
+		{"mentions-secrets", `git commit -m "mask secrets before sending diffs to AI"`},
+		{"mentions-dotenv", `git commit -m "harden .env parsing"`},
+	}
+	for _, g := range gate {
+		got := v("Bash", `{"command":`+jsonStr(g.cmd)+`}`, "feat/x")
+		if got.Decision != "gate" {
+			t.Fatalf("%s: expected gate (not deny) for %q: %+v", g.name, g.cmd, got)
+		}
+		if got.Category != CatShell {
+			t.Fatalf("%s: expected shell category for %q: %+v", g.name, g.cmd, got)
+		}
+	}
+}
+
+// TestClassifySecretReadStillDeniesAfterCommitMessageFix is the control set:
+// the commit/PR-message carve-out must NOT weaken any actual secret read, a
+// default-branch push, or a compound where a later segment is a real read.
+func TestClassifySecretReadStillDeniesAfterCommitMessageFix(t *testing.T) {
+	deny := []struct{ name, cmd string }{
+		{"cat-dotenv", "cat .env"},
+		{"git-show-dotenv", "git show HEAD:.env"},
+		{"grep-password-dotenv", "grep -r password .env"},
+		{"compound-commit-then-cat-secret", `git commit -m x && cat .env`},
+		{"push-default-branch", "git push origin main"},
+	}
+	for _, d := range deny {
+		got := v("Bash", `{"command":`+jsonStr(d.cmd)+`}`, "feat/x")
+		if got.Decision != "deny" {
+			t.Fatalf("%s: expected deny for %q: %+v", d.name, d.cmd, got)
+		}
+	}
+	// Feature-branch push and remote gates must still be unaffected.
+	if g := v("Bash", `{"command":"git push origin feat/x"}`, "feat/x"); g.Decision != "gate" || g.Category != CatRemote {
+		t.Fatalf("feature push: %+v", g)
+	}
+}
+
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
 
 // jsonStr quotes a string as a JSON literal for embedding in a command field.

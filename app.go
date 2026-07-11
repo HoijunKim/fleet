@@ -1104,11 +1104,18 @@ func (a *App) AgentAsk(projectID, question string) string {
 		func(tool string, input json.RawMessage, cwd string) agent.Verdict {
 			// The branch can change mid-run via checkout, so it is resolved
 			// live from the tool call's cwd rather than cached at run start.
-			if cwd == "" {
-				cwd = repoDir
+			// Only Bash classification can reach a push decision (Edit/Write
+			// never consult CurrentBranch), so the branch - a git subprocess
+			// spawn - is resolved only for Bash; other tools skip it.
+			var branch string
+			if tool == "Bash" {
+				if cwd == "" {
+					cwd = repoDir
+				}
+				branch = git.CurrentBranch(cwd)
 			}
 			return agent.Classify(tool, input, agent.ClassifyContext{
-				CurrentBranch:     git.CurrentBranch(cwd),
+				CurrentBranch:     branch,
 				ProtectedBranches: agent.DefaultProtectedBranches(),
 			})
 		})
