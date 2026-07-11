@@ -242,6 +242,47 @@ func (a *App) SaveConfig(c config.Config) string {
 	return ""
 }
 
+// EditorOption is a known editor and whether its command is on PATH.
+type EditorOption struct {
+	Name      string `json:"name"`
+	Command   string `json:"command"`
+	Installed bool   `json:"installed"`
+}
+
+// knownEditors is the curated name->command list shown in the picker (display
+// order when equally installed).
+var knownEditors = []EditorOption{
+	{Name: "VS Code", Command: "code"},
+	{Name: "Cursor", Command: "cursor"},
+	{Name: "Windsurf", Command: "windsurf"},
+	{Name: "Sublime Text", Command: "subl"},
+	{Name: "Zed", Command: "zed"},
+	{Name: "Neovim", Command: "nvim"},
+	{Name: "Vim", Command: "vim"},
+	{Name: "IntelliJ IDEA", Command: "idea"},
+	{Name: "WebStorm", Command: "webstorm"},
+	{Name: "Emacs", Command: "emacs"},
+	{Name: "Notepad++", Command: "notepad++"},
+}
+
+// DetectEditors returns the known editors, marking the ones on PATH installed
+// and sorting installed-first (stable within each group).
+func (a *App) DetectEditors() []EditorOption { return detectEditors(exec.LookPath) }
+
+func detectEditors(lookPath func(string) (string, error)) []EditorOption {
+	var installed, missing []EditorOption
+	for _, e := range knownEditors {
+		e := e
+		if _, err := lookPath(e.Command); err == nil {
+			e.Installed = true
+			installed = append(installed, e)
+		} else {
+			missing = append(missing, e)
+		}
+	}
+	return append(installed, missing...)
+}
+
 func errMsg(err error) string {
 	if err != nil {
 		return err.Error()

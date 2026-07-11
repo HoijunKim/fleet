@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -757,5 +758,32 @@ func TestAgenda(t *testing.T) {
 
 	if last := items[len(items)-1]; last.Due != "" {
 		t.Errorf("empty-due item should sort last, got %+v", last)
+	}
+}
+
+func TestDetectEditors(t *testing.T) {
+	installed := map[string]bool{"code": true, "nvim": true}
+	look := func(cmd string) (string, error) {
+		if installed[cmd] {
+			return "/usr/bin/" + cmd, nil
+		}
+		return "", errors.New("not found")
+	}
+	got := detectEditors(look)
+	// full known list returned; installed ones flagged + sorted first
+	if len(got) < 5 {
+		t.Fatalf("expected the full known list, got %d", len(got))
+	}
+	if !got[0].Installed || !got[1].Installed {
+		t.Fatalf("installed editors should sort first: %+v", got[:2])
+	}
+	var code EditorOption
+	for _, e := range got {
+		if e.Command == "code" {
+			code = e
+		}
+	}
+	if code.Name != "VS Code" || !code.Installed {
+		t.Fatalf("code: %+v", code)
 	}
 }
