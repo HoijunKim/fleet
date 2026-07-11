@@ -24,4 +24,12 @@ describe("parseAction", () => {
     expect(parseAction("edit", "Edit", '{"file_path":"z","old_string":"","new_string":"q"}').kind).toBe("diff");
     expect(parseAction("edit", "Edit", "not json").kind).toBe("raw");
   });
+  it("returns a string for undefined/non-serializable input", () => {
+    const a = parseAction("edit", "Edit", undefined);
+    expect(a.kind).toBe("raw");
+    if (a.kind === "raw") {
+      expect(typeof a.json).toBe("string");
+      expect(a.json).toBe("undefined");
+    }
+  });
 });

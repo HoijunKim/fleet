@@ -31,5 +31,11 @@ export function parseAction(category: string, toolName: string, toolInput: any):
 }
 
 function safeJson(v: any): string {
-  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+  if (v === undefined) return "undefined";
+  try {
+    const s = JSON.stringify(v, null, 2);
+    return s === undefined ? String(v) : s; // stringify returns undefined for functions/symbols too
+  } catch {
+    return String(v);
+  }
 }
