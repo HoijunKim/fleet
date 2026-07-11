@@ -218,7 +218,12 @@
             <label class="field-label" for="set-editor">Editor</label>
             <select id="set-editor" class="input" bind:value={editorChoice} on:change={onEditorChoice}>
               {#each editors as e (e.command)}
-                <option value={e.command}>{e.name}{e.installed ? " (installed)" : ""}</option>
+                <!-- Disable editors not on PATH so you can't pick one you don't have.
+                     Exception: keep the currently-saved editor selectable even if this
+                     machine lacks it (e.g. a config synced from another machine). -->
+                <option value={e.command} disabled={!e.installed && e.command !== cfg.Editor}>
+                  {e.name}{e.installed ? " (installed)" : " (not installed)"}
+                </option>
               {/each}
               <option value="custom">Custom...</option>
             </select>
