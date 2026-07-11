@@ -466,6 +466,41 @@ func TestSearchAllAssembles(t *testing.T) {
 	}
 }
 
+func TestSearchFilesEmptyQuery(t *testing.T) {
+	a := newTestApp(t)
+	if got := a.SearchFiles("   "); got == nil || len(got) != 0 {
+		t.Errorf("blank query must return empty non-nil, got %v", got)
+	}
+}
+
+func TestSearchFilesAssembles(t *testing.T) {
+	// A real git repo in a temp root so scan.Discover finds it; the fake runner
+	// returns canned ls-files output for the "ls-files" subcommand.
+	root := t.TempDir()
+	repo := filepath.Join(root, "myrepo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	a := &App{cfg: cfg, runner: fakeRunner{out: map[string]string{"ls-files": "src/main.go\nREADME.md\nconfig.yaml\n"}}, store: newTestStore(t)}
+	hits := a.SearchFiles("main")
+	if len(hits) != 1 {
+		t.Fatalf("hits=%v", hits)
+	}
+	if hits[0].Repo != "myrepo" || hits[0].File != "src/main.go" {
+		t.Errorf("hit=%+v", hits[0])
+	}
+	// Test case-insensitive matching: uppercase query should match lowercase file
+	hitsUpper := a.SearchFiles("MAIN")
+	if len(hitsUpper) != 1 {
+		t.Fatalf("case-insensitive query should match, got hits=%v", hitsUpper)
+	}
+	if hitsUpper[0].File != "src/main.go" {
+		t.Errorf("case-insensitive hit file=%q, want src/main.go", hitsUpper[0].File)
+	}
+}
+
 type ghFakeApp struct{}
 
 func (ghFakeApp) Run(args ...string) (string, error) {
