@@ -12,7 +12,10 @@ export const consent = writable(false);
 export const running = writable(false);
 export const stream = writable("");
 export const activity = writable<{ tool: string; input: string }[]>([]);
-export const pending = writable<{ id: string; toolName: string; toolInput: string } | null>(null);
+export const pending = writable<{
+  id: string; toolName: string; toolInput: string;
+  category: string; severity: string; summary: string;
+} | null>(null);
 export const cost = writable<{ costUsd: number; inputTokens: number; outputTokens: number } | null>(null);
 export const turns = writable<Turn[]>([]);
 export const overlayOpen = writable(false);
@@ -51,7 +54,13 @@ export async function initAgentSession(): Promise<void> {
     started = true;
     EventsOn("agent:text", (t: any) => { if (stale()) return; stream.update((s) => s + String(t ?? "")); });
     EventsOn("agent:activity", (a: any) => { if (stale()) return; activity.update((x) => [...x, { tool: a?.tool ?? "", input: fmtInput(a?.input) }]); });
-    EventsOn("agent:action", (a: any) => { if (stale()) return; pending.set({ id: a?.id ?? "", toolName: a?.toolName ?? "", toolInput: fmtInput(a?.toolInput) }); });
+    EventsOn("agent:action", (a: any) => {
+      if (stale()) return;
+      pending.set({
+        id: a?.id ?? "", toolName: a?.toolName ?? "", toolInput: fmtInput(a?.toolInput),
+        category: a?.category ?? "shell", severity: a?.severity ?? "medium", summary: a?.summary ?? "",
+      });
+    });
     EventsOn("agent:done", (d: any) => {
       if (stale()) return;
       cost.set({ costUsd: d?.costUsd ?? 0, inputTokens: d?.inputTokens ?? 0, outputTokens: d?.outputTokens ?? 0 });
@@ -99,7 +108,9 @@ export async function ask(q: string): Promise<void> {
 export async function decide(approved: boolean): Promise<void> {
   const p = get(pending);
   if (!p || deciding) return;
+  const summary = p.summary;
   pending.set(null);
+  activity.update((x) => [...x, { tool: approved ? "approved" : "rejected", input: summary }]);
   deciding = true;
   try { await ApproveAction(p.id, approved); } finally { deciding = false; }
 }
@@ -117,3 +128,24 @@ export function openOverlay(p: Proj): void {
   overlayOpen.set(true);
 }
 export function closeOverlay(): void { overlayOpen.set(false); } // does NOT cancel the run
+
+// Test-isolation only: resets every store and module-level run state to its
+// initial value. Does NOT reset `started` - the agent:* event subscriptions
+// stay registered across resets within a single test process.
+export function __reset(): void {
+  available.set(false);
+  consent.set(false);
+  running.set(false);
+  stream.set("");
+  activity.set([]);
+  pending.set(null);
+  cost.set(null);
+  turns.set([]);
+  overlayOpen.set(false);
+  project = null;
+  loadedPath = "";
+  gen = 0;
+  runPath = "";
+  runGen = 0;
+  deciding = false;
+}

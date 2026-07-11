@@ -31,7 +31,40 @@ describe("AgentOverlay", () => {
   it("shows the approval card with the pending tool", () => {
     S.setProject({ path: "/r", repoPath: "/r", name: "r" });
     S.overlayOpen.set(true); S.consent.set(true);
-    S.pending.set({ id: "act-9", toolName: "Edit", toolInput: "{}" });
+    S.pending.set({ id: "act-9", toolName: "Edit", toolInput: "{}", category: "edit", severity: "low", summary: "" });
     expect(render()).toContain("Edit");
+  });
+
+  it("renders the category badge and summary", () => {
+    S.setProject({ path: "/r", repoPath: "/r", name: "r" });
+    S.overlayOpen.set(true); S.consent.set(true);
+    S.pending.set({ id: "act-10", toolName: "Bash", toolInput: JSON.stringify({ command: "git push origin main" }), category: "remote", severity: "high", summary: "Push branch main to origin" });
+    const html = render();
+    expect(html).toContain("ov-cat-remote");
+    expect(html).toContain("Push branch main to origin");
+    expect(html).toContain("git push origin main");
+  });
+
+  it("renders a red/green diff for an Edit action", () => {
+    S.setProject({ path: "/r", repoPath: "/r", name: "r" });
+    S.overlayOpen.set(true); S.consent.set(true);
+    S.pending.set({
+      id: "act-11", toolName: "Edit", category: "edit", severity: "low", summary: "Edit foo.ts",
+      toolInput: JSON.stringify({ file_path: "foo.ts", old_string: "old", new_string: "new" }),
+    });
+    const html = render();
+    expect(html).toContain("foo.ts");
+    expect(html).toContain("ov-del");
+    expect(html).toContain("ov-add");
+  });
+
+  it("renders an approved outcome line with the check icon", () => {
+    S.setProject({ path: "/r", repoPath: "/r", name: "r" });
+    S.overlayOpen.set(true); S.consent.set(true);
+    S.activity.set([{ tool: "approved", input: "Edit foo.ts" }]);
+    const html = render();
+    expect(html).toContain("ov-act-ok");
+    expect(html).toContain("Edit foo.ts");
+    S.activity.set([]);
   });
 });

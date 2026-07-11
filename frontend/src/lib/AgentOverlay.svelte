@@ -5,6 +5,7 @@
     available, consent, running, stream, activity, pending, cost, turns, overlayOpen,
     giveConsent, ask, decide, cancel, closeOverlay,
   } from "./agentSession";
+  import { parseAction } from "./agentAction";
   import Icon from "./Icon.svelte";
   import Logo from "./Logo.svelte";
   import { renderBrief } from "./markdown";
@@ -13,6 +14,8 @@
   export let projectName: string = "";
 
   let question = "";
+
+  $: action = $pending ? parseAction($pending.category, $pending.toolName, $pending.toolInput) : null;
 
   async function onConsent() {
     const err = await giveConsent();
@@ -71,8 +74,15 @@
         {#if $activity.length}
           <div class="ov-activity">
             {#each $activity as a, i}
-              <div class="ov-act" in:fly|local={flyUp(i)}>
-                <Icon name="activity" size={13} /><span class="mono">{a.tool}</span> {a.input}
+              <div class="ov-act" class:ov-act-ok={a.tool === "approved"} class:ov-act-rej={a.tool === "rejected"} in:fly|local={flyUp(i)}>
+                {#if a.tool === "approved"}
+                  <Icon name="check" size={13} />
+                {:else if a.tool === "rejected"}
+                  <Icon name="x" size={13} />
+                {:else}
+                  <Icon name="activity" size={13} />
+                {/if}
+                <span class="mono">{a.tool}</span> {a.input}
               </div>
             {/each}
           </div>
@@ -90,9 +100,27 @@
         </div>
 
         {#if $pending}
-          <div class="ov-approval" transition:scale={fadeScaleIn()}>
-            <div class="ov-approval-head">Approve <span class="mono">{$pending.toolName}</span>?</div>
-            <pre class="ov-approval-body">{$pending.toolInput}</pre>
+          <div class="ov-approval sev-{$pending.severity}" transition:scale={fadeScaleIn()}>
+            <div class="ov-approval-head">
+              <span class="ov-cat ov-cat-{$pending.category}">{$pending.category}</span>
+              <span class="ov-summary">{$pending.summary || $pending.toolName}</span>
+            </div>
+            {#if action && action.kind === "diff"}
+              <div class="ov-diff mono">
+                <div class="ov-diff-file">{action.file}</div>
+                {#each action.removed as l}<div class="ov-del">- {l}</div>{/each}
+                {#each action.added as l}<div class="ov-add">+ {l}</div>{/each}
+              </div>
+            {:else if action && action.kind === "write"}
+              <div class="ov-diff mono">
+                <div class="ov-diff-file">{action.file}</div>
+                {#each action.preview as l}<div class="ov-add">+ {l}</div>{/each}
+              </div>
+            {:else if action && action.kind === "command"}
+              <pre class="ov-cmd">{action.command}</pre>
+            {:else if action && action.kind === "raw"}
+              <pre class="ov-approval-body">{action.json}</pre>
+            {/if}
             <div class="ov-approval-btns">
               <button class="btn btn-primary btn-sm" on:click={() => decide(true)}><Icon name="check" size={14} /> Approve</button>
               <button class="btn btn-sm ov-reject" on:click={() => decide(false)}><Icon name="x" size={14} /> Reject</button>
@@ -139,6 +167,8 @@
   .ov-consent p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
   .ov-activity { display: flex; flex-direction: column; gap: 5px; }
   .ov-act { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--faint); }
+  .ov-act-ok { color: var(--accent); }
+  .ov-act-rej { color: var(--muted); }
   .ov-thread { display: flex; flex-direction: column; gap: 12px; }
   .ov-q { align-self: flex-end; max-width: 80%; background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 12px 12px 4px 12px; padding: 8px 12px; font-size: 13px; color: var(--text); white-space: pre-wrap; user-select: text; }
   .ov-a { align-self: flex-start; max-width: 94%; font-size: 13.5px; line-height: 1.6; color: var(--text); user-select: text; }
@@ -148,7 +178,8 @@
   .ov-a :global(pre) { overflow-x: auto; }
   .ov-stream { white-space: pre-wrap; }
   .ov-approval { border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--r-btn); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .ov-approval-head { font-size: 13px; color: var(--text); }
+  .ov-approval-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+  .ov-summary { flex: 1; }
   .ov-approval-body { margin: 0; max-height: 320px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--raised); border-radius: 4px; padding: 10px; white-space: pre-wrap; }
   .ov-approval-btns { display: flex; gap: 8px; }
   .ov-reject { border: 1px solid var(--err-line); color: var(--err); background: transparent; }
