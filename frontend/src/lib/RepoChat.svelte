@@ -130,7 +130,9 @@
       .join("\n\n");
     return (
       "You are a senior engineer pair-working on ONE repository. Reference actual files, commits and " +
-      "diff lines; be direct and specific, no filler. Answer in " + langName() + " (keep code identifiers as-is).\n\n" +
+      "diff lines; be direct and specific, no filler. Answer in " + langName() + " (keep code identifiers as-is). " +
+      "Write in plain text with ASCII punctuation only: use a hyphen (-), not em or en dashes; straight quotes; " +
+      "no other special Unicode symbols.\n\n" +
       "You can INSPECT the repo. To use a tool, reply with EXACTLY one line and nothing else:\n" +
       "TOOL read <repo-relative-path>   (read a file)\n" +
       "TOOL grep <pattern>              (search the code)\n" +

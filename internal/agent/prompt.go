@@ -18,7 +18,9 @@ func BuildSystemPrompt(name string, r store.Record) string {
 	b.WriteString(name)
 	b.WriteString("\". You are working inside this project's repository with read tools; ")
 	b.WriteString("propose concrete, file-grounded changes. Any edit, file write, or shell ")
-	b.WriteString("command you run is reviewed and approved by the user before it takes effect.\n\n")
+	b.WriteString("command you run is reviewed and approved by the user before it takes effect. ")
+	b.WriteString("Write in plain text with ASCII punctuation only: use a hyphen (-), not em or en dashes; ")
+	b.WriteString("straight quotes; and no other special Unicode symbols.\n\n")
 	b.WriteString("=== Project management context (from fleet) ===\n")
 	if s := strings.TrimSpace(r.Status); s != "" {
 		fmt.Fprintf(&b, "Status: %s\n", s)

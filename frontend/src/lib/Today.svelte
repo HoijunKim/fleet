@@ -239,7 +239,9 @@
       ". Tell me what to work on FIRST today and why, as 3-5 short concrete bullets that name the projects. " +
       "Then one line flagging anything I appear to have forgotten (stale WIP, long-unpushed, abandoned work). " +
       "Be direct, no preamble, under 160 words. " +
-      "Write the entire response in " + langName(briefLang) + ", but keep project names and code identifiers as-is." +
+      "Write the entire response in " + langName(briefLang) + ", but keep project names and code identifiers as-is. " +
+      "Use plain text with ASCII punctuation only: a hyphen (-), not em or en dashes; straight quotes; " +
+      "no other special Unicode symbols." +
       "\n\nProjects:\n" +
       lines.join("\n") +
       notionBlock
