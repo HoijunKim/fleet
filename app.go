@@ -871,6 +871,36 @@ func (a *App) SearchAll(query string) []SearchHit {
 	return out
 }
 
+// FileHit is one cross-repo file-name search result.
+type FileHit struct {
+	Repo     string `json:"repo"`
+	RepoPath string `json:"repoPath"`
+	File     string `json:"file"`
+}
+
+// SearchFiles finds tracked files across all discovered repos whose repo-
+// relative path contains query (case-insensitive), capped for a responsive UI.
+func (a *App) SearchFiles(query string) []FileHit {
+	out := []FileHit{}
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return out
+	}
+	cfg := a.cfgSnapshot()
+	for _, r := range scan.Discover(cfg.Roots, cfg.ScanDepth, false) {
+		files, _ := git.ListFiles(a.runner, r.Path)
+		for _, f := range files {
+			if strings.Contains(strings.ToLower(f), q) {
+				out = append(out, FileHit{Repo: r.Name, RepoPath: r.Path, File: f})
+				if len(out) >= 500 {
+					return out
+				}
+			}
+		}
+	}
+	return out
+}
+
 // OpenEditorAt opens a specific file (repo-relative) in the configured editor.
 func (a *App) OpenEditorAt(repoPath, file string) string {
 	return errMsg(action.EditorCmd(a.cfgSnapshot().Editor, filepath.Join(repoPath, file)).Start())
