@@ -1,5 +1,5 @@
-# Normalize line endings: store LF in the repo, check out native per-OS.
-* text=auto
+# Normalize line endings: store LF in the repo, check out LF (avoid CRLF churn).
+* text=auto eol=lf
 
 # Binary assets - never touch line endings.
 *.png binary

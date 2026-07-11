@@ -131,13 +131,13 @@
 
       <div class="ov-foot">
         {#if $running}
-          <span class="ov-run"><span class="spinner"></span> working in the repo…</span>
+          <span class="ov-run"><span class="spinner"></span> working in the repo...</span>
           <button class="ov-cancel" on:click={cancel}><Icon name="stop" size={13} /> Cancel</button>
         {:else if $cost}
           <span class="ov-cost">cost ${$cost.costUsd.toFixed(4)} · {$cost.inputTokens} in / {$cost.outputTokens} out</span>
         {/if}
         <div class="ov-input">
-          <input class="input" type="text" placeholder="Ask about this repo…" bind:value={question}
+          <input class="input" type="text" placeholder="Ask about this repo..." bind:value={question}
                  on:keydown={onKey} disabled={$running} aria-label="Ask about this repo" />
           <button class="btn btn-primary btn-sm" on:click={submit} disabled={$running || !question.trim()}>Ask</button>
         </div>

@@ -805,6 +805,7 @@ select.input option { background: var(--surface); color: var(--text); }
 }
 .icon-btn:hover { background: var(--raised); color: var(--text); border-color: var(--border-hover); }
 
+/* Command-palette key hint */
 .ic-jump {
   font-family: var(--font-mono);
   font-size: 11px;

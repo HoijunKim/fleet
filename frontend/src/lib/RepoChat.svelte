@@ -235,7 +235,7 @@
         <p class="rchat-hint">Agentic deep-dive - Claude Code reads this repo (you approve every edit/command). Opens in a focused view.</p>
       {/if}
       <button class="btn btn-primary btn-sm" on:click={() => { agentSetProject(project); openOverlay(project); }}>
-        {$running ? "Resume agentic deep-dive…" : "Open agentic deep-dive"}
+        {$running ? "Resume agentic deep-dive..." : "Open agentic deep-dive"}
         {#if $running}<span class="rchat-run-dot"></span>{/if}
       </button>
     </div>

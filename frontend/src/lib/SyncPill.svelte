@@ -34,7 +34,7 @@
   {#key state}
     <span class="pill-inner" in:fade={{ duration: fadeMs }}>
       {#if state === "syncing"}
-        <span class="spinner"></span><span class="pill-text">Syncing…</span>
+        <span class="spinner"></span><span class="pill-text">Syncing...</span>
       {:else if state === "synced"}
         <span class="dot dot-ok"></span><span class="pill-text">Synced {ago(lastSyncedUnix)}</span>
       {:else if state === "offline"}
