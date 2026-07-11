@@ -128,6 +128,23 @@ func TestClassifyCompoundAndDesyncBypassesDenied(t *testing.T) {
 		{"sed-secret", "sed -n 1p .env", "feat/x"},
 		{"cp-secret", "cp id_rsa /tmp/x", "feat/x"},
 		{"secret-in-compound", "git status && cat .env", "feat/x"},
+		// PASS-2 CRITICAL 1 - a single `&` backgrounds the command and conceals a
+		// trailing push; splitting on `&` exposes it to the per-segment backstop.
+		{"single-amp-commit-push", "git commit -m x & git push origin main", "feat/x"},
+		{"single-amp-status-push", "git status & git push origin main", "feat/x"},
+		// PASS-2 CRITICAL 2 - the Windows native binary `git.exe` must normalize.
+		{"git-exe-push", "git.exe push origin main", "feat/x"},
+		{"git-EXE-push", "git.EXE push origin main", "feat/x"},
+		// PASS-2 IMPORTANT 3 - command-substitution / subshell glue the binary to
+		// punctuation so gitSubcommand cannot see it; the backstop still denies.
+		{"cmd-subst-push", "$(git push origin main)", "feat/x"},
+		{"backtick-push", "`git push origin main`", "feat/x"},
+		{"subshell-push", "(git push origin main)", "feat/x"},
+		// PASS-2 IMPORTANT 4 - a line continuation splits one push across lines.
+		{"line-continuation-push", "git push \\\norigin main", "feat/x"},
+		// PASS-2 MINOR 6 - the attached `=` forms of --all / --mirror.
+		{"push-all-eq", "git push --all=", "feat/x"},
+		{"push-mirror-eq-origin", "git push --mirror=origin", "feat/x"},
 	}
 	for _, d := range deny {
 		got := v("Bash", `{"command":`+jsonStr(d.cmd)+`}`, d.cur)
@@ -165,6 +182,20 @@ func TestClassifyControlsStillGate(t *testing.T) {
 	// A commit message containing the word "push" must NOT trip the push backstop.
 	if g := v("Bash", `{"command":"git commit -m \"push it real good\""}`, "feat/x"); g.Decision != "gate" || g.Category != "shell" {
 		t.Fatalf("commit mentioning push: %+v", g)
+	}
+	// PASS-2: a quoted commit message "push the fix" keeps its quotes, so the bare
+	// `push` backstop must not match it - it still gates as a shell commit.
+	if g := v("Bash", `{"command":"git commit -m \"push the fix\""}`, "feat/x"); g.Decision != "gate" || g.Category != "shell" {
+		t.Fatalf("commit 'push the fix': %+v", g)
+	}
+	// PASS-2: an unrelated binary named `gitx` (not git) with a push arg stays a
+	// generic shell gate - the backstop only fires when a git binary is present.
+	if g := v("Bash", `{"command":"gitx push origin main"}`, "feat/x"); g.Decision != "gate" {
+		t.Fatalf("gitx push: %+v", g)
+	}
+	// PASS-2: a plain echo gates (no push token, no secret).
+	if g := v("Bash", `{"command":"echo hello"}`, "feat/x"); g.Decision != "gate" {
+		t.Fatalf("echo hello: %+v", g)
 	}
 }
 

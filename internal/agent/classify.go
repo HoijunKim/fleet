@@ -74,14 +74,21 @@ func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) V
 	}
 }
 
-// shellSepRe splits a command line on shell separators. The `||` alternative is
-// listed before `|` so a logical-OR is consumed whole, not as two empty pipes.
-var shellSepRe = regexp.MustCompile(`&&|\|\||;|\||\n|\r`)
+// shellSepRe splits a command line on shell separators. Two-character operators
+// are listed before their one-character prefixes (`&&` before `&`, `||` before
+// `|`) so each is consumed whole, not as two empty separators. A single `&`
+// backgrounds the command to its left, so `git commit -m x & git push …` runs
+// BOTH; splitting on it exposes the trailing push to the per-segment backstop.
+var shellSepRe = regexp.MustCompile(`&&|\|\||;|\||&|\n|\r`)
 
 // splitSegments breaks a command line into the sub-commands the shell would run.
-// Splitting is deliberately quote-unaware: over-splitting can only produce more
-// segments to inspect (fail-closed), never hide one. Returns a single-element
-// slice when no separator is present.
+// Splitting is deliberately quote-unaware: it is a best-effort over-approximation
+// that errs toward MORE segments. A quoted separator can spuriously split a token
+// (e.g. a commit message) — at worst yielding an extra segment that gates, or a
+// refspec with a stray quote that then gates rather than resolving to a protected
+// branch. It never merges segments to drop a `push` token; any push riding a
+// separator lands on its own segment where classifySegment's backstop inspects it.
+// Returns a single-element slice when no separator is present.
 func splitSegments(c string) []string {
 	if !shellSepRe.MatchString(c) {
 		return []string{c}
@@ -103,16 +110,24 @@ func classifyBash(cmd string, ctx ClassifyContext) Verdict {
 	if c == "" {
 		return Verdict{Decision: "gate", Category: CatShell, Severity: SevLow, Summary: "Run a command"}
 	}
+	// A backslash-newline is a shell line continuation: the next line is part of
+	// the SAME command. Collapse it to a space FIRST so a refspec continued onto
+	// the next line (`git push \<newline>origin main`) is not orphaned onto its
+	// own pseudo-segment by the newline separator.
+	c = lineContinuationRe.ReplaceAllString(c, " ")
 	// Secret-read guard runs on the WHOLE command (unsplit), so a secret path in
 	// any position is caught regardless of the reading command's name.
 	if readsSecret(c) {
 		return deny("reading a secret file is blocked")
 	}
-	// Compound commands (`a && b`, `a; b`, `a | b`, newline, ...) are classified
-	// per segment; the verdict is deny if ANY segment denies, else a single gate
-	// whose Summary shows the whole command (never a per-segment summary that
-	// could conceal a later push). splitSegments only splits when a separator is
-	// present, so classifySegment does not recurse.
+	// Compound commands (`a && b`, `a & b`, `a; b`, `a | b`, newline, ...) are
+	// classified per segment: deny if ANY segment denies, else a single gate whose
+	// Summary shows the WHOLE command. Because splitting is quote-unaware the
+	// per-segment summary is not the safety mechanism — each segment is run
+	// independently through classifySegment's bare-`push`-token backstop, so a push
+	// hidden behind a separator (or an odd binary form) is denied on its own
+	// segment. splitSegments only splits when a separator is present, so
+	// classifySegment does not recurse.
 	segs := splitSegments(c)
 	if len(segs) > 1 {
 		for _, seg := range segs {
@@ -122,24 +137,34 @@ func classifyBash(cmd string, ctx ClassifyContext) Verdict {
 		}
 		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Run: " + truncate(c, 80)}
 	}
-	return classifySegment(c, ctx)
+	return classifySegment(segs[0], ctx)
 }
 
 // classifySegment classifies a single command with no shell separators.
 func classifySegment(seg string, ctx ClassifyContext) Verdict {
 	sub, args := gitSubcommand(seg)
 	sub = strings.ToLower(sub) // subcommand match is case-insensitive
-	switch {
-	case sub == "push":
+	// A cleanly-parsed git push is the ONLY safe push form; classifyPush decides
+	// gate (feature branch) vs deny (protected / unresolvable).
+	if sub == "push" {
 		return classifyPush(args, ctx)
+	}
+	// Fail-closed push backstop. Any segment that carries a bare `push` token
+	// alongside a git binary but did NOT parse as a clean push above is denied.
+	// This fires BEFORE the commit case (so a segment that also parses as
+	// `commit` cannot conceal a trailing push) and is independent of whether
+	// gitSubcommand detected git: it catches command-substitution and subshell
+	// forms whose binary token is glued to punctuation (`$(git push …)`,
+	// backtick-git, `(git push …)`) and an unknown value-taking global flag that
+	// desyncs the token stream. A quoted commit message keeps its quotes, so
+	// `-m "push the fix"` is not a bare `push` token and still gates as a commit.
+	// `gitx`/`mygit` are other programs (no git binary token) and stay generic.
+	if hasPushToken(seg) && hasGitBinaryToken(seg) {
+		return deny("push present but not a clean safe push; blocked")
+	}
+	switch {
 	case sub == "commit":
 		return Verdict{Decision: "gate", Category: CatShell, Severity: SevMedium, Summary: "Commit: " + commitMessage(seg)}
-	case sub != "" && hasPushToken(seg):
-		// Fail-closed backstop: a git command carries a `push` token but the
-		// parser did not classify it as a push (e.g. an unknown value-taking
-		// global flag desynced the token stream). Never fall through to a
-		// generic gate that could let the push run unseen.
-		return deny("push present but not parsed as a push; blocked")
 	case isPRCreate(seg):
 		return Verdict{Decision: "gate", Category: CatRemote, Severity: SevMedium, Summary: "Open a pull request"}
 	default:
@@ -158,14 +183,29 @@ func hasPushToken(cmd string) bool {
 	return false
 }
 
+// hasGitBinaryToken reports whether any token denotes the git binary, tolerating
+// a `.exe`/`.EXE` suffix and leading shell-substitution/subshell punctuation that
+// glues it to `$(`, a backtick, or `(`. It deliberately does NOT match `gitx` or
+// `mygit`, which are other programs, so those stay generic gates.
+func hasGitBinaryToken(cmd string) bool {
+	for _, t := range strings.Fields(cmd) {
+		if gitBinaryLoose(t) {
+			return true
+		}
+	}
+	return false
+}
+
 // classifyPush resolves the push destination(s) and denies any that hit a
 // protected branch or that cannot be determined.
 func classifyPush(args []string, ctx ClassifyContext) Verdict {
 	// --all / --mirror push (or mirror) every local branch, including the
-	// default branch, so they can never resolve to a safe bare-branch gate.
+	// default branch, so they can never resolve to a safe bare-branch gate. Match
+	// the attached `=` forms (`--all=`, `--mirror=origin`) by prefix too.
 	for _, a := range args {
-		switch strings.ToLower(a) {
-		case "--all", "--mirror":
+		la := strings.ToLower(a)
+		if la == "--all" || la == "--mirror" ||
+			strings.HasPrefix(la, "--all=") || strings.HasPrefix(la, "--mirror=") {
 			return deny("push --all/--mirror can hit the default branch")
 		}
 	}
@@ -237,6 +277,28 @@ func consumesValue(flag string) bool {
 	return false
 }
 
+// lineContinuationRe matches a backslash-newline shell line continuation
+// (`\<LF>` or `\<CRLF>`), which joins the next line onto the current command.
+var lineContinuationRe = regexp.MustCompile(`\\\r?\n`)
+
+// gitBinary reports whether tok is the git executable, tolerating a Windows
+// `.exe`/`.EXE` suffix (`git.exe`, `git.EXE`). `gitx`/`mygit` are other programs
+// and are NOT git.
+func gitBinary(tok string) bool {
+	if len(tok) >= 4 && strings.EqualFold(tok[len(tok)-4:], ".exe") {
+		tok = tok[:len(tok)-4]
+	}
+	return tok == "git"
+}
+
+// gitBinaryLoose additionally tolerates leading shell-substitution/subshell
+// punctuation that glues the binary to `$(`, a backtick, or `(` (`$(git`,
+// backtick-git, `(git`). Used only by the push backstop, which denies outright
+// rather than resolving a branch from a punctuation-mangled invocation.
+func gitBinaryLoose(tok string) bool {
+	return gitBinary(strings.TrimLeft(tok, "$(`"))
+}
+
 // gitSubcommand returns the git subcommand and its args if cmd is a git
 // invocation, else ("", nil). Handles global flags including the value-taking
 // ones (`git --git-dir /x push …`) so the value token is not mistaken for the
@@ -244,7 +306,7 @@ func consumesValue(flag string) bool {
 func gitSubcommand(cmd string) (string, []string) {
 	toks := strings.Fields(cmd)
 	i := 0
-	for i < len(toks) && toks[i] != "git" {
+	for i < len(toks) && !gitBinary(toks[i]) {
 		i++ // tolerate a leading `env FOO=bar git …`
 	}
 	if i >= len(toks) {
