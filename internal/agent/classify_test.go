@@ -72,8 +72,14 @@ func TestClassifySecretReadDenied(t *testing.T) {
 }
 
 func TestClassifyFailClosed(t *testing.T) {
-	if v("Bash", `{}`, "feat/x").Decision != "gate" { // empty command -> generic gate is fine, but must not be a push
-		// an empty command is a harmless no-op; gating it is acceptable
+	// An empty Bash command is a harmless no-op: it must gate (not deny) and
+	// must specifically NOT be classified as a push/remote action.
+	empty := v("Bash", `{}`, "feat/x")
+	if empty.Decision != "gate" {
+		t.Fatalf("empty command should gate as a harmless no-op: %+v", empty)
+	}
+	if empty.Category == CatRemote {
+		t.Fatalf("empty command must not classify as a push: %+v", empty)
 	}
 	if v("Bash", `not json`, "feat/x").Decision != "deny" {
 		t.Fatal("garbage input must deny")
@@ -196,6 +202,58 @@ func TestClassifyControlsStillGate(t *testing.T) {
 	// PASS-2: a plain echo gates (no push token, no secret).
 	if g := v("Bash", `{"command":"echo hello"}`, "feat/x"); g.Decision != "gate" {
 		t.Fatalf("echo hello: %+v", g)
+	}
+}
+
+// --- Pass-3 bypass-fix regression tests -------------------------------------
+
+// TestClassifyHeadAtPushResolvesToCurrentBranch covers CRITICAL 1: `HEAD`/`@`
+// as a push destination refer to the CURRENT branch, not a literal branch
+// named "HEAD"/"@". When the current branch is protected, these must deny
+// exactly like a bare `git push` on that branch already does.
+func TestClassifyHeadAtPushResolvesToCurrentBranch(t *testing.T) {
+	deny := []struct{ name, cmd, cur string }{
+		{"head-on-main", "git push origin HEAD", "main"},
+		{"at-on-master", "git push origin @", "master"},
+		{"head-tracking-on-main", "git push -u origin HEAD", "main"},
+	}
+	for _, d := range deny {
+		got := v("Bash", `{"command":`+jsonStr(d.cmd)+`}`, d.cur)
+		if got.Decision != "deny" {
+			t.Fatalf("%s: expected deny for %q (on %q): %+v", d.name, d.cmd, d.cur, got)
+		}
+	}
+	// Control: HEAD push while on a feature branch is a normal remote push and
+	// still gates (it does NOT deny - resolving HEAD must not over-broaden).
+	g := v("Bash", `{"command":"git push origin HEAD"}`, "feat/x")
+	if g.Decision != "gate" || g.Category != "remote" {
+		t.Fatalf("HEAD push on feature branch should gate remote: %+v", g)
+	}
+}
+
+// TestClassifyPathQualifiedGitBinary covers IMPORTANT 2: a path-qualified or
+// platform-shim git binary token must still be recognized as git so an
+// unconditional push to the default branch denies instead of falling through
+// to a generic gate.
+func TestClassifyPathQualifiedGitBinary(t *testing.T) {
+	deny := []struct{ name, cmd string }{
+		{"abs-path-git", "/usr/bin/git push origin main"},
+		{"relative-git", "./git push origin main"},
+		{"git-cmd-shim", "git.cmd push origin main"},
+	}
+	for _, d := range deny {
+		got := v("Bash", `{"command":`+jsonStr(d.cmd)+`}`, "feat/x")
+		if got.Decision != "deny" {
+			t.Fatalf("%s: expected deny for %q: %+v", d.name, d.cmd, got)
+		}
+	}
+	// Controls: an unrelated binary is still not git, and a feature-branch
+	// push is still a normal gate - the fix must not over-broaden.
+	if g := v("Bash", `{"command":"gitx push origin main"}`, "feat/x"); g.Decision != "gate" {
+		t.Fatalf("gitx push should stay a generic gate: %+v", g)
+	}
+	if g := v("Bash", `{"command":"git push origin feat/x"}`, "feat/x"); g.Decision != "gate" || g.Category != "remote" {
+		t.Fatalf("feature-branch push should gate remote: %+v", g)
 	}
 }
 

@@ -240,6 +240,18 @@ func classifyPush(args []string, ctx ClassifyContext) Verdict {
 		if dest == "" {
 			return deny("cannot determine push target")
 		}
+		// `HEAD` and `@` are git shorthand for "the branch currently checked
+		// out" - `git push origin HEAD` pushes to a remote branch named after
+		// the CURRENT branch, not a branch literally named "HEAD". Resolve it
+		// before the protected-branch check so `git push origin HEAD` while on
+		// main/master denies like the bare `git push` does. Unresolvable ->
+		// deny (fail-closed).
+		if strings.EqualFold(dest, "HEAD") || dest == "@" {
+			if ctx.CurrentBranch == "" {
+				return deny("cannot determine push target")
+			}
+			dest = ctx.CurrentBranch
+		}
 		if protected[strings.ToLower(dest)] {
 			return deny("push to the default branch is blocked")
 		}
@@ -281,12 +293,22 @@ func consumesValue(flag string) bool {
 // (`\<LF>` or `\<CRLF>`), which joins the next line onto the current command.
 var lineContinuationRe = regexp.MustCompile(`\\\r?\n`)
 
-// gitBinary reports whether tok is the git executable, tolerating a Windows
-// `.exe`/`.EXE` suffix (`git.exe`, `git.EXE`). `gitx`/`mygit` are other programs
-// and are NOT git.
+// gitBinary reports whether tok is the git executable. It first strips
+// surrounding quotes and any path prefix down to the BASENAME (everything
+// through the last `/` or `\`) so a path-qualified invocation
+// (`/usr/bin/git`, `./git`, `C:\...\git.exe`, a quoted path) is recognized,
+// then tolerates a `.exe`/`.EXE`/`.cmd`/`.CMD` suffix (`git.exe`, `git.cmd`).
+// `gitx`/`mygit` are other programs and are NOT git.
 func gitBinary(tok string) bool {
-	if len(tok) >= 4 && strings.EqualFold(tok[len(tok)-4:], ".exe") {
-		tok = tok[:len(tok)-4]
+	tok = strings.Trim(tok, `"'`)
+	if i := strings.LastIndexAny(tok, `/\`); i >= 0 {
+		tok = tok[i+1:]
+	}
+	for _, ext := range []string{".exe", ".cmd"} {
+		if len(tok) >= len(ext) && strings.EqualFold(tok[len(tok)-len(ext):], ext) {
+			tok = tok[:len(tok)-len(ext)]
+			break
+		}
 	}
 	return tok == "git"
 }
