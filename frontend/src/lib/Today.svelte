@@ -278,6 +278,7 @@
       } catch {
         ghByPath = new Map();
       }
+      if (g !== genId) return; // cancelled during the GitHub-signals fetch
       const res = await AskAI(buildPrompt());
       if (g !== genId) return; // cancelled
       if (typeof res === "string" && res.startsWith("error:")) {
