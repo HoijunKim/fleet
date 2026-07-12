@@ -57,6 +57,8 @@ export function GetProject(arg1:string):Promise<main.ProjectView>;
 
 export function GitHubInfo(arg1:string):Promise<main.GitHubView>;
 
+export function GitHubSignals():Promise<Array<main.RepoGHSignal>>;
+
 export function GitHubURL(arg1:string):Promise<string>;
 
 export function GiveAgentConsent():Promise<string>;

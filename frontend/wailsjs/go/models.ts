@@ -439,6 +439,26 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RepoGHSignal {
+	    repoPath: string;
+	    name: string;
+	    ci: string;
+	    prs: number;
+	    issues: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RepoGHSignal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repoPath = source["repoPath"];
+	        this.name = source["name"];
+	        this.ci = source["ci"];
+	        this.prs = source["prs"];
+	        this.issues = source["issues"];
+	    }
+	}
 	export class RepoView {
 	    name: string;
 	    path: string;

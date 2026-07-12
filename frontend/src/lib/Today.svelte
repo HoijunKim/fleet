@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI, GitHubSignals } from "../../wailsjs/go/main/App";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
   import { toastSuccess, toastError } from "./toasts";
   import Select from "./Select.svelte";
   import { daysUntil } from "./pm";
+  import { ciBit } from "./ciBit";
 
   // Full project list (code + manual) from App.svelte.
   export let projects: any[] = [];
@@ -57,6 +58,11 @@
   let brief = "";
   let briefError = "";
   let genId = 0; // soft-cancel: a bump makes an in-flight result get dropped
+
+  // GitHub status per repo (CI conclusion, open PRs/issues), loaded fresh
+  // before each brief. Best-effort: an empty map just means projectLine adds
+  // nothing GitHub-related, it never blocks the brief.
+  let ghByPath = new Map<string, { ci: string; prs: number; issues: number }>();
 
   function cancelBrief() {
     genId++;
@@ -193,6 +199,13 @@
     const since = daysSince(p.lastWhen);
     if (since !== null) bits.push("last commit " + since + "d ago");
     if ((p.todo || 0) >= 8) bits.push(p.todo + " code TODOs");
+    const g = ghByPath.get(p.repoPath || p.path);
+    if (g) {
+      const bit = ciBit(g.ci);
+      if (bit) bits.push(bit);
+      if (g.prs > 0) bits.push(g.prs + " open PRs");
+      if (g.issues > 0) bits.push(g.issues + " open issues");
+    }
     return "- " + (p.name || p.id) + ": " + (bits.length ? bits.join(", ") : "clean, on track");
   }
 
@@ -241,7 +254,9 @@
       "Be direct, no preamble, under 160 words. " +
       "Write the entire response in " + langName(briefLang) + ", but keep project names and code identifiers as-is. " +
       "Use plain text with ASCII punctuation only: a hyphen (-), not em or en dashes; straight quotes; " +
-      "no other special Unicode symbols." +
+      "no other special Unicode symbols. " +
+      "GitHub signals are priority factors - a failing CI likely blocks shipping (urgent), open PRs are waiting " +
+      "on review/merge - weigh them alongside uncommitted work and deadlines." +
       "\n\nProjects:\n" +
       lines.join("\n") +
       notionBlock
@@ -255,6 +270,14 @@
     brief = "";
     briefError = "";
     try {
+      // Best-effort: a failed/empty fetch leaves ghByPath empty and the
+      // brief falls back to git+Notion only, never blocking on GitHub.
+      try {
+        const sigs = await GitHubSignals();
+        ghByPath = new Map(sigs.map((s: any) => [s.repoPath, s]));
+      } catch {
+        ghByPath = new Map();
+      }
       const res = await AskAI(buildPrompt());
       if (g !== genId) return; // cancelled
       if (typeof res === "string" && res.startsWith("error:")) {

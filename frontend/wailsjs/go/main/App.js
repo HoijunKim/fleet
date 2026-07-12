@@ -110,6 +110,10 @@ export function GitHubInfo(arg1) {
   return window['go']['main']['App']['GitHubInfo'](arg1);
 }
 
+export function GitHubSignals() {
+  return window['go']['main']['App']['GitHubSignals']();
+}
+
 export function GitHubURL(arg1) {
   return window['go']['main']['App']['GitHubURL'](arg1);
 }
