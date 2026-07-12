@@ -971,6 +971,13 @@ type GitHubView struct {
 // GitHubInfo returns a repo's GitHub status (cached per owner/repo). Returns
 // Available=false when the remote is not a parseable GitHub URL or gh fails.
 func (a *App) GitHubInfo(remote string) GitHubView {
+	return a.githubInfoForRemote(remote)
+}
+
+// githubInfoForRemote returns a repo's GitHub status (cached per owner/repo).
+// Returns Available=false when the remote is not a parseable GitHub URL or gh
+// fails. Shared by GitHubInfo and GitHubSignals so both hit the same cache.
+func (a *App) githubInfoForRemote(remote string) GitHubView {
 	owner, repo, ok := gh.OwnerRepo(remote)
 	if !ok {
 		return GitHubView{Available: false}
@@ -995,6 +1002,66 @@ func (a *App) GitHubInfo(remote string) GitHubView {
 	a.ghCache[key] = ghEntry{v: v, at: time.Now()}
 	a.ghMu.Unlock()
 	return v
+}
+
+// RepoGHSignal is one repo's GitHub status for the brief.
+type RepoGHSignal struct {
+	RepoPath string `json:"repoPath"`
+	Name     string `json:"name"`
+	CI       string `json:"ci"`
+	PRs      int    `json:"prs"`
+	Issues   int    `json:"issues"`
+}
+
+// GitHubSignals bulk-fetches GitHub status for every discovered repo that has a
+// GitHub remote, bounded-parallel and cache-backed (shares the badge cache).
+// Repos with no/non-GitHub remote or an unavailable result are omitted; a
+// gh-less environment returns an empty slice, never an error.
+func (a *App) GitHubSignals() []RepoGHSignal {
+	out := []RepoGHSignal{}
+	cfg := a.cfgSnapshot()
+	repos := scan.Discover(cfg.Roots, cfg.ScanDepth, false)
+
+	type job struct {
+		path, name, remote string
+	}
+	var jobs []job
+	for _, r := range repos {
+		remote, err := git.RemoteURL(a.runner, r.Path)
+		if err != nil || strings.TrimSpace(remote) == "" {
+			continue
+		}
+		if _, _, ok := gh.OwnerRepo(remote); !ok {
+			continue // not a GitHub remote
+		}
+		jobs = append(jobs, job{path: r.Path, name: r.Name, remote: remote})
+	}
+
+	results := make([]RepoGHSignal, len(jobs))
+	found := make([]bool, len(jobs))
+	sem := make(chan struct{}, 6) // bounded worker pool
+	var wg sync.WaitGroup
+	for i, j := range jobs {
+		wg.Add(1)
+		go func(i int, j job) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			v := a.githubInfoForRemote(j.remote)
+			if !v.Available {
+				return
+			}
+			results[i] = RepoGHSignal{RepoPath: j.path, Name: j.name, CI: v.CI, PRs: v.PRs, Issues: v.Issues}
+			found[i] = true
+		}(i, j)
+	}
+	wg.Wait()
+	for i := range jobs {
+		if found[i] {
+			out = append(out, results[i])
+		}
+	}
+	return out
 }
 
 // SymbolsView is a repo's symbol summary for the front end.

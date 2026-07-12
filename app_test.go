@@ -588,6 +588,90 @@ func TestGitHubInfoDoesNotCacheFailure(t *testing.T) {
 	}
 }
 
+// dirRemoteRunner is a git.Runner that resolves "remote get-url origin" per
+// directory. fakeRunner (above) is dir-agnostic - it answers purely off
+// args[0], the same for every repo - so it cannot model two repos discovered
+// under one App/runner with different remotes, which GitHubSignals's test
+// needs. This is the minimal extension that closes that one gap; every other
+// git subcommand still returns empty output, same as fakeRunner's zero value.
+type dirRemoteRunner struct{ remotes map[string]string }
+
+func (r dirRemoteRunner) Run(dir string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "remote" {
+		if url, ok := r.remotes[dir]; ok {
+			return url, nil
+		}
+		return "", errStub{} // no origin configured for this repo
+	}
+	return "", nil
+}
+
+func TestGitHubSignals(t *testing.T) {
+	// Discover finds three temp git repos under one root: one with a
+	// github.com remote, one with no remote, one with a non-GitHub remote.
+	root := t.TempDir()
+	ghRepo := filepath.Join(root, "ghrepo")
+	noRemoteRepo := filepath.Join(root, "norepo")
+	gitlabRepo := filepath.Join(root, "gitlabrepo")
+	for _, dir := range []string{ghRepo, noRemoteRepo, gitlabRepo} {
+		if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	a := &App{
+		cfg: cfg,
+		runner: dirRemoteRunner{remotes: map[string]string{
+			ghRepo:     "git@github.com:hoijun/fleet.git",
+			gitlabRepo: "git@gitlab.com:hoijun/other.git",
+			// noRemoteRepo intentionally absent -> RemoteURL errors (no origin)
+		}},
+		ghRunner: ghFakeApp{}, // canned CI=failure, PRs=1, Issues=3
+		store:    newTestStore(t),
+	}
+
+	got := a.GitHubSignals()
+	if len(got) != 1 {
+		t.Fatalf("only the github-remote repo should be included: %+v", got)
+	}
+	s := got[0]
+	if s.RepoPath != ghRepo || s.Name != "ghrepo" {
+		t.Errorf("wrong repo signaled: %+v", s)
+	}
+	if s.CI == "" || s.PRs < 0 {
+		t.Fatalf("signal not populated: %+v", s)
+	}
+	if s.CI != "failure" || s.PRs != 1 || s.Issues != 3 {
+		t.Errorf("signal values don't match the faked gh output: %+v", s)
+	}
+}
+
+func TestGitHubSignalsGHUnavailable(t *testing.T) {
+	root := t.TempDir()
+	ghRepo := filepath.Join(root, "ghrepo")
+	if err := os.MkdirAll(filepath.Join(ghRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	calls := 0
+	a := &App{
+		cfg:      cfg,
+		runner:   dirRemoteRunner{remotes: map[string]string{ghRepo: "git@github.com:hoijun/fleet.git"}},
+		ghRunner: ghErrCountFake{calls: &calls}, // gh CLI unavailable/erroring
+		store:    newTestStore(t),
+	}
+	got := a.GitHubSignals()
+	if got == nil {
+		t.Fatal("GitHubSignals must return a non-nil empty slice when gh is unavailable, not nil")
+	}
+	if len(got) != 0 {
+		t.Fatalf("gh-unavailable env should yield no signals: %+v", got)
+	}
+}
+
 func TestEdgeBindingsRoundTrip(t *testing.T) {
 	a := newTestApp(t)
 	if msg := a.AddEdge("/a", "/b", "http", "n"); msg != "" {
