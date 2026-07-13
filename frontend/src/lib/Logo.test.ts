@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { render as ssrRender } from "svelte/server";
 import Logo from "./Logo.svelte";
 
-const render = (props: Record<string, unknown> = {}) => (Logo as any).render(props).html as string;
+const render = (props: Record<string, unknown> = {}) => ssrRender(Logo, { props }).body as string;
 
 describe("Logo", () => {
   it("renders the brand svg sized by prop", () => {

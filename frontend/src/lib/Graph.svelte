@@ -620,6 +620,7 @@
             style={s.manual ? `stroke: ${KIND_COLORS[s.kind] || "var(--border)"}` : undefined}
           />
           {#if connectMode && s.manual && s.id}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
             <line
               class="edge-hit"
               x1={s.x1}

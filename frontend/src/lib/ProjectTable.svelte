@@ -143,7 +143,7 @@
             </td>
             <td>
               {#if ddayLabel(p.deadline)}
-                {@const d = ddayLabel(p.deadline)}
+                {@const d = ddayLabel(p.deadline)!}
                 <span class="dday {d.cls}">{d.text}</span>
               {:else}
                 <span class="pm-dash">-</span>

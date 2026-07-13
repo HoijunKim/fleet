@@ -13,10 +13,11 @@ vi.mock("../../wailsjs/go/main/App", () => ({
 }));
 
 import { get } from "svelte/store";
+import { render as ssrRender } from "svelte/server";
 import * as S from "./agentSession";
 import AgentOverlay from "./AgentOverlay.svelte";
 
-const render = (props: Record<string, unknown> = {}) => (AgentOverlay as any).render(props).html as string;
+const render = (props: Record<string, unknown> = {}) => ssrRender(AgentOverlay, { props }).body as string;
 
 beforeEach(() => { calls.length = 0; S.overlayOpen.set(false); S.pending.set(null); });
 

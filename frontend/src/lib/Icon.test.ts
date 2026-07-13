@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { render as ssrRender } from "svelte/server";
 import Icon from "./Icon.svelte";
 
-// Svelte 3 server render: Component.render(props) -> { html }
+// Svelte 5 server render: render(Comp, { props }) -> { head, body }
 function render(props: Record<string, unknown>) {
-  return (Icon as any).render(props).html as string;
+  return ssrRender(Icon, { props } as any).body as string;
 }
 
 describe("Icon", () => {

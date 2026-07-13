@@ -175,7 +175,7 @@
     .then((ok) => {
       notionOn = !!ok;
       if (notionOn) return NotionTasks();
-      return { tasks: [], error: "" };
+      return { tasks: [], error: "" } as any;
     })
     .then((res: any) => {
       const r = res || { tasks: [], error: "" };
