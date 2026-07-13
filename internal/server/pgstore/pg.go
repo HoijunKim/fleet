@@ -12,16 +12,18 @@ import (
 )
 
 // maxSerializeRetries bounds retries when a SERIALIZABLE transaction aborts with
-// a serialization failure (SQLSTATE 40001). Family revocation runs SERIALIZABLE
-// so a concurrent tip-rotation cannot phantom-insert a live token past a
-// revoke; on the rare conflict the loser retries and sees the committed state.
+// a transient conflict. Family revocation runs SERIALIZABLE so a concurrent
+// tip-rotation cannot phantom-insert a live token past a revoke; on the rare
+// conflict the loser retries and sees the committed state.
 const maxSerializeRetries = 5
 
-// isSerializationFailure reports whether err is a Postgres serialization failure
-// (40001), the retryable outcome of a SERIALIZABLE conflict.
-func isSerializationFailure(err error) bool {
+// isRetryable reports whether err is a transient Postgres conflict worth
+// retrying: a serialization failure (40001) or a deadlock (40P01), both
+// possible outcomes of concurrent family-scoped writes and both resolved by
+// re-running against the committed state.
+func isRetryable(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "40001"
+	return errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01")
 }
 
 // Pg is the Postgres-backed Store implementation.
@@ -95,7 +97,7 @@ func (p *Pg) CreateRefreshToken(ctx context.Context, userID, tokenHash string, e
 func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, expiresAt time.Time) (string, error) {
 	for attempt := 0; ; attempt++ {
 		userID, err := p.rotateOnce(ctx, oldHash, newHash, expiresAt)
-		if isSerializationFailure(err) && attempt < maxSerializeRetries {
+		if isRetryable(err) && attempt < maxSerializeRetries {
 			continue
 		}
 		return userID, err
@@ -151,13 +153,13 @@ func (p *Pg) rotateOnce(ctx context.Context, oldHash, newHash string, expiresAt 
 
 // RevokeRefreshToken revokes the entire family of the given token, so logout
 // ends the whole rotation chain rather than only the presented token. An unknown
-// token matches no family (scalar subquery is NULL) and is a no-op (idempotent).
+// token matches no family (the IN-subquery is empty) and is a no-op (idempotent).
 // Like rotation it runs SERIALIZABLE with a bounded retry so a concurrent
 // tip-rotation cannot survive the logout revoke.
 func (p *Pg) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
 	for attempt := 0; ; attempt++ {
 		err := p.revokeFamilyOnce(ctx, tokenHash)
-		if isSerializationFailure(err) && attempt < maxSerializeRetries {
+		if isRetryable(err) && attempt < maxSerializeRetries {
 			continue
 		}
 		return err
