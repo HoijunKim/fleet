@@ -52,8 +52,8 @@ jobs:
             echo "$fmt_out"
             exit 1
           fi
-      - name: Test server packages
-        run: go test ./cmd/fleetd/... ./internal/server/...
+      - name: Test server packages (race)
+        run: go test -race ./cmd/fleetd/... ./internal/server/...
 
   deploy:
     needs: test
