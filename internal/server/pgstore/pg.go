@@ -7,8 +7,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// maxSerializeRetries bounds retries when a SERIALIZABLE transaction aborts with
+// a serialization failure (SQLSTATE 40001). Family revocation runs SERIALIZABLE
+// so a concurrent tip-rotation cannot phantom-insert a live token past a
+// revoke; on the rare conflict the loser retries and sees the committed state.
+const maxSerializeRetries = 5
+
+// isSerializationFailure reports whether err is a Postgres serialization failure
+// (40001), the retryable outcome of a SERIALIZABLE conflict.
+func isSerializationFailure(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "40001"
+}
 
 // Pg is the Postgres-backed Store implementation.
 type Pg struct {
@@ -76,9 +90,20 @@ func (p *Pg) CreateRefreshToken(ctx context.Context, userID, tokenHash string, e
 // token is revoked and newHash inserted into the SAME family. Presenting an
 // already-revoked token is treated as reuse: the whole family is revoked and
 // ErrRefreshReuse is returned. Unknown or expired tokens return errRefreshInvalid
-// and leave any family untouched.
+// and leave any family untouched. It runs SERIALIZABLE with a bounded retry so a
+// concurrent tip-rotation cannot survive a reuse-triggered family revoke.
 func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, expiresAt time.Time) (string, error) {
-	tx, err := p.pool.Begin(ctx)
+	for attempt := 0; ; attempt++ {
+		userID, err := p.rotateOnce(ctx, oldHash, newHash, expiresAt)
+		if isSerializationFailure(err) && attempt < maxSerializeRetries {
+			continue
+		}
+		return userID, err
+	}
+}
+
+func (p *Pg) rotateOnce(ctx context.Context, oldHash, newHash string, expiresAt time.Time) (string, error) {
+	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return "", err
 	}
@@ -105,7 +130,7 @@ func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, ex
 		if err := tx.Commit(ctx); err != nil {
 			return "", err
 		}
-		return "", ErrRefreshReuse
+		return userID, ErrRefreshReuse // userID for the security log; caller still 401s
 	}
 	if time.Now().After(exp) {
 		return "", errRefreshInvalid // normal expiry, not an attack: leave the family live
@@ -126,10 +151,29 @@ func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, ex
 
 // RevokeRefreshToken revokes the entire family of the given token, so logout
 // ends the whole rotation chain rather than only the presented token. An unknown
-// token matches no family and is a no-op (idempotent).
+// token matches no family (scalar subquery is NULL) and is a no-op (idempotent).
+// Like rotation it runs SERIALIZABLE with a bounded retry so a concurrent
+// tip-rotation cannot survive the logout revoke.
 func (p *Pg) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
-	_, err := p.pool.Exec(ctx,
+	for attempt := 0; ; attempt++ {
+		err := p.revokeFamilyOnce(ctx, tokenHash)
+		if isSerializationFailure(err) && attempt < maxSerializeRetries {
+			continue
+		}
+		return err
+	}
+}
+
+func (p *Pg) revokeFamilyOnce(ctx context.Context, tokenHash string) error {
+	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx,
 		`UPDATE refresh_tokens SET revoked = true
-		 WHERE family_id = (SELECT family_id FROM refresh_tokens WHERE token_hash = $1)`, tokenHash)
-	return err
+		 WHERE family_id IN (SELECT family_id FROM refresh_tokens WHERE token_hash = $1)`, tokenHash); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

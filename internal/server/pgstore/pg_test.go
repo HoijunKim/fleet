@@ -3,6 +3,8 @@ package pgstore
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -138,5 +140,62 @@ func TestExpiredRefreshIsInvalidNotReuse(t *testing.T) {
 	_, err = pg.RotateRefreshToken(ctx, "exp0", "exp1", time.Now().Add(time.Hour))
 	if !errors.Is(err, errRefreshInvalid) {
 		t.Fatalf("expired token: err = %v, want errRefreshInvalid (not reuse)", err)
+	}
+}
+
+// TestRefreshFamilyConcurrentReuseRevokesTip stresses the phantom-row race: for
+// many families it concurrently reuses the (revoked) original token and rotates
+// the live tip. A reuse always fires (the original is already rotated), so the
+// family MUST end with zero live tokens - a surviving live token would mean a
+// tip-rotation phantomed past the family revoke. SERIALIZABLE + retry guarantees
+// the invariant.
+func TestRefreshFamilyConcurrentReuseRevokesTip(t *testing.T) {
+	pg := testPg(t)
+	ctx := context.Background()
+	u, err := pg.UpsertUserByGitHub(ctx, GitHubIdentity{GitHubID: 101, Login: "u101"})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	exp := time.Now().Add(24 * time.Hour)
+	const N = 60
+
+	var wg sync.WaitGroup
+	fail := make(chan string, N)
+	for i := 0; i < N; i++ {
+		orig := fmt.Sprintf("c%d-t0", i)
+		tip := fmt.Sprintf("c%d-t1", i)
+		if err := pg.CreateRefreshToken(ctx, u.ID, orig, exp); err != nil {
+			t.Fatalf("create %d: %v", i, err)
+		}
+		if _, err := pg.RotateRefreshToken(ctx, orig, tip, exp); err != nil {
+			t.Fatalf("seed rotate %d: %v", i, err)
+		}
+		wg.Add(1)
+		go func(i int, orig, tip string) {
+			defer wg.Done()
+			var inner sync.WaitGroup
+			inner.Add(2)
+			go func() { defer inner.Done(); _, _ = pg.RotateRefreshToken(ctx, orig, fmt.Sprintf("c%d-reuse", i), exp) }()
+			go func() { defer inner.Done(); _, _ = pg.RotateRefreshToken(ctx, tip, fmt.Sprintf("c%d-t2", i), exp) }()
+			inner.Wait()
+
+			var live int
+			err := pg.pool.QueryRow(ctx,
+				`SELECT count(*) FROM refresh_tokens
+				 WHERE family_id = (SELECT family_id FROM refresh_tokens WHERE token_hash = $1)
+				   AND revoked = false`, orig).Scan(&live)
+			if err != nil {
+				fail <- fmt.Sprintf("family %d query: %v", i, err)
+				return
+			}
+			if live != 0 {
+				fail <- fmt.Sprintf("family %d: %d live token(s) after concurrent reuse (phantom survived revoke)", i, live)
+			}
+		}(i, orig, tip)
+	}
+	wg.Wait()
+	close(fail)
+	for msg := range fail {
+		t.Error(msg)
 	}
 }

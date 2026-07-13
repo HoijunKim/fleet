@@ -266,9 +266,10 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, pgstore.ErrRefreshReuse) {
 			// Reuse of a rotated token: the family was revoked server-side. Log the
-			// security event but keep the client response opaque (same 401 as any
-			// invalid token), and never log the token hash.
-			slog.Warn("refresh token reuse detected; family revoked")
+			// security event with the affected user (never the token hash, which is
+			// a secret), but keep the client response opaque (same 401 as any
+			// invalid token).
+			slog.Warn("refresh token reuse detected; family revoked", "user_id", userID)
 		}
 		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
 		return

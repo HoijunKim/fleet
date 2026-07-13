@@ -77,7 +77,7 @@ func (f *fakeStore) RotateRefreshToken(ctx context.Context, oldHash, newHash str
 	}
 	if row.revoked {
 		f.revokeFamily(row.familyID) // reuse: revoke the whole family
-		return "", pgstore.ErrRefreshReuse
+		return row.userID, pgstore.ErrRefreshReuse
 	}
 	if time.Now().After(row.expires) {
 		return "", fmt.Errorf("invalid")
