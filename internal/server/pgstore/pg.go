@@ -26,6 +26,9 @@ func New(ctx context.Context, databaseURL string) (*Pg, error) {
 // Close releases the pool.
 func (p *Pg) Close() { p.pool.Close() }
 
+// Ping verifies a live connection to the database (used by the readiness probe).
+func (p *Pg) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
+
 // errRefreshInvalid marks a refresh token that exists but is revoked/expired.
 var errRefreshInvalid = errors.New("refresh token invalid")
 

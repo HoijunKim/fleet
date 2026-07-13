@@ -46,6 +46,7 @@ type PushResult struct {
 
 // Store is the server persistence seam consumed by the HTTP and auth layers.
 type Store interface {
+	Ping(ctx context.Context) error
 	UpsertUserByGitHub(ctx context.Context, id GitHubIdentity) (User, error)
 	CreateRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
 	RotateRefreshToken(ctx context.Context, oldHash, newHash string, expiresAt time.Time) (string, error)

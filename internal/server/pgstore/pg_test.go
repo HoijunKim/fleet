@@ -53,3 +53,10 @@ func TestRefreshTokenRotation(t *testing.T) {
 		t.Fatalf("rotate new: %v", err)
 	}
 }
+
+func TestPing(t *testing.T) {
+	pg := testPg(t)
+	if err := pg.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+}

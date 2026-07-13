@@ -4,9 +4,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -14,15 +18,23 @@ import (
 	"github.com/hoijun/fleet/internal/server/auth"
 )
 
-// statusWriter captures the response status for structured request logging.
+// statusWriter captures the response status (and whether anything was written)
+// for structured request logging and safe panic recovery.
 type statusWriter struct {
 	http.ResponseWriter
 	status int
+	wrote  bool
 }
 
 func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
+	w.wrote = true
 	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Write(b []byte) (int, error) {
+	w.wrote = true
+	return w.ResponseWriter.Write(b)
 }
 
 // LogRequests logs one structured line per request via slog.
@@ -36,6 +48,7 @@ func LogRequests(next http.Handler) http.Handler {
 			"path", r.URL.Path,
 			"status", sw.status,
 			"dur_ms", time.Since(start).Milliseconds(),
+			"request_id", RequestIDOf(r.Context()),
 		)
 	})
 }
@@ -43,7 +56,91 @@ func LogRequests(next http.Handler) http.Handler {
 // ctxKey namespaces context values for this package.
 type ctxKey int
 
-const userIDKey ctxKey = 0
+const (
+	userIDKey    ctxKey = 0
+	requestIDKey ctxKey = 1
+)
+
+// RequestID assigns a correlation id to each request: it honors an inbound
+// X-Request-Id only when it passes validRequestID (guarding against log
+// injection), otherwise it generates a fresh random id. The id is echoed in the
+// X-Request-Id response header and stored on the context for LogRequests and
+// Recoverer.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-Id")
+		if !validRequestID(id) {
+			id = newRequestID()
+		}
+		w.Header().Set("X-Request-Id", id)
+		ctx := context.WithValue(r.Context(), requestIDKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// RequestIDOf returns the correlation id stored by RequestID, or "" if absent.
+func RequestIDOf(ctx context.Context) string {
+	v, _ := ctx.Value(requestIDKey).(string)
+	return v
+}
+
+// validRequestID accepts a non-empty id of at most 64 chars drawn from an
+// unambiguous, log-safe alphabet. Anything else is rejected so a client cannot
+// smuggle control characters or an oversized value into the logs.
+func validRequestID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		ok := (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+			(c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// newRequestID returns a fresh random hex id.
+func newRequestID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand should never fail; fall back to a time-based id so a
+		// request is still correlated rather than dropping the id entirely.
+		return fmt.Sprintf("ts-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// Recoverer turns a handler panic into a logged 500 instead of crashing the
+// connection. It re-panics http.ErrAbortHandler (an intentional abort) and
+// avoids a superfluous WriteHeader when the handler already wrote a response.
+func Recoverer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			if rec == http.ErrAbortHandler {
+				panic(rec)
+			}
+			slog.Error("panic recovered",
+				"err", fmt.Sprint(rec),
+				"method", r.Method,
+				"path", r.URL.Path,
+				"request_id", RequestIDOf(r.Context()),
+				"stack", string(debug.Stack()),
+			)
+			if sw, ok := w.(*statusWriter); ok && sw.wrote {
+				return // response already started; a second WriteHeader is a no-op warning
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
 
 // WithUserID stores the authenticated user id on the context.
 func WithUserID(ctx context.Context, id string) context.Context {

@@ -182,3 +182,62 @@ func TestRateLimiterHardCapDeniesNewKeys(t *testing.T) {
 		t.Fatal("existing key with tokens should still be served past the cap")
 	}
 }
+
+func TestRecovererCatchesPanic(t *testing.T) {
+	h := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { panic("boom") }))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest("GET", "/", nil)) // must not panic out of ServeHTTP
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d, want 500", rr.Code)
+	}
+}
+
+func TestRecovererNoDoubleWriteAfterResponse(t *testing.T) {
+	h := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = w.Write([]byte("partial"))
+		panic("late boom")
+	}))
+	rr := httptest.NewRecorder()
+	sw := &statusWriter{ResponseWriter: rr, status: http.StatusOK}
+	h.ServeHTTP(sw, httptest.NewRequest("GET", "/", nil))
+	if rr.Code != http.StatusTeapot {
+		t.Fatalf("code = %d, want 418 (recoverer must not override an already-written response)", rr.Code)
+	}
+}
+
+func TestRequestIDGeneratesAndEchoes(t *testing.T) {
+	var captured string
+	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = RequestIDOf(r.Context())
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest("GET", "/", nil))
+	got := rr.Header().Get("X-Request-Id")
+	if got == "" || got != captured {
+		t.Fatalf("header=%q ctx=%q: want a non-empty id present in both", got, captured)
+	}
+}
+
+func TestRequestIDHonorsValidInbound(t *testing.T) {
+	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Request-Id", "abc-123_XYZ.1")
+	h.ServeHTTP(rr, req)
+	if got := rr.Header().Get("X-Request-Id"); got != "abc-123_XYZ.1" {
+		t.Fatalf("valid inbound id not echoed: %q", got)
+	}
+}
+
+func TestRequestIDRejectsInvalidInbound(t *testing.T) {
+	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Request-Id", "bad id with space")
+	h.ServeHTTP(rr, req)
+	got := rr.Header().Get("X-Request-Id")
+	if got == "bad id with space" || got == "" {
+		t.Fatalf("invalid inbound id not replaced: %q", got)
+	}
+}

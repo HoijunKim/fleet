@@ -20,7 +20,10 @@ type syncFakeStore struct {
 	gotPush  []pgstore.Doc
 	pushRes  []pgstore.PushResult
 	pushCurs int64
+	pingErr  error
 }
+
+func (f *syncFakeStore) Ping(ctx context.Context) error { return f.pingErr }
 
 func (f *syncFakeStore) UpsertUserByGitHub(ctx context.Context, id pgstore.GitHubIdentity) (pgstore.User, error) {
 	return pgstore.User{}, nil

@@ -41,6 +41,7 @@ type refreshRow struct {
 func newFakeStore() *fakeStore {
 	return &fakeStore{users: map[int64]pgstore.User{}, refresh: map[string]refreshRow{}}
 }
+func (f *fakeStore) Ping(ctx context.Context) error { return nil }
 func (f *fakeStore) UpsertUserByGitHub(ctx context.Context, id pgstore.GitHubIdentity) (pgstore.User, error) {
 	u, ok := f.users[id.GitHubID]
 	if !ok {

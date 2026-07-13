@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -20,16 +22,39 @@ type Options struct {
 	TrustProxy bool
 }
 
-// NewRouter builds the full HTTP handler: public /healthz, IP-rate-limited auth
-// routes, and JWT-authenticated per-user-rate-limited /sync routes.
+// NewRouter builds the full HTTP handler: public /healthz + /readyz,
+// IP-rate-limited auth routes, and JWT-authenticated per-user-rate-limited
+// /sync routes.
 func NewRouter(opts Options) http.Handler {
 	r := chi.NewRouter()
+	// RequestID first (so the id is on the context for logging and recovery),
+	// then LogRequests (wraps the statusWriter Recoverer reuses), then Recoverer
+	// innermost so it catches handler panics and the resulting 500 is logged.
+	r.Use(RequestID)
 	r.Use(LogRequests)
+	r.Use(Recoverer)
 
+	// Liveness: cheap, no dependencies - a 200 means the process is up.
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	})
+
+	// Readiness: 200 only when the DB is reachable, so a DB blip pulls the
+	// instance from rotation without triggering a liveness restart.
+	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if opts.Store != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := opts.Store.Ping(ctx); err != nil {
+				http.Error(w, "not ready", http.StatusServiceUnavailable)
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
 	})
 
 	if opts.Auth != nil {
