@@ -15,8 +15,29 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/hoijun/fleet/internal/server/auth"
+	"github.com/hoijun/fleet/internal/server/metrics"
 )
+
+// MetricsMiddleware records request count, latency, status class, and the
+// in-flight gauge into m (nil-safe). It reads the chi route PATTERN (a bounded
+// set) rather than the raw path, so metric cardinality cannot grow with hostile
+// request URLs.
+func MetricsMiddleware(m *metrics.Metrics) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			m.IncInFlight()
+			defer m.DecInFlight()
+			start := time.Now()
+			sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(sw, r)
+			route := chi.RouteContext(r.Context()).RoutePattern()
+			m.ObserveHTTP(route, r.Method, sw.status, time.Since(start))
+		})
+	}
+}
 
 // statusWriter captures the response status (and whether anything was written)
 // for structured request logging and safe panic recovery.

@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+
+	"github.com/hoijun/fleet/internal/server/metrics"
 	"testing"
 	"time"
 
@@ -114,6 +116,7 @@ func newTestServer(h *Handlers) *httptest.Server {
 func TestOAuthFullFlow(t *testing.T) {
 	key := []byte("k")
 	store := newFakeStore()
+	mx := metrics.New("t", "t")
 	h := New(Config{
 		Store:        store,
 		GitHub:       fakeGitHub{user: GitHubUser{ID: 5, Login: "octo", AvatarURL: "http://a"}},
@@ -121,6 +124,7 @@ func TestOAuthFullFlow(t *testing.T) {
 		ClientID:     "cid",
 		AuthorizeURL: "https://github.test/authorize",
 		CallbackURL:  "https://api.test/auth/github/callback",
+		Metrics:      mx,
 	})
 	srv := newTestServer(h)
 	defer srv.Close()
@@ -235,6 +239,21 @@ func TestOAuthFullFlow(t *testing.T) {
 	resp, _ = client.Post(srv.URL+"/auth/logout", "application/json", strings.NewReader(string(body)))
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("logout status = %d, want 204", resp.StatusCode)
+	}
+
+	// Auth metrics recorded the flow: 1 login, 1 successful rotation, and 2 reuse
+	// events (reusing ex.Refresh, then the family-revoked rf.Refresh).
+	var mb strings.Builder
+	mx.Render(&mb)
+	out := mb.String()
+	for _, want := range []string{
+		"fleet_auth_logins_total 1",
+		"fleet_auth_refresh_rotations_total 1",
+		"fleet_auth_refresh_reuse_total 2",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("auth metric %q missing:\n%s", want, out)
+		}
 	}
 }
 

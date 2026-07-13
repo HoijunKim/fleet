@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/hoijun/fleet/internal/server/auth"
+	"github.com/hoijun/fleet/internal/server/metrics"
 	"github.com/hoijun/fleet/internal/server/pgstore"
 )
 
@@ -20,6 +21,11 @@ type Options struct {
 	// (Fly-Client-IP / X-Forwarded-For) when deriving the client IP. Only set
 	// this true when the server sits behind a trusted proxy. Defaults false.
 	TrustProxy bool
+	// Metrics collects request/pool/auth metrics (nil disables collection).
+	Metrics *metrics.Metrics
+	// MetricsToken guards GET /metrics with a Bearer token. When empty the
+	// endpoint is not registered at all (metrics are opt-in and never public).
+	MetricsToken string
 }
 
 // NewRouter builds the full HTTP handler: public /healthz + /readyz,
@@ -34,8 +40,15 @@ func NewRouter(opts Options) http.Handler {
 	// wrapper immediately outside it (that is where the *statusWriter is
 	// created); do not reorder these three without revisiting Recoverer.
 	r.Use(RequestID)
+	r.Use(MetricsMiddleware(opts.Metrics)) // times the full handler; nil-safe
 	r.Use(LogRequests)
 	r.Use(Recoverer)
+
+	// Opt-in, token-gated /metrics: registered only when a token is configured,
+	// so metrics are never exposed publicly by default.
+	if opts.MetricsToken != "" && opts.Metrics != nil {
+		r.Method("GET", "/metrics", opts.Metrics.Handler(opts.MetricsToken))
+	}
 
 	// Liveness: cheap, no dependencies, never rate-limited - a 200 means the
 	// process is up.

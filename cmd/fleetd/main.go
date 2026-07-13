@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/hoijun/fleet/internal/server/auth"
 	httpapi "github.com/hoijun/fleet/internal/server/http"
+	"github.com/hoijun/fleet/internal/server/metrics"
 	"github.com/hoijun/fleet/internal/server/pgstore"
 )
 
@@ -47,6 +49,7 @@ func run(ctx context.Context) error {
 	callbackURL := mustEnv("GITHUB_OAUTH_CALLBACK_URL")
 	addr := ":" + envOr("PORT", "8080")
 	trustProxy := envBool("TRUST_PROXY")
+	metricsToken := envOr("METRICS_TOKEN", "")
 
 	if err := pgstore.Migrate(databaseURL); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -58,19 +61,28 @@ func run(ctx context.Context) error {
 	}
 	defer store.Close()
 
+	m := metrics.New(envOr("FLEET_VERSION", "dev"), runtime.Version())
+	m.SetPoolSource(func() metrics.PoolStats {
+		s := store.Stat()
+		return metrics.PoolStats{Total: int(s.TotalConns()), Idle: int(s.IdleConns()), Acquired: int(s.AcquiredConns())}
+	})
+
 	authH := auth.New(auth.Config{
 		Store:       store,
 		GitHub:      auth.NewHTTPGitHub(clientID, clientSecret),
 		SigningKey:  signingKey,
 		ClientID:    clientID,
 		CallbackURL: callbackURL,
+		Metrics:     m,
 	})
 
 	router := httpapi.NewRouter(httpapi.Options{
-		Store:      store,
-		Auth:       authH,
-		SigningKey: signingKey,
-		TrustProxy: trustProxy,
+		Store:        store,
+		Auth:         authH,
+		SigningKey:   signingKey,
+		TrustProxy:   trustProxy,
+		Metrics:      m,
+		MetricsToken: metricsToken,
 	})
 
 	ln, err := net.Listen("tcp", addr)
@@ -85,7 +97,7 @@ func run(ctx context.Context) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	slog.Info("listening", "addr", addr, "trust_proxy", trustProxy)
+	slog.Info("listening", "addr", addr, "trust_proxy", trustProxy, "metrics", metricsToken != "")
 	return serve(ctx, srv, ln)
 }
 

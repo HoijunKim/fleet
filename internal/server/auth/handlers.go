@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/hoijun/fleet/internal/server/metrics"
 	"github.com/hoijun/fleet/internal/server/pgstore"
 )
 
@@ -27,6 +28,8 @@ type Config struct {
 	AccessTTL    time.Duration
 	RefreshTTL   time.Duration
 	Now          func() time.Time
+	// Metrics counts auth security events (reuse/rotations/logins); nil-safe.
+	Metrics *metrics.Metrics
 }
 
 // Handlers holds the OAuth endpoints plus short-lived server state.
@@ -239,6 +242,7 @@ func (h *Handlers) Exchange(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "token error", http.StatusInternalServerError)
 		return
 	}
+	h.cfg.Metrics.IncLogin()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":  access,
 		"refresh_token": raw,
@@ -270,10 +274,12 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 			// a secret), but keep the client response opaque (same 401 as any
 			// invalid token).
 			slog.Warn("refresh token reuse detected; family revoked", "user_id", userID)
+			h.cfg.Metrics.IncRefreshReuse()
 		}
 		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
 		return
 	}
+	h.cfg.Metrics.IncRefreshRotation()
 	access, err := IssueAccess(h.cfg.SigningKey, userID, h.cfg.AccessTTL, h.cfg.Now())
 	if err != nil {
 		http.Error(w, "token error", http.StatusInternalServerError)

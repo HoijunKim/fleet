@@ -46,6 +46,9 @@ func (p *Pg) Close() { p.pool.Close() }
 // Ping verifies a live connection to the database (used by the readiness probe).
 func (p *Pg) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
 
+// Stat returns a snapshot of the connection pool (used for the /metrics gauges).
+func (p *Pg) Stat() *pgxpool.Stat { return p.pool.Stat() }
+
 // errRefreshInvalid marks a refresh token that is unknown or expired (a normal
 // failure, not an attack). Revoked-token reuse is ErrRefreshReuse instead.
 var errRefreshInvalid = errors.New("refresh token invalid")
