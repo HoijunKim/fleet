@@ -1,6 +1,12 @@
 app = "fleet-api"
 primary_region = "nrt"
 
+# Fly stops a machine by sending its stop signal (SIGINT by default) and then
+# SIGKILL after kill_timeout. fleetd drains in-flight requests for up to 10s
+# (shutdownTimeout in cmd/fleetd/main.go), so keep this comfortably above that
+# or the graceful drain is cut short.
+kill_timeout = "15s"
+
 [build]
   dockerfile = "Dockerfile"
 

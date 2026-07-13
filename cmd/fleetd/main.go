@@ -4,18 +4,42 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/hoijun/fleet/internal/server/auth"
 	httpapi "github.com/hoijun/fleet/internal/server/http"
 	"github.com/hoijun/fleet/internal/server/pgstore"
 )
 
+// shutdownTimeout bounds the graceful drain after a stop signal. It is kept
+// under fly.toml's kill_timeout so the drain completes before Fly SIGKILLs the
+// process.
+const shutdownTimeout = 10 * time.Second
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	// Fly stops a machine with SIGINT (its default) then SIGKILL after
+	// kill_timeout; catch SIGINT and SIGTERM so run drains either way.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		slog.Error("server exited", "err", err)
+		os.Exit(1)
+	}
+}
 
+// run wires config, storage, and routes, then serves until ctx is cancelled by
+// a stop signal and drains gracefully. It returns an error (rather than
+// exiting) so failures propagate to main for a single exit point.
+func run(ctx context.Context) error {
 	databaseURL := mustEnv("DATABASE_URL")
 	signingKey := []byte(mustEnv("JWT_SIGNING_KEY"))
 	clientID := mustEnv("GITHUB_OAUTH_CLIENT_ID")
@@ -25,14 +49,12 @@ func main() {
 	trustProxy := envBool("TRUST_PROXY")
 
 	if err := pgstore.Migrate(databaseURL); err != nil {
-		slog.Error("migrate failed", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("migrate: %w", err)
 	}
 
 	store, err := pgstore.New(context.Background(), databaseURL)
 	if err != nil {
-		slog.Error("db connect failed", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("db connect: %w", err)
 	}
 	defer store.Close()
 
@@ -51,10 +73,39 @@ func main() {
 		TrustProxy: trustProxy,
 	})
 
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+	srv := &http.Server{
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
 	slog.Info("listening", "addr", addr, "trust_proxy", trustProxy)
-	if err := http.ListenAndServe(addr, router); err != nil {
-		slog.Error("server stopped", "err", err)
-		os.Exit(1)
+	return serve(ctx, srv, ln)
+}
+
+// serve runs srv on ln until ctx is cancelled, then drains in-flight requests
+// with a bounded timeout. It returns nil on a clean shutdown, or the serve or
+// shutdown error otherwise.
+func serve(ctx context.Context, srv *http.Server, ln net.Listener) error {
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(ln) }()
+	select {
+	case err := <-errc:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		slog.Info("shutting down")
+		sctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		return srv.Shutdown(sctx)
 	}
 }
 
