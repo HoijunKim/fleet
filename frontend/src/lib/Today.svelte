@@ -14,7 +14,20 @@
 
   onMount(async () => {
     await initAgentSession();
+    refreshGhSignals(); // populate CI/PR signals independently of the AI brief
   });
+
+  // GitHub signals (CI conclusion, open PRs) feed the Needs-attention panel AND
+  // the brief. Fetch them here so the CI/PR reasons surface even for a user
+  // without the AI CLI (the brief path also refreshes them in generate()).
+  async function refreshGhSignals() {
+    try {
+      const sigs = await GitHubSignals();
+      ghByPath = new Map((sigs || []).map((s: any) => [s.repoPath, s]));
+    } catch {
+      // best-effort: an empty map just omits CI/PR reasons
+    }
+  }
 
   // Full project list (code + manual) from App.svelte.
   export let projects: any[] = [];
@@ -34,23 +47,41 @@
   $: attention = deriveAttention(projects, ghByPath);
 
   // Per-row actions: read-only/navigational except push, which is the user's
-  // explicit click on their own repo (reported via a toast either way).
+  // explicit click on their own repo (reported via a toast either way). Each
+  // guards against a rejecting binding, matching the file's defensive pattern.
+  const pushing = new Set<string>();
   async function doEditor(it: AttentionItem) {
-    const err = await OpenEditor(it.path);
-    if (err) toastError(err);
+    try {
+      const err = await OpenEditor(it.path);
+      if (err) toastError(err);
+    } catch (e) {
+      toastError(String(e));
+    }
   }
   async function doPush(it: AttentionItem) {
-    const err = await Push(it.path);
-    if (err) toastError("Push failed: " + err);
-    else toastSuccess("Pushed " + it.name);
+    if (pushing.has(it.path)) return; // ignore a double-click while in flight
+    pushing.add(it.path);
+    try {
+      const err = await Push(it.path);
+      if (err) toastError("Push failed: " + err);
+      else toastSuccess("Pushed " + it.name);
+    } catch (e) {
+      toastError("Push failed: " + String(e));
+    } finally {
+      pushing.delete(it.path);
+    }
   }
   async function openGitHub(it: AttentionItem, suffix: string) {
-    const base = await GitHubURL(it.remote);
-    if (!base) {
-      toastError("No GitHub URL for " + it.name);
-      return;
+    try {
+      const base = await GitHubURL(it.remote);
+      if (!base) {
+        toastError("No GitHub URL for " + it.name);
+        return;
+      }
+      OpenURL(base + suffix);
+    } catch (e) {
+      toastError(String(e));
     }
-    OpenURL(base + suffix);
   }
 
   // ---- AI briefing --------------------------------------------------------

@@ -112,6 +112,30 @@ describe("deriveAttention", () => {
     expect(items[0].name).toBe("ci-one");
   });
 
+  it("ranks a single high-severity reason above a stack of med/low", () => {
+    const gh = new Map<string, GHSignal>([
+      ["/ci", { ci: "failure", prs: 0, issues: 0 }],
+      ["/stack", { ci: "success", prs: 3, issues: 0 }],
+    ]);
+    const projects = [
+      base({ id: "/stack", name: "stack", repoPath: "/stack", path: "/stack", dirty: true, modified: 1, ahead: 1, hasUpstream: true }),
+      base({ id: "/ci", name: "ci-one", repoPath: "/ci", path: "/ci" }),
+    ];
+    const items = deriveAttention(projects, gh);
+    expect(items[0].name).toBe("ci-one"); // lone high beats dirty+unpushed+prs stack
+  });
+
+  it("always includes a dig-in action (ask or open) on a busy row", () => {
+    const gh = new Map<string, GHSignal>([["/r/proj", { ci: "failure", prs: 2, issues: 0 }]]);
+    const acts = deriveAttention([base({ dirty: true, todo: 12 })], gh)[0].actions;
+    expect(acts.length).toBeLessThanOrEqual(3);
+    expect(acts.includes("ask") || acts.includes("open")).toBe(true);
+  });
+
+  it("a deadline row's dig-in is 'open'", () => {
+    expect(deriveAttention([base({ deadline: iso(1) })], new Map())[0].actions).toContain("open");
+  });
+
   it("caps at 8 items", () => {
     const many = Array.from({ length: 20 }, (_, i) =>
       base({ id: "/p" + i, name: "p" + i, repoPath: "/p" + i, path: "/p" + i, todo: 12 }),

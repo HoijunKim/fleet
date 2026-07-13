@@ -37,6 +37,7 @@ const IDLE_DAYS = 14;
 const DEADLINE_NEAR_DAYS = 3;
 const MAX_ITEMS = 8;
 
+const SEV_ORDER: Record<Severity, number> = { high: 3, med: 2, low: 1 };
 const SEV_WEIGHT: Record<Severity, number> = { high: 100, med: 40, low: 10 };
 const KIND_WEIGHT: Record<ReasonKind, number> = {
   ci: 60, deadline: 55, unpushed: 30, dirty: 25, prs: 20, idle: 8, todo: 6,
@@ -47,25 +48,27 @@ function daysSince(when: string): number | null {
   return d === null ? null : -d;
 }
 
-// actionsFor maps a row's reasons to a deduped, ordered set of one-click actions
-// (at most 3). Push appears only for an unpushed reason (which already implies
-// ahead>0 && hasUpstream). GitHub actions (ci/prs) require a remote - and a
-// ci/prs reason only exists when GitHub signals loaded, i.e. a GitHub remote.
+// actionsFor maps a row's reasons to a deduped set of one-click actions: up to
+// two contextual "signal" actions plus one guaranteed dig-in (open for a
+// deadline row, else ask), so a busy row never loses its way to investigate.
+// Push appears only for an unpushed reason (which already implies ahead>0 &&
+// hasUpstream). GitHub actions (ci/prs) require a remote - and a ci/prs reason
+// only exists when GitHub signals loaded, i.e. a GitHub remote.
 function actionsFor(reasons: Reason[], p: any): ActionKind[] {
   const kinds = new Set(reasons.map((r) => r.kind));
   const hasRemote = !!p.remote;
-  const out: ActionKind[] = [];
+  const signals: ActionKind[] = [];
   const add = (a: ActionKind) => {
-    if (!out.includes(a)) out.push(a);
+    if (!signals.includes(a)) signals.push(a);
   };
 
   if (kinds.has("ci") && hasRemote) add("ci");
   if (kinds.has("prs") && hasRemote) add("prs");
   if (kinds.has("unpushed")) add("push");
   if (kinds.has("dirty") || kinds.has("idle") || kinds.has("todo") || kinds.has("unpushed")) add("editor");
-  if (kinds.has("deadline")) add("open");
-  if (!out.includes("open")) add("ask"); // always leave a way to dig in
-  return out.slice(0, 3);
+
+  const digIn: ActionKind = kinds.has("deadline") ? "open" : "ask";
+  return [...signals.slice(0, 2), digIn];
 }
 
 export function deriveAttention(
@@ -112,7 +115,11 @@ export function deriveAttention(
 
     if (reasons.length === 0) continue;
 
-    const rank = reasons.reduce((sum, r) => sum + SEV_WEIGHT[r.sev] + KIND_WEIGHT[r.kind], 0);
+    // Rank primarily by the most-severe reason (a single high beats any stack of
+    // med/low), with the summed weight only breaking ties within a bucket.
+    const maxSev = Math.max(...reasons.map((r) => SEV_ORDER[r.sev]));
+    const weight = reasons.reduce((sum, r) => sum + SEV_WEIGHT[r.sev] + KIND_WEIGHT[r.kind], 0);
+    const rank = maxSev * 100000 + weight;
     items.push({
       id: p.id,
       name: p.name,
