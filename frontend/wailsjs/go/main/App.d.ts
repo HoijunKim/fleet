@@ -17,6 +17,8 @@ export function Agenda():Promise<Array<main.AgendaItem>>;
 
 export function AgentAsk(arg1:string,arg2:string):Promise<string>;
 
+export function AgentAskFleet(arg1:string):Promise<string>;
+
 export function AgentAvailable():Promise<boolean>;
 
 export function AgentConsent():Promise<boolean>;

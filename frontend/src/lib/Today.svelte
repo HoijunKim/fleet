@@ -1,5 +1,6 @@
 <script lang="ts">
   import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI, GitHubSignals } from "../../wailsjs/go/main/App";
+  import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
@@ -7,6 +8,11 @@
   import Select from "./Select.svelte";
   import { daysUntil } from "./pm";
   import { ciBit } from "./ciBit";
+  import { available, consent, openFleetOverlay, initAgentSession } from "./agentSession";
+
+  onMount(async () => {
+    await initAgentSession();
+  });
 
   // Full project list (code + manual) from App.svelte.
   export let projects: any[] = [];
@@ -354,8 +360,22 @@
 <div class="today">
   <div class="today-inner">
     <div class="today-head">
-      <h1 class="today-title">Today</h1>
-      <p class="today-sub">What you'd lose track of, and what to do first.</p>
+      <div class="today-head-row">
+        <div>
+          <h1 class="today-title">Today</h1>
+          <p class="today-sub">What you'd lose track of, and what to do first.</p>
+        </div>
+        {#if $available}
+          <div class="today-fleet-launch">
+            {#if !$consent}
+              <p class="today-fleet-hint">Reads across ALL your projects at once.</p>
+            {/if}
+            <button class="btn btn-primary btn-sm today-fleet-btn" on:click={openFleetOverlay}>
+              Ask across all projects
+            </button>
+          </div>
+        {/if}
+      </div>
     </div>
 
     <!-- AI briefing leads: the reason to open fleet -->
@@ -492,6 +512,7 @@
     gap: 20px;
   }
   .today-head { margin-bottom: 2px; }
+  .today-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .today-title {
     margin: 0;
     font-size: 24px;
@@ -500,6 +521,9 @@
     color: var(--text);
   }
   .today-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .today-fleet-launch { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .today-fleet-hint { margin: 0; font-size: 11.5px; color: var(--faint); text-align: right; max-width: 220px; line-height: 1.4; }
+  .today-fleet-btn { white-space: nowrap; }
 
   .brief-card { border-color: #33415d; }
   .brief-controls { margin-left: auto; display: flex; align-items: center; gap: 8px; }

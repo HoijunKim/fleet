@@ -67,4 +67,23 @@ describe("AgentOverlay", () => {
     expect(html).toContain("Edit foo.ts");
     S.activity.set([]);
   });
+
+  it("shows the fleet header and read-scope consent copy in fleet mode", () => {
+    S.openFleetOverlay();
+    S.available.set(true); S.consent.set(false);
+    const html = render({ projectName: "All projects" });
+    expect(html).toContain("All projects - agentic deep-dive");
+    expect(html).toContain("across ALL your projects");
+    expect(html).not.toContain("read files in this repo");
+  });
+
+  it("shows the single-repo header and consent copy outside fleet mode", () => {
+    S.setProject({ path: "/r", repoPath: "/r", name: "r" });
+    S.overlayOpen.set(true);
+    S.available.set(true); S.consent.set(false);
+    const html = render({ projectName: "r" });
+    expect(html).toContain("r · agentic deep-dive");
+    expect(html).toContain("read files in this repo");
+    expect(html).not.toContain("across ALL your projects");
+  });
 });

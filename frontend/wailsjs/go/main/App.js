@@ -30,6 +30,10 @@ export function AgentAsk(arg1, arg2) {
   return window['go']['main']['App']['AgentAsk'](arg1, arg2);
 }
 
+export function AgentAskFleet(arg1) {
+  return window['go']['main']['App']['AgentAskFleet'](arg1);
+}
+
 export function AgentAvailable() {
   return window['go']['main']['App']['AgentAvailable']();
 }

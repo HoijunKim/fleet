@@ -15,6 +15,7 @@ vi.mock("../../wailsjs/go/main/App", () => ({
   AgentConsent: async () => true,
   GiveAgentConsent: async () => "",
   AgentAsk: async (id: string, q: string) => { calls.push(["ask", id, q]); return ""; },
+  AgentAskFleet: async (q: string) => { calls.push(["askFleet", q]); return ""; },
   ApproveAction: async (id: string, ok: boolean) => { calls.push(["approve", id, ok]); },
   CancelAgent: () => { calls.push(["cancel"]); },
 }));
@@ -23,8 +24,14 @@ import * as S from "./agentSession";
 
 // vitest runs in the `node` environment (no localStorage). The store guards
 // `typeof localStorage === "undefined"`, so chat persistence simply no-ops here;
-// guard the test's own cleanup the same way.
-beforeEach(() => { calls.length = 0; if (typeof localStorage !== "undefined") localStorage.clear(); });
+// guard the test's own cleanup the same way. __reset() clears module-level run
+// state (project/running/gen/...) so a test can't inherit a stuck `running`
+// flag left by a prior test that never fired agent:done/agent:error.
+beforeEach(() => {
+  calls.length = 0;
+  if (typeof localStorage !== "undefined") localStorage.clear();
+  S.__reset();
+});
 
 describe("agentSession", () => {
   it("runs a question and lands the answer on agent:done", async () => {
@@ -59,5 +66,34 @@ describe("agentSession", () => {
     await S.decide(true);
     expect(calls).toContainEqual(["approve", "act-1", true]);
     expect(get(S.pending)).toBe(null);
+  });
+
+  it("routes ask to AgentAskFleet in fleet mode, AgentAsk otherwise", async () => {
+    await S.initAgentSession();
+    S.setProject({ path: "/repo/a", repoPath: "/repo/a" });
+    await S.ask("q1");
+    expect(calls).toContainEqual(["ask", "/repo/a", "q1"]); // AgentAsk
+    S.setProject({ path: "__fleet__", name: "All projects", isFleet: true });
+    await S.ask("q2");
+    expect(calls).toContainEqual(["askFleet", "q2"]); // AgentAskFleet
+  });
+
+  it("openFleetOverlay scopes the store to the fleet identity and opens the overlay", async () => {
+    await S.initAgentSession();
+    S.setProject({ path: "/repo/a", repoPath: "/repo/a" });
+    S.openFleetOverlay();
+    expect(get(S.overlayOpen)).toBe(true);
+    await S.ask("q3");
+    expect(calls).toContainEqual(["askFleet", "q3"]);
+  });
+
+  it("exposes isFleet so consumers can detect the fleet identity without private state", async () => {
+    await S.initAgentSession();
+    S.setProject({ path: "/repo/a", repoPath: "/repo/a" });
+    expect(get(S.isFleet)).toBe(false);
+    S.openFleetOverlay();
+    expect(get(S.isFleet)).toBe(true);
+    S.setProject({ path: "/repo/a", repoPath: "/repo/a" });
+    expect(get(S.isFleet)).toBe(false);
   });
 });

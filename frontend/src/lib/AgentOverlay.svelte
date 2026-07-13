@@ -2,7 +2,7 @@
   import { scale, fade, fly } from "svelte/transition";
   import { fadeScaleIn, flyUp } from "./motion";
   import {
-    available, consent, running, stream, activity, pending, cost, turns, overlayOpen,
+    available, consent, running, stream, activity, pending, cost, turns, overlayOpen, isFleet,
     giveConsent, ask, decide, cancel, closeOverlay,
   } from "./agentSession";
   import { parseAction } from "./agentAction";
@@ -16,6 +16,10 @@
   let question = "";
 
   $: action = $pending ? parseAction($pending.category, $pending.toolName, $pending.toolInput) : null;
+  // Fleet identity: primarily detected via the store's own isFleet flag
+  // (set by setProject/openFleetOverlay), with projectName === "All projects"
+  // as a fallback for callers that only pass the prop (e.g. render tests).
+  $: fleetMode = $isFleet || projectName === "All projects";
 
   async function onConsent() {
     const err = await giveConsent();
@@ -55,18 +59,28 @@
     <div class="ov-panel" transition:scale={fadeScaleIn()}>
       <div class="ov-head">
         <Logo size={18} />
-        <span class="ov-title">{projectName} · agentic deep-dive</span>
+        <span class="ov-title">
+          {#if fleetMode}All projects - agentic deep-dive{:else}{projectName} · agentic deep-dive{/if}
+        </span>
         <button class="ov-close" on:click={closeOverlay} aria-label="Close"><Icon name="x" size={18} /></button>
       </div>
 
       <div class="ov-body">
         {#if $available && !$consent}
           <div class="ov-consent">
-            <p>
-              The agentic deep-dive lets Claude Code read files in this repo and send them to
-              Anthropic under your Claude login, and can propose edits or commands (each one you
-              approve here first).
-            </p>
+            {#if fleetMode}
+              <p>
+                The agentic deep-dive lets Claude Code read files across ALL your projects and
+                send them to Anthropic under your Claude login, and can propose edits or commands
+                (each one you approve here first).
+              </p>
+            {:else}
+              <p>
+                The agentic deep-dive lets Claude Code read files in this repo and send them to
+                Anthropic under your Claude login, and can propose edits or commands (each one you
+                approve here first).
+              </p>
+            {/if}
             <button class="btn btn-primary btn-sm" on:click={onConsent}>Enable agentic deep-dive</button>
           </div>
         {/if}

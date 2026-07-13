@@ -1,11 +1,11 @@
 import { writable, get } from "svelte/store";
 import {
-  AgentAvailable, AgentConsent, GiveAgentConsent, AgentAsk, ApproveAction, CancelAgent,
+  AgentAvailable, AgentConsent, GiveAgentConsent, AgentAsk, AgentAskFleet, ApproveAction, CancelAgent,
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 
 type Turn = { role: "user" | "assistant"; text: string };
-type Proj = { path: string; repoPath?: string; name?: string } | null;
+type Proj = { path: string; repoPath?: string; name?: string; isFleet?: boolean } | null;
 
 export const available = writable(false);
 export const consent = writable(false);
@@ -19,6 +19,11 @@ export const pending = writable<{
 export const cost = writable<{ costUsd: number; inputTokens: number; outputTokens: number } | null>(null);
 export const turns = writable<Turn[]>([]);
 export const overlayOpen = writable(false);
+// Whether the CURRENT identity (as scoped by setProject/openOverlay) is the
+// fleet-wide "__fleet__" identity, not a single repo. Consumers (e.g.
+// AgentOverlay) read this to switch header/consent copy without reaching into
+// module-private state.
+export const isFleet = writable(false);
 
 let project: Proj = null;
 let loadedPath = "";
@@ -85,6 +90,7 @@ export function setProject(p: Proj): void {
   project = p;
   loadedPath = p ? p.path : "";
   turns.set(p ? loadChat(p.path) : []);
+  isFleet.set(!!(p && p.isFleet));
 }
 
 export async function giveConsent(): Promise<string> {
@@ -99,8 +105,9 @@ export async function ask(q: string): Promise<void> {
   turns.update((t) => [...t, { role: "user", text }]);
   stream.set(""); activity.set([]); pending.set(null); cost.set(null); running.set(true);
   runPath = project.path; runGen = ++gen;
-  const id = project.repoPath || project.path;
-  const err = await AgentAsk(id, text);
+  const err = project.isFleet
+    ? await AgentAskFleet(text)
+    : await AgentAsk(project.repoPath || project.path, text);
   if (stale()) return;
   if (err) { turns.update((t) => [...t, { role: "assistant", text: err }]); running.set(false); }
 }
@@ -129,6 +136,14 @@ export function openOverlay(p: Proj): void {
 }
 export function closeOverlay(): void { overlayOpen.set(false); } // does NOT cancel the run
 
+// Fleet identity: scopes the shared session to a synthetic "__fleet__" path so
+// cancel-on-switch + staleness work exactly like any other project, but ask()
+// dispatches to AgentAskFleet (agentic run at the projects root) instead of a
+// single repo.
+export function openFleetOverlay(): void {
+  openOverlay({ path: "__fleet__", name: "All projects", isFleet: true });
+}
+
 // Test-isolation only: resets every store and module-level run state to its
 // initial value. Does NOT reset `started` - the agent:* event subscriptions
 // stay registered across resets within a single test process.
@@ -142,6 +157,7 @@ export function __reset(): void {
   cost.set(null);
   turns.set([]);
   overlayOpen.set(false);
+  isFleet.set(false);
   project = null;
   loadedPath = "";
   gen = 0;
