@@ -84,6 +84,11 @@ export async function initAgentSession(): Promise<void> {
 }
 
 export function setProject(p: Proj): void {
+  // Same-path re-entrancy guard only (e.g. re-selecting the already-scoped
+  // repo). NOT a fleet-vs-repo guard: a repo path never equals "__fleet__",
+  // so this does nothing to protect a live fleet run from being clobbered by
+  // a subsequent setProject(repo) call - callers must not auto-scope while
+  // isFleet is true (see App.svelte's `$: if (!$isFleet) agentSetProject(...)`).
   if (p && project && p.path === project.path) return;
   if (get(running)) { CancelAgent(); gen++; running.set(false); pending.set(null); activity.set([]); stream.set(""); cost.set(null); }
   overlayOpen.set(false);

@@ -96,4 +96,21 @@ describe("agentSession", () => {
     S.setProject({ path: "/repo/a", repoPath: "/repo/a" });
     expect(get(S.isFleet)).toBe(false);
   });
+
+  // Regression for the fleet-clobber bug: App.svelte's `$: agentSetProject(selected)`
+  // re-fires on every `projects` refresh (Svelte's safe_not_equal treats the
+  // freshly-recomputed `selected` object as dirty even when unchanged), which
+  // used to rescope away from the fleet identity and CancelAgent() a live
+  // fleet run out from under the user. isFleet must track setProject's
+  // current identity in every case so App's `$: if (!$isFleet) agentSetProject(selected)`
+  // guard can suppress that re-scoping while fleet mode is active.
+  it("tracks the current identity via isFleet across fleet, repo, and null projects", async () => {
+    await S.initAgentSession();
+    S.setProject({ path: "__fleet__", name: "All projects", isFleet: true });
+    expect(get(S.isFleet)).toBe(true);
+    S.setProject({ path: "/repo/a", repoPath: "/repo/a" });
+    expect(get(S.isFleet)).toBe(false);
+    S.setProject(null);
+    expect(get(S.isFleet)).toBe(false);
+  });
 });

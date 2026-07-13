@@ -16,7 +16,7 @@
   import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import AgentOverlay from "./lib/AgentOverlay.svelte";
-  import { setProject as agentSetProject } from "./lib/agentSession";
+  import { setProject as agentSetProject, isFleet } from "./lib/agentSession";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
   import { STATUS_ORDER, deadlineSort, daysUntil } from "./lib/pm";
 
@@ -150,7 +150,14 @@
   // Scope the shared agentic session to the current selection. Clearing or
   // changing the selection cancels a live agentic run and rescopes the store
   // (and its overlay) to the newly-selected repo (or none).
-  $: agentSetProject(selected);
+  // Skipped while a fleet run is active: `selected` is recomputed (a new
+  // object) on every `projects` refresh, which Svelte's safe_not_equal
+  // treats as "dirty" even when the selected repo hasn't changed - re-firing
+  // agentSetProject(selected) here would rescope away from "__fleet__" and
+  // CancelAgent() a live fleet run out from under the user. Leaving fleet
+  // mode happens explicitly (e.g. RepoChat's launcher calling setProject on
+  // a repo), which flips isFleet back to false and re-enables auto-scope.
+  $: if (!$isFleet) agentSetProject(selected);
   $: loadingCount = projects.filter((p) => p.type === "code" && !p.loaded && !p.errMsg).length;
   // Derived from the live list so removed rows never inflate the count.
   $: selectedCount = projects.filter((p) => selectedIds.has(p.id)).length;
