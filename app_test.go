@@ -791,6 +791,17 @@ func TestAgentAskRefusesWithoutConsent(t *testing.T) {
 	}
 }
 
+// TestAgentAskFleetNoRoots guards the fleet run's root gate: with no project
+// root configured there is nowhere to run the agent, so AgentAskFleet must
+// refuse before ever touching the store or runAgent's consent/available gates.
+func TestAgentAskFleetNoRoots(t *testing.T) {
+	a := &App{} // zero-value config: cfg.Roots is empty
+	got := a.AgentAskFleet("hi")
+	if !strings.Contains(got, "root") {
+		t.Fatalf("AgentAskFleet with no roots = %q, want an error mentioning root", got)
+	}
+}
+
 func TestAgenda(t *testing.T) {
 	a := newTestApp(t)
 	p := a.AddProject("proj")

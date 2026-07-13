@@ -1203,17 +1203,37 @@ func fleetExecutable() string {
 // done/error), and gates mutating tool calls through agent:action. Returns ""
 // on a successful start, or an "error: ..." string.
 func (a *App) AgentAsk(projectID, question string) string {
+	// Checked here too (ahead of the store read below), not just inside
+	// runAgent: TestAgentAskRefusesWithoutConsent requires AgentAsk to refuse
+	// before touching the store at all. runAgent re-checks it (and
+	// AgentAvailable) as the single source of truth enforced for every
+	// caller, including AgentAskFleet.
 	if !a.AgentConsent() {
 		return "error: agentic deep-dive requires consent"
-	}
-	if !a.AgentAvailable() {
-		return "error: agentic deep-dive requires the Claude (Claude Code) provider"
 	}
 	repoDir := projectID // a code project's id is its repo path
 	rec, _ := a.store.Get(projectID)
 	name := rec.Name
 	if name == "" {
 		name = filepath.Base(projectID)
+	}
+	return a.runAgent(repoDir, agent.BuildSystemPrompt(name, rec), projectID, question)
+}
+
+// runAgent is the shared agentic-run pipeline behind AgentAsk and
+// AgentAskFleet: consent/availability gates, tmp hook settings, the
+// single-run mutex (agentMu/agentCancel/agentSrv), the approval server +
+// classify closure, and the run goroutine (events + cleanup). repoDir is
+// where the claude CLI runs, systemPrompt frames its role, and sessionKey
+// keys the resume-session cache (a.agentSession) - callers that want an
+// independent conversation history pass distinct keys. Returns "" on a
+// successful start, or an "error: ..." string.
+func (a *App) runAgent(repoDir, systemPrompt, sessionKey, question string) string {
+	if !a.AgentConsent() {
+		return "error: agentic deep-dive requires consent"
+	}
+	if !a.AgentAvailable() {
+		return "error: agentic deep-dive requires the Claude (Claude Code) provider"
 	}
 
 	tmpDir, err := os.MkdirTemp("", "fleet-agent-")
@@ -1264,13 +1284,13 @@ func (a *App) AgentAsk(projectID, question string) string {
 		return "error: " + err.Error()
 	}
 	a.agentSrv = srv
-	resume := a.agentSession[projectID]
+	resume := a.agentSession[sessionKey]
 	a.agentMu.Unlock()
 
 	opts := agent.Options{
 		RepoDir:      repoDir,
 		Prompt:       question,
-		SystemPrompt: agent.BuildSystemPrompt(name, rec),
+		SystemPrompt: systemPrompt,
 		Policy:       agent.DefaultPolicy(),
 		SettingsPath: settings,
 		HookURL:      srv.URL(),
@@ -1290,7 +1310,7 @@ func (a *App) AgentAsk(projectID, question string) string {
 			case agent.KindInit:
 				if ev.SessionID != "" {
 					a.agentMu.Lock()
-					a.agentSession[projectID] = ev.SessionID
+					a.agentSession[sessionKey] = ev.SessionID
 					a.agentMu.Unlock()
 				}
 			case agent.KindText:
@@ -1316,6 +1336,34 @@ func (a *App) AgentAsk(projectID, question string) string {
 		}
 	}()
 	return ""
+}
+
+// AgentAskFleet starts a fleet-wide agentic deep-dive: the agent runs at the
+// first configured project root and can read/grep across every repo under
+// it, with each mutating action approved by the user just like AgentAsk.
+// Returns "" on a successful start, or an "error: ..." string.
+func (a *App) AgentAskFleet(question string) string {
+	cfg := a.cfgSnapshot()
+	if len(cfg.Roots) == 0 {
+		return "error: no project root configured"
+	}
+	root := cfg.Roots[0]
+
+	var fps []agent.FleetProject
+	for id, rec := range a.store.Snapshot() { // id is the record's key: a repo path for code projects
+		open := 0
+		for _, t := range rec.Tasks {
+			if t.Status != "done" {
+				open++
+			}
+		}
+		name := rec.Name
+		if name == "" {
+			name = filepath.Base(id)
+		}
+		fps = append(fps, agent.FleetProject{Name: name, Status: rec.Status, Deadline: rec.Deadline, OpenTasks: open})
+	}
+	return a.runAgent(root, agent.BuildFleetSystemPrompt(fps), "__fleet__", question)
 }
 
 // ApproveAction resolves the outstanding gated tool call id with the user's

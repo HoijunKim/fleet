@@ -43,3 +43,21 @@ func TestBuildSystemPromptEmpty(t *testing.T) {
 		t.Errorf("empty record still needs role framing: %s", out)
 	}
 }
+
+func TestBuildFleetSystemPrompt(t *testing.T) {
+	got := BuildFleetSystemPrompt([]FleetProject{
+		{Name: "fleet", Status: "active", Deadline: "2026-08-01", OpenTasks: 3},
+		{Name: "arsi", Status: "paused"},
+	})
+	if !strings.Contains(got, "fleet") || !strings.Contains(got, "arsi") {
+		t.Fatalf("projects not listed: %s", got)
+	}
+	// fleet-wide framing + the approval note must be present
+	if !strings.Contains(got, "approve") && !strings.Contains(got, "approved") {
+		t.Fatalf("missing approval framing: %s", got)
+	}
+	// empty list must not panic and still frame the role
+	if BuildFleetSystemPrompt(nil) == "" {
+		t.Fatal("empty fleet prompt should still frame the role")
+	}
+}
