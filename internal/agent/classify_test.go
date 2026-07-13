@@ -43,6 +43,32 @@ func TestClassifyGrepGlob(t *testing.T) {
 		{"glob normal", "Glob", `{"pattern":"**/*.go"}`, "allow"},
 		{"glob normal src path", "Glob", `{"pattern":"**/*.go","path":"internal/agent"}`, "allow"},
 		{"glob unparseable", "Glob", `{"pattern":123}`, "deny"},
+
+		// Wildcard-glob bypasses (F1): a glob resolves to a secret file without
+		// the literal secret token appearing in the query text.
+		{"grep glob .k star", "Grep", `{"pattern":"x","glob":"**/*.k*"}`, "deny"},
+		{"grep glob .p star", "Grep", `{"pattern":".","glob":"**/*.p*"}`, "deny"},
+		{"grep glob id_ star", "Grep", `{"pattern":".","glob":"**/id_*"}`, "deny"},
+		{"grep glob cred star", "Grep", `{"pattern":".","glob":"**/cred*"}`, "deny"},
+		{"grep glob star sec", "Grep", `{"pattern":"=","glob":"**/*sec*"}`, "deny"},
+		{"grep glob star tok", "Grep", `{"pattern":"=","glob":"**/*tok*"}`, "deny"},
+		{"grep glob .en star", "Grep", `{"pattern":".","glob":"**/.en*"}`, "deny"},
+		{"grep glob brace key pem", "Grep", `{"pattern":".","glob":"**/*.{key,pem}"}`, "deny"},
+		{"glob wildcard id star", "Glob", `{"pattern":"**/*.k*"}`, "deny"},
+		{"glob brace p12 pfx", "Glob", `{"pattern":"**/cert.{p12,pfx}"}`, "deny"},
+		// Windows backslash secret-dir bypass (F2).
+		{"grep path .ssh backslash", "Grep", `{"pattern":"PRIVATE","path":".ssh\\"}`, "deny"},
+		{"grep path .aws backslash", "Grep", `{"pattern":"x","path":".aws\\"}`, "deny"},
+		{"grep path .ssh backslash config", "Grep", `{"pattern":".","path":".ssh\\config"}`, "deny"},
+		// Wildcarded secret directory.
+		{"grep glob .s star dir", "Grep", `{"pattern":".","glob":"**/.s*/id_x"}`, "deny"},
+		// Common source globs must STILL allow (no over-deny regression).
+		{"grep glob go allow", "Grep", `{"pattern":"TODO","glob":"**/*.go"}`, "allow"},
+		{"grep glob ts allow", "Grep", `{"pattern":"x","glob":"**/*.ts"}`, "allow"},
+		{"grep glob json allow", "Grep", `{"pattern":"x","glob":"**/*.json"}`, "allow"},
+		{"grep glob yaml allow", "Grep", `{"pattern":"x","glob":"**/*.yaml"}`, "allow"},
+		{"grep glob txt allow", "Grep", `{"pattern":"x","glob":"**/*.txt"}`, "allow"},
+		{"glob brace ts tsx allow", "Glob", `{"pattern":"**/*.{ts,tsx}"}`, "allow"},
 	}
 	for _, c := range cases {
 		got := v(c.tool, c.input, "feat/x")

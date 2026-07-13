@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -84,7 +85,7 @@ func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) V
 		if json.Unmarshal(toolInput, &p) != nil {
 			return deny("unreadable grep")
 		}
-		if secretScopeRe.MatchString(p.Path) || secretScopeRe.MatchString(p.Glob) {
+		if scopeTargetsSecret(p.Path) || scopeTargetsSecret(p.Glob) {
 			return deny("grep of a secret path is blocked")
 		}
 		return allow("search")
@@ -98,7 +99,7 @@ func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) V
 		if json.Unmarshal(toolInput, &p) != nil {
 			return deny("unreadable glob")
 		}
-		if secretScopeRe.MatchString(p.Pattern) || secretScopeRe.MatchString(p.Path) {
+		if scopeTargetsSecret(p.Pattern) || scopeTargetsSecret(p.Path) {
 			return deny("glob of a secret path is blocked")
 		}
 		return allow("search")
@@ -404,15 +405,108 @@ func isPRCreate(cmd string) bool {
 // secretPathRe matches a token/substring naming a secret file or path.
 var secretPathRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|credentials|secret|\.ssh/)`)
 
-// secretScopeRe matches a Grep/Glob path or glob that targets a secret-shaped
-// file OR a secret directory. It mirrors the Read(**/...) deny globs in
-// policy.go (so search cannot reach what Read cannot), and - unlike secretArgRe,
-// which scans a whole Bash command for a file arg - it also matches a bare
-// secret DIRECTORY (`.ssh`, `.aws`) that a Glob/Grep scope could enumerate even
-// with no trailing file. Over-matching (a source path merely CONTAINING
-// "secret"/"token") errs toward deny (fail-closed); the agent can still search
-// with an unscoped pattern.
-var secretScopeRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|\.keystore|\.ovpn|credentials|secret|token|\.ssh(?:/|$)|\.aws(?:/|$))`)
+// secretScopeRe matches the LITERAL secret-shaped substrings in a Grep/Glob
+// path or glob (a name like `.env`/`id_rsa`/`credentials` typed verbatim, or a
+// secret directory `.ssh`/`.aws` with a `/` or `\` separator). It is the
+// first-line literal check inside scopeTargetsSecret; the glob-aware check there
+// handles WILDCARD forms (`*.k*`, `id_*`, `*.{key,pem}`) that resolve to a
+// secret file without the literal token ever appearing. Over-matching (a source
+// path merely CONTAINING "secret"/"token") errs toward deny (fail-closed); the
+// agent can still search with an unscoped pattern.
+var secretScopeRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|\.keystore|\.ovpn|credentials|secret|token|\.ssh(?:[/\\]|$)|\.aws(?:[/\\]|$))`)
+
+// secretGlobBasenames are canonical secret file names, one representative per
+// Read(**/...) deny glob in policy.go. A Grep/Glob whose FILENAME segment
+// matches any of these via path.Match targets a secret - so a wildcard glob
+// (`*.k*`, `id_*`, `cred*`, `.en*`) is caught even though the literal secret
+// token never appears in the query string. The two bare names `secret`/`token`
+// cover Read's `*secret*`/`*token*` globs: an extensioned query (`*.go`,
+// `*.json`) cannot match a bare name, so ordinary searches stay allowed, while a
+// name-targeting query (`*sec*`, `*tok*`, `*`) is denied.
+var secretGlobBasenames = []string{
+	".env", ".env.prod", "id_rsa", "id_ed25519", "id_dsa", "credentials", ".netrc",
+	"server.pem", "server.key", "cert.p12", "cert.pfx", "vpn.ovpn", "app.keystore",
+	"secret", "token",
+}
+
+// secretDirNames are secret directories a Grep/Glob scope must not enumerate.
+var secretDirNames = []string{".ssh", ".aws"}
+
+// scopeTargetsSecret reports whether a Grep/Glob path or glob argument targets a
+// secret-shaped file or directory. A glob is a PATTERN that can resolve to a
+// secret file without containing the secret token literally (`*.k*` -> a
+// `.key`), so a substring scan alone (the old bug) is bypassable. It therefore:
+// (1) runs the literal secretScopeRe scan, then (2) normalizes `\`->`/`, expands
+// brace alternations, splits into path segments, and path.Match-es the filename
+// segment against secretGlobBasenames and every segment against secretDirNames.
+// A malformed pattern is a hit (fail-closed).
+func scopeTargetsSecret(s string) bool {
+	if s == "" {
+		return false
+	}
+	if secretScopeRe.MatchString(s) {
+		return true
+	}
+	norm := strings.ReplaceAll(s, `\`, "/")
+	for _, g := range expandBraces(norm) {
+		segs := strings.Split(g, "/")
+		for i, seg := range segs {
+			if seg == "" || seg == "**" || seg == "." || seg == ".." {
+				continue
+			}
+			if i == len(segs)-1 {
+				for _, name := range secretGlobBasenames {
+					if matchGlob(seg, name) {
+						return true
+					}
+				}
+			}
+			for _, dir := range secretDirNames {
+				if matchGlob(seg, dir) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// matchGlob reports whether pattern matches name via path.Match; a malformed
+// pattern returns true (fail-closed: an unparseable scope is treated as a hit).
+func matchGlob(pattern, name string) bool {
+	ok, err := path.Match(pattern, name)
+	if err != nil {
+		return true
+	}
+	return ok
+}
+
+// expandBraces expands shell brace alternations (`{a,b}`) into concrete
+// alternatives so path.Match - which has no brace support - can test each
+// (`*.{key,pem}` -> `*.key`, `*.pem`). Bounded to guard against a blow-up;
+// unbalanced braces are left literal.
+func expandBraces(s string) []string {
+	i := strings.IndexByte(s, '{')
+	if i < 0 {
+		return []string{s}
+	}
+	j := strings.IndexByte(s[i:], '}')
+	if j < 0 {
+		return []string{s} // unbalanced; treat literally
+	}
+	j += i
+	pre, body, post := s[:i], s[i+1:j], s[j+1:]
+	var out []string
+	for _, alt := range strings.Split(body, ",") {
+		for _, rest := range expandBraces(post) {
+			out = append(out, pre+alt+rest)
+			if len(out) >= 64 {
+				return out
+			}
+		}
+	}
+	return out
+}
 
 // secretArgRe matches a secret path at an argument boundary (start-of-string, a
 // path separator, whitespace, or a shell operator), so ANY reading command hits
