@@ -135,6 +135,10 @@ func (m *Metrics) SetPoolSource(fn func() PoolStats) {
 // missing or mismatched Bearer token yields 401 via a constant-time compare.
 func (m *Metrics) Handler(token string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token == "" { // defense-in-depth: never authorize against an empty token
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		const pfx = "Bearer "
 		h := r.Header.Get("Authorization")
 		got := strings.TrimPrefix(h, pfx)
