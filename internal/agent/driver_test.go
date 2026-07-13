@@ -63,7 +63,7 @@ func TestWriteHookSettings(t *testing.T) {
 		t.Fatalf("settings not valid JSON: %v", err)
 	}
 	s := string(data)
-	for _, want := range []string{`"PreToolUse"`, `"Edit|Write|Bash"`, `"command"`, HookFlag} {
+	for _, want := range []string{`"PreToolUse"`, `"Edit|Write|Bash|Grep|Glob"`, `"command"`, HookFlag} {
 		if !strings.Contains(s, want) {
 			t.Errorf("settings missing %q\n%s", want, s)
 		}

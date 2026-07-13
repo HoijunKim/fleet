@@ -101,6 +101,37 @@ func TestApprovalServerAutoDeniesWithoutAsking(t *testing.T) {
 	}
 }
 
+func TestApprovalServerAutoAllows(t *testing.T) {
+	coord := NewCoordinator()
+	fired := false
+	classify := func(tool string, _ json.RawMessage, _ string) Verdict {
+		if tool == "Grep" {
+			return Verdict{Decision: "allow", Reason: "search"}
+		}
+		return Verdict{Decision: "gate", Category: CatEdit, Summary: "Edit x"}
+	}
+	s := NewApprovalServer(context.Background(), coord, time.Second, func(ActionRequest) { fired = true }, classify)
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop(nil)
+
+	body := `{"tool_name":"Grep","tool_input":{"pattern":"TODO"},"cwd":"/r"}`
+	resp, err := http.Post(s.URL(), "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	if out["approved"] != true {
+		t.Fatalf("auto-allow should answer approved=true, got %v", out)
+	}
+	if fired {
+		t.Fatal("onAction must NOT fire for an auto-allowed action")
+	}
+}
+
 // gateStub is a fake claude that reads FLEET_HOOK_URL (set by Driver.Run),
 // POSTs a mutating tool call to fleet's loopback ApprovalServer exactly as the
 // real PreToolUse hook would, and emits a result reflecting the decision. It

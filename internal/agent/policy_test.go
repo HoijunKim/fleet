@@ -16,8 +16,11 @@ func has(list []string, want string) bool {
 
 func TestDefaultPolicyLists(t *testing.T) {
 	p := DefaultPolicy()
-	if !has(p.Allowed, "Read") || !has(p.Allowed, "Grep") || !has(p.Allowed, "Glob") {
-		t.Errorf("read-only tools must be allowed: %+v", p.Allowed)
+	if !has(p.Allowed, "Read") {
+		t.Errorf("Read must be allowed: %+v", p.Allowed)
+	}
+	if has(p.Allowed, "Grep") || has(p.Allowed, "Glob") {
+		t.Errorf("Grep/Glob must NOT be allow-listed (they route through the approval hook): %+v", p.Allowed)
 	}
 	if !has(p.Disallowed, "Read(**/.env)") || !has(p.Disallowed, "Bash(rm:*)") {
 		t.Errorf("secret/destructive must be denied: %+v", p.Disallowed)

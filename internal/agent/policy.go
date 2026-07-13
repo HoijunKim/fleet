@@ -2,11 +2,13 @@ package agent
 
 import "strings"
 
-// Policy is the tool allow/deny lists handed to the claude CLI. Read-only tools
-// are allow-listed so they run without a prompt; secret reads and destructive
-// shell commands are denied outright; mutating tools (Edit, Write, general
-// Bash) are deliberately absent from both lists so they fall through to the
-// PreToolUse approval hook.
+// Policy is the tool allow/deny lists handed to the claude CLI. Read is
+// allow-listed so file reads run without a prompt (secret paths still blocked by
+// the Read(**/.env)-style deny globs); secret reads and destructive shell
+// commands are denied outright; mutating tools (Edit, Write, general Bash) AND
+// the search tools (Grep, Glob) are deliberately absent from both lists so they
+// fall through to the PreToolUse approval hook, where the classifier gates
+// mutations and denies searches that target a secret-shaped path.
 type Policy struct {
 	Allowed    []string
 	Disallowed []string
@@ -16,7 +18,7 @@ type Policy struct {
 func DefaultPolicy() Policy {
 	return Policy{
 		Allowed: []string{
-			"Read", "Grep", "Glob",
+			"Read",
 			"Bash(git status)", "Bash(git status:*)",
 			"Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
 		},

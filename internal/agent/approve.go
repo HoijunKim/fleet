@@ -97,6 +97,12 @@ func (s *ApprovalServer) handleApprove(w http.ResponseWriter, r *http.Request) {
 		writeDecision(w, false, v.Reason)
 		return
 	}
+	if v.Decision == "allow" {
+		// Auto-allow: a safe read-scope search runs with no prompt - do not
+		// register a pending decision or notify the GUI.
+		writeDecision(w, true, v.Reason)
+		return
+	}
 	id := s.coord.Register()
 	if s.onAction != nil {
 		s.onAction(ActionRequest{

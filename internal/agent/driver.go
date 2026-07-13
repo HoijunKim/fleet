@@ -70,7 +70,7 @@ func WriteHookSettings(path, fleetExe string) error {
 		"hooks": map[string]any{
 			"PreToolUse": []any{
 				map[string]any{
-					"matcher": "Edit|Write|Bash",
+					"matcher": "Edit|Write|Bash|Grep|Glob",
 					"hooks": []any{
 						map[string]any{
 							"type":    "command",
