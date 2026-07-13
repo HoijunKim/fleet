@@ -75,6 +75,20 @@ func TestClassifyGrepGlob(t *testing.T) {
 		{"grep brace bomb", "Grep", `{"pattern":".","glob":"**/x.{a00,a01,a02,a03,a04,a05,a06,a07,a08,a09,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63,a64,a65,a66,a67,a68,a69,a70,a71,a72,a73,a74,a75,a76,a77,a78,a79,a80,a81,a82,a83,a84,a85,a86,a87,a88,a89,a90,a91,a92,a93,a94,a95,a96,a97,a98,a99,b00,b01,b02,b03,b04,b05,b06,b07,b08,b09,b10,b11,b12,b13,b14,b15,b16,b17,b18,b19,b20,b21,b22,b23,b24,b25,b26,b27,b28,b29,b30,b31,b32,b33,b34,b35,b36,b37,b38,b39,b40,b41,b42,b43,b44,b45,b46,b47,b48,b49,b50,b51,b52,b53,b54,b55,b56,b57,b58,b59,b60,b61,b62,b63,b64,b65,b66,b67,b68,b69,b70,b71,b72,b73,b74,b75,b76,b77,b78,b79,b80,b81,b82,b83,b84,b85,b86,b87,b88,b89,b90,b91,b92,b93,b94,b95,b96,b97,b98,b99,c00,c01,c02,c03,c04,c05,c06,c07,c08,c09,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22,c23,c24,c25,c26,c27,c28,c29,c30,c31,c32,c33,c34,c35,c36,c37,c38,c39,c40,c41,c42,c43,c44,c45,c46,c47,c48,c49,c50,c51,c52,c53,c54,c55,c56,c57,c58,ke*}"}`, "deny"},
 		// Nested braces must expand to a fixed point.
 		{"grep nested brace", "Grep", `{"pattern":".","glob":"**/id_{rsa,{dsa,ed25519}}"}`, "deny"},
+		// C1b (round 3): no-dot extension globs - the `*` spans the on-disk dot.
+		{"grep nodot key", "Grep", `{"pattern":"BEGIN","glob":"**/*key"}`, "deny"},
+		{"grep nodot pem", "Grep", `{"pattern":"BEGIN","glob":"**/*pem"}`, "deny"},
+		{"grep nodot p12", "Grep", `{"pattern":".","glob":"**/*p12"}`, "deny"},
+		{"grep nodot ovpn", "Grep", `{"pattern":".","glob":"**/*ovpn"}`, "deny"},
+		{"grep nodot keystore", "Grep", `{"pattern":".","glob":"**/*keystore"}`, "deny"},
+		{"grep nodot ey", "Grep", `{"pattern":".","glob":"**/*ey"}`, "deny"},
+		{"grep literal stem span", "Grep", `{"pattern":".","glob":"**/private*key"}`, "deny"},
+		{"glob nodot key", "Glob", `{"pattern":"**/*key"}`, "deny"},
+		// Case-folded wildcarded extension.
+		{"grep upper key wildcard", "Grep", `{"pattern":".","glob":"**/*.KE*"}`, "deny"},
+		{"grep upper pem", "Grep", `{"pattern":".","glob":"**/*.PEM"}`, "deny"},
+		// README.* can match README.key -> denied (accepted fail-closed over-deny).
+		{"grep readme star deny", "Grep", `{"pattern":"x","glob":"**/README.*"}`, "deny"},
 		// Common source globs must STILL allow (no over-deny regression).
 		{"grep glob go allow", "Grep", `{"pattern":"TODO","glob":"**/*.go"}`, "allow"},
 		{"grep glob ts allow", "Grep", `{"pattern":"x","glob":"**/*.ts"}`, "allow"},

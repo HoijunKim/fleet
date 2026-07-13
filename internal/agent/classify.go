@@ -416,10 +416,12 @@ var secretPathRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pe
 var secretScopeRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|\.keystore|\.ovpn|credentials|secret|token|\.ssh(?:[/\\]|$)|\.aws(?:[/\\]|$))`)
 
 // secretExts are file extensions whose contents are secret (mirrors the
-// Read(**/*.pem) family in policy.go). Matched STEM-INDEPENDENTLY: a glob like
-// `production.ke*` or `privkey.p*` targets a key regardless of stem, so a
-// fixed-canonical-filename check (which only caught `server.key`) is not enough
-// - the extension pattern is matched on its own via path.Match.
+// Read(**/*.pem) family in policy.go). Matched via glob INTERSECTION against
+// `*.<ext>` (see lastSegHitsSecret), which is right-anchored by the literal
+// extension, so it catches every form that can resolve to a secret file -
+// dotted (`*.k*`, `production.ke*`), no-dot where a `*` spans the on-disk dot
+// (`*key`, `private*key`), case-folded (`*.KE*`) - without over-denying common
+// source globs (`*.go`/`*.json` cannot end in `.key`).
 var secretExts = []string{"pem", "key", "p12", "pfx", "keystore", "ovpn"}
 
 // secretNames are representative secret file names (exact + standard variants).
@@ -467,7 +469,7 @@ func scopeTargetsSecret(s string) bool {
 				continue
 			}
 			for _, dir := range secretDirNames {
-				if matchGlob(seg, dir) {
+				if matchGlob(strings.ToLower(seg), dir) {
 					return true
 				}
 			}
@@ -480,28 +482,126 @@ func scopeTargetsSecret(s string) bool {
 }
 
 // lastSegHitsSecret reports whether a filename glob targets a secret file by
-// extension (stem-independent) or by name. The caller guarantees seg has a
-// literal character.
+// extension or by name. It case-folds the segment (all canonicals are
+// lowercase) so uppercase/wildcarded forms cannot slip. The extension test is a
+// glob INTERSECTION against `*.<ext>` - it asks "can this pattern match ANY
+// `<stem>.<ext>` file", which a literal-dot slice of the pattern text cannot
+// (an attacker omits the dot: `*key` has none, yet path.Match("*key",
+// "server.key") is true). The caller guarantees seg has a literal character.
 func lastSegHitsSecret(seg string) bool {
-	if dot := strings.LastIndexByte(seg, '.'); dot >= 0 {
-		ext := seg[dot+1:]
-		for _, se := range secretExts {
-			if matchGlob(ext, se) {
-				return true
-			}
+	low := strings.ToLower(seg)
+	for _, se := range secretExts {
+		if globsIntersect(low, "*."+se) {
+			return true
 		}
 	}
-	stem := seg
-	if dot := strings.LastIndexByte(seg, '.'); dot > 0 { // keep a leading-dot dotfile whole
-		stem = seg[:dot]
+	stem := low
+	if dot := strings.LastIndexByte(low, '.'); dot > 0 { // keep a leading-dot dotfile whole
+		stem = low[:dot]
 	}
 	stemLit := hasLiteral(stem)
 	for _, name := range secretNames {
-		if matchGlob(seg, name) || (stemLit && matchGlob(stem, name)) {
+		if matchGlob(low, name) || (stemLit && matchGlob(stem, name)) {
 			return true
 		}
 	}
 	return false
+}
+
+// globTok is one token of a single-path-segment glob: a `*` (star, any run), an
+// any-char (`?` or an approximated `[..]` class), or a literal byte.
+type globTok struct {
+	star bool
+	any  bool
+	ch   byte
+}
+
+// tokenizeGlob splits a single-segment glob into tokens. A `[..]` class is
+// approximated as one any-char, which over-approximates intersection toward a
+// hit (fail-closed).
+func tokenizeGlob(g string) []globTok {
+	var ts []globTok
+	for i := 0; i < len(g); {
+		switch g[i] {
+		case '*':
+			ts = append(ts, globTok{star: true})
+			i++
+		case '?':
+			ts = append(ts, globTok{any: true})
+			i++
+		case '[':
+			j := i + 1
+			if j < len(g) && (g[j] == '!' || g[j] == '^') {
+				j++
+			}
+			if j < len(g) && g[j] == ']' {
+				j++
+			}
+			for j < len(g) && g[j] != ']' {
+				j++
+			}
+			ts = append(ts, globTok{any: true})
+			if j < len(g) {
+				i = j + 1
+			} else {
+				i = j
+			}
+		default:
+			ts = append(ts, globTok{ch: g[i]})
+			i++
+		}
+	}
+	return ts
+}
+
+func toksShareChar(a, b globTok) bool {
+	if a.any || b.any {
+		return true
+	}
+	return a.ch == b.ch
+}
+
+// globsIntersect reports whether the single-segment glob patterns a and b can
+// both match some common string. Used to test a query segment against `*.<ext>`
+// so that "can this glob reach a secret-extension file" is decided by matching
+// semantics, not by the pattern's literal text.
+func globsIntersect(a, b string) bool {
+	ta, tb := tokenizeGlob(a), tokenizeGlob(b)
+	memo := make(map[[2]int]int8)
+	var rec func(i, j int) bool
+	rec = func(i, j int) bool {
+		key := [2]int{i, j}
+		if v, ok := memo[key]; ok {
+			return v == 1
+		}
+		res := false
+		switch {
+		case i == len(ta) && j == len(tb):
+			res = true
+		default:
+			// A star can match the empty string on its own side.
+			if i < len(ta) && ta[i].star && rec(i+1, j) {
+				res = true
+			} else if j < len(tb) && tb[j].star && rec(i, j+1) {
+				res = true
+			} else if i < len(ta) && ta[i].star && j < len(tb) && !tb[j].star && rec(i, j+1) {
+				// a's star absorbs the char b consumes here
+				res = true
+			} else if j < len(tb) && tb[j].star && i < len(ta) && !ta[i].star && rec(i+1, j) {
+				res = true
+			} else if i < len(ta) && j < len(tb) && !ta[i].star && !tb[j].star &&
+				toksShareChar(ta[i], tb[j]) && rec(i+1, j+1) {
+				res = true
+			}
+		}
+		if res {
+			memo[key] = 1
+		} else {
+			memo[key] = 2
+		}
+		return res
+	}
+	return rec(0, 0)
 }
 
 // hasLiteral reports whether s contains a non-wildcard character. A pure
