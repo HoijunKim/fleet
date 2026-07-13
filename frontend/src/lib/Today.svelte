@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI, GitHubSignals } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI, GitHubSignals, OpenEditor, Push, GitHubURL } from "../../wailsjs/go/main/App";
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
   import { renderBrief } from "./markdown";
   import { toastSuccess, toastError } from "./toasts";
   import Select from "./Select.svelte";
+  import Icon from "./Icon.svelte";
   import { daysUntil } from "./pm";
   import { ciBit } from "./ciBit";
+  import { deriveAttention, type AttentionItem } from "./attention";
   import { available, consent, openFleetOverlay, initAgentSession } from "./agentSession";
 
   onMount(async () => {
@@ -21,42 +23,35 @@
   // Open a project straight into its Ask-AI deep-dive tab.
   export let onDrill: (id: string) => void = () => {};
 
-  // ---- Forgotten work: derived client-side from the loaded projects, the way
-  // the attention queue is. "Forgotten" means genuinely neglected, so fresh
-  // work is not flagged - WIP/unpushed must have sat a couple of days first.
   function daysSince(when: string): number | null {
     const d = daysUntil(when);
     return d === null ? null : -d;
   }
 
-  type Forgot = { p: any; kind: string; text: string; days: number };
+  // ---- Needs attention: derived client-side from loaded projects + GitHub
+  // signals - the same signals the AI brief reasons over, but structured so each
+  // item carries the one-click actions relevant to it (see attention.ts).
+  $: attention = deriveAttention(projects, ghByPath);
 
-  $: forgotten = (() => {
-    const out: Forgot[] = [];
-    for (const p of projects || []) {
-      if (p.type !== "code" || !p.isGit) continue;
-      const since = daysSince(p.lastWhen);
-      const s = since === null ? 0 : since;
-      if (p.dirty && s >= 2) {
-        out.push({ p, kind: "wip", text: (p.modified || 0) + " uncommitted, idle " + s + "d", days: s });
-      }
-      if (p.ahead > 0 && s >= 2) {
-        out.push({ p, kind: "unpushed", text: p.ahead + " unpushed, idle " + s + "d", days: s });
-      }
-      if (!p.dirty && p.ahead === 0 && since !== null && since > 14) {
-        out.push({ p, kind: "idle", text: "untouched " + since + "d", days: since });
-      }
-      if ((p.todo || 0) >= 8) {
-        out.push({ p, kind: "todo", text: p.todo + " TODOs in code", days: s });
-      }
+  // Per-row actions: read-only/navigational except push, which is the user's
+  // explicit click on their own repo (reported via a toast either way).
+  async function doEditor(it: AttentionItem) {
+    const err = await OpenEditor(it.path);
+    if (err) toastError(err);
+  }
+  async function doPush(it: AttentionItem) {
+    const err = await Push(it.path);
+    if (err) toastError("Push failed: " + err);
+    else toastSuccess("Pushed " + it.name);
+  }
+  async function openGitHub(it: AttentionItem, suffix: string) {
+    const base = await GitHubURL(it.remote);
+    if (!base) {
+      toastError("No GitHub URL for " + it.name);
+      return;
     }
-    out.sort((a, b) => b.days - a.days);
-    return out.slice(0, 8);
-  })();
-
-  const KIND_LABEL: Record<string, string> = {
-    wip: "WIP", unpushed: "unpushed", idle: "idle", todo: "TODOs",
-  };
+    OpenURL(base + suffix);
+  }
 
   // ---- AI briefing --------------------------------------------------------
   let aiAvailable = false;
@@ -423,26 +418,43 @@
       {/if}
     </section>
 
-    <!-- Forgotten work: deterministic, always available -->
+    <!-- Needs attention: deterministic, structured, one-click actions -->
     <section class="ov-card">
       <div class="ov-card-head">
-        <h3 class="ov-card-title">Easy to forget</h3>
-        <span class="ov-count">{forgotten.length}</span>
+        <h3 class="ov-card-title">Needs attention</h3>
+        <span class="ov-count">{attention.length}</span>
       </div>
-      {#if forgotten.length === 0}
-        <div class="ov-empty">Nothing slipping through the cracks. Clean.</div>
+      {#if attention.length === 0}
+        <div class="ov-empty">All clear. Nothing needs attention right now.</div>
       {:else}
         <ul class="ov-list">
-          {#each forgotten as f, i (f.p.id + ":" + f.kind)}
-            <li in:fly={flyUp(i)} class="forgot-li">
-              <button class="ov-row" on:click={() => onOpen(f.p.id)}>
-                <span class="ov-name">{f.p.name}</span>
-                <span class="forgot-detail">{f.text}</span>
-                <span class="ov-tags">
-                  <span class="ov-pill forgot-{f.kind}">{KIND_LABEL[f.kind] || f.kind}</span>
+          {#each attention as it, i (it.id)}
+            <li in:fly={flyUp(i)} class="att-li">
+              <button class="ov-row" on:click={() => onOpen(it.id)} title="Open {it.name}">
+                <span class="ov-name">{it.name}</span>
+                <span class="ov-tags att-reasons">
+                  {#each it.reasons as r}
+                    <span class="ov-pill att-r-{r.kind}">{r.label}</span>
+                  {/each}
                 </span>
               </button>
-              <button class="forgot-ask" on:click|stopPropagation={() => onDrill(f.p.id)} title="Ask AI about this repo">Ask AI</button>
+              <span class="att-actions">
+                {#each it.actions as a}
+                  {#if a === "editor"}
+                    <button class="att-action" title="Open in editor" on:click|stopPropagation={() => doEditor(it)}><Icon name="file" size={13} /></button>
+                  {:else if a === "push"}
+                    <button class="att-action" title="Push {it.branch}" on:click|stopPropagation={() => doPush(it)}><Icon name="activity" size={13} /><span>Push</span></button>
+                  {:else if a === "ci"}
+                    <button class="att-action" title="Open CI on GitHub" on:click|stopPropagation={() => openGitHub(it, "/actions")}><Icon name="external" size={13} /><span>CI</span></button>
+                  {:else if a === "prs"}
+                    <button class="att-action" title="Open pull requests on GitHub" on:click|stopPropagation={() => openGitHub(it, "/pulls")}><Icon name="external" size={13} /><span>PRs</span></button>
+                  {:else if a === "ask"}
+                    <button class="att-action" title="Ask AI about this repo" on:click|stopPropagation={() => onDrill(it.id)}><Icon name="sparkle" size={13} /><span>Ask</span></button>
+                  {:else if a === "open"}
+                    <button class="att-action" title="Open project" on:click|stopPropagation={() => onOpen(it.id)}><Icon name="external" size={13} /><span>Open</span></button>
+                  {/if}
+                {/each}
+              </span>
             </li>
           {/each}
         </ul>
@@ -580,23 +592,34 @@
     white-space: nowrap;
   }
   .forgot-detail.due-late { color: var(--err); }
-  .forgot-li { display: flex; align-items: center; gap: 6px; }
-  .forgot-li .ov-row { flex: 1; min-width: 0; }
-  .forgot-ask {
+
+  .att-li { display: flex; align-items: center; gap: 6px; }
+  .att-li .ov-row { flex: 1; min-width: 0; }
+  .att-reasons { display: flex; gap: 4px; flex-wrap: wrap; }
+  .att-actions {
     flex: none;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity var(--t);
+  }
+  .att-li:hover .att-actions,
+  .att-actions:focus-within { opacity: 1; }
+  .att-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font: inherit;
     font-size: 11px;
     color: var(--accent);
     background: var(--accent-soft);
     border: 1px solid var(--accent-line);
     border-radius: var(--r-pill);
-    padding: 3px 10px;
+    padding: 3px 8px;
     cursor: pointer;
-    opacity: 0;
-    transition: opacity var(--t), background var(--t);
+    transition: background var(--t), color var(--t);
   }
-  .forgot-li:hover .forgot-ask, .forgot-ask:focus-visible { opacity: 1; }
-  .forgot-ask:hover { background: rgba(110, 168, 254, 0.22); }
+  .att-action:hover { background: rgba(110, 168, 254, 0.22); }
   .notion-li { display: flex; align-items: center; gap: 6px; }
   .notion-li .ov-row { flex: 1; min-width: 0; }
   .notion-done {
@@ -611,8 +634,11 @@
   }
   .notion-done:hover { border-color: var(--ok); background: var(--ok-soft); }
   .notion-done:disabled { opacity: 0.5; cursor: default; }
-  .ov-pill.forgot-wip      { color: var(--dirty); border-color: var(--dirty-line); background: var(--dirty-soft); }
-  .ov-pill.forgot-unpushed { color: var(--ahead); border-color: var(--ok-line);    background: var(--ok-soft); }
-  .ov-pill.forgot-idle     { color: var(--muted); border-color: var(--border);     background: var(--raised); }
-  .ov-pill.forgot-todo     { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+  .ov-pill.att-r-ci,
+  .ov-pill.att-r-deadline  { color: var(--err); border-color: var(--err-line);    background: var(--err-soft); }
+  .ov-pill.att-r-unpushed  { color: var(--ahead); border-color: var(--ok-line);    background: var(--ok-soft); }
+  .ov-pill.att-r-dirty     { color: var(--dirty); border-color: var(--dirty-line); background: var(--dirty-soft); }
+  .ov-pill.att-r-prs,
+  .ov-pill.att-r-todo      { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+  .ov-pill.att-r-idle      { color: var(--muted); border-color: var(--border);     background: var(--raised); }
 </style>
