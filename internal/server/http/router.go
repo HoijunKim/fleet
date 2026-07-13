@@ -30,11 +30,15 @@ func NewRouter(opts Options) http.Handler {
 	// RequestID first (so the id is on the context for logging and recovery),
 	// then LogRequests (wraps the statusWriter Recoverer reuses), then Recoverer
 	// innermost so it catches handler panics and the resulting 500 is logged.
+	// NOTE: Recoverer's double-write guard depends on LogRequests being the
+	// wrapper immediately outside it (that is where the *statusWriter is
+	// created); do not reorder these three without revisiting Recoverer.
 	r.Use(RequestID)
 	r.Use(LogRequests)
 	r.Use(Recoverer)
 
-	// Liveness: cheap, no dependencies - a 200 means the process is up.
+	// Liveness: cheap, no dependencies, never rate-limited - a 200 means the
+	// process is up.
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -42,19 +46,26 @@ func NewRouter(opts Options) http.Handler {
 	})
 
 	// Readiness: 200 only when the DB is reachable, so a DB blip pulls the
-	// instance from rotation without triggering a liveness restart.
-	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if opts.Store != nil {
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-			defer cancel()
-			if err := opts.Store.Ping(ctx); err != nil {
-				http.Error(w, "not ready", http.StatusServiceUnavailable)
-				return
+	// instance from rotation without triggering a liveness restart. Rate-limited
+	// per IP: it is unauthenticated and pings the DB, so it must not be a lever
+	// to contend for pool connections. The limit is generous so Fly's own health
+	// check never trips it.
+	readyLimit := NewRateLimiter(5, 10, opts.TrustProxy)
+	r.Group(func(r chi.Router) {
+		r.Use(readyLimit.ByIP)
+		r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+			if opts.Store != nil {
+				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+				defer cancel()
+				if err := opts.Store.Ping(ctx); err != nil {
+					http.Error(w, "not ready", http.StatusServiceUnavailable)
+					return
+				}
 			}
-		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ready"))
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ready"))
+		})
 	})
 
 	if opts.Auth != nil {

@@ -26,9 +26,19 @@ kill_timeout = "15s"
   auto_start_machines = true
   min_machines_running = 0
 
+  # Liveness: process is up.
   [[http_service.checks]]
     method = "GET"
     path = "/healthz"
     interval = "15s"
     timeout = "2s"
     grace_period = "5s"
+
+  # Readiness: DB reachable. A failing /readyz pulls this machine from the
+  # proxy pool (DB blip) without the liveness check restarting the process.
+  [[http_service.checks]]
+    method = "GET"
+    path = "/readyz"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
