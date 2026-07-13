@@ -22,6 +22,36 @@ func TestClassifyEdits(t *testing.T) {
 	}
 }
 
+func TestClassifyGrepGlob(t *testing.T) {
+	// Secret-path targets deny; content patterns and normal scopes allow.
+	cases := []struct {
+		name, tool, input, want string
+	}{
+		{"grep secret path", "Grep", `{"pattern":"x","path":"repo/.env"}`, "deny"},
+		{"grep secret glob", "Grep", `{"pattern":"x","glob":"**/*.key"}`, "deny"},
+		{"grep secret path id_rsa", "Grep", `{"pattern":"x","path":".ssh/id_rsa"}`, "deny"},
+		{"grep content pattern secret", "Grep", `{"pattern":"secret"}`, "allow"},
+		{"grep content pattern password", "Grep", `{"pattern":"password"}`, "allow"},
+		{"grep normal path", "Grep", `{"pattern":"TODO","path":"internal/agent"}`, "allow"},
+		{"grep normal glob", "Grep", `{"pattern":"func","glob":"**/*.go"}`, "allow"},
+		{"grep unparseable", "Grep", `{"pattern":123}`, "deny"},
+		{"glob secret pattern", "Glob", `{"pattern":"**/id_rsa"}`, "deny"},
+		{"glob secret pattern key", "Glob", `{"pattern":"**/*.pem"}`, "deny"},
+		{"glob secret path bare .ssh", "Glob", `{"pattern":"**/*.go","path":".ssh"}`, "deny"},
+		{"glob secret path .aws dir", "Glob", `{"pattern":"*","path":"home/.aws"}`, "deny"},
+		{"grep token glob", "Grep", `{"pattern":"x","glob":"**/*token*"}`, "deny"},
+		{"glob normal", "Glob", `{"pattern":"**/*.go"}`, "allow"},
+		{"glob normal src path", "Glob", `{"pattern":"**/*.go","path":"internal/agent"}`, "allow"},
+		{"glob unparseable", "Glob", `{"pattern":123}`, "deny"},
+	}
+	for _, c := range cases {
+		got := v(c.tool, c.input, "feat/x")
+		if got.Decision != c.want {
+			t.Fatalf("%s: got %q want %q (%+v)", c.name, got.Decision, c.want, got)
+		}
+	}
+}
+
 func TestClassifyPushProtectedAlwaysDenied(t *testing.T) {
 	deny := []struct{ cmd, cur string }{
 		{"git push origin main", "feat/x"},

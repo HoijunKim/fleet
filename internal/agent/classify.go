@@ -28,7 +28,7 @@ type ClassifyContext struct {
 
 // Verdict is the classifier's decision for one gated tool call.
 type Verdict struct {
-	Decision string // "gate" | "deny"
+	Decision string // "allow" | "gate" | "deny"
 	Reason   string
 	Category Category
 	Severity Severity
@@ -38,11 +38,13 @@ type Verdict struct {
 // DefaultProtectedBranches are never pushed to by the agent.
 func DefaultProtectedBranches() []string { return []string{"main", "master"} }
 
-func deny(reason string) Verdict { return Verdict{Decision: "deny", Reason: reason} }
+func deny(reason string) Verdict  { return Verdict{Decision: "deny", Reason: reason} }
+func allow(reason string) Verdict { return Verdict{Decision: "allow", Reason: reason} }
 
-// Classify decides how a gated tool call is handled. It NEVER returns allow;
-// callers treat "gate" as "ask the user" and "deny" as "block". Any parse
-// failure or ambiguity is deny (fail-closed).
+// Classify decides how a gated tool call is handled. It returns "allow" ONLY
+// for a safe read-scope Grep/Glob (no secret-shaped path/glob target); callers
+// treat "allow" as "run without asking", "gate" as "ask the user", and "deny"
+// as "block". Any parse failure or ambiguity is deny (fail-closed).
 func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) Verdict {
 	switch toolName {
 	case "Edit":
@@ -69,6 +71,37 @@ func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) V
 			return deny("unreadable command")
 		}
 		return classifyBash(p.Command, ctx)
+	case "Grep":
+		// pattern is a CONTENT regex, not a path - never checked against
+		// secretPathRe (a legit `Grep(pattern="secret")` must run). Only path/glob
+		// scope which files are searched, so only they can target a secret file.
+		// pattern is decoded so a malformed pattern denies (fail-closed).
+		var p struct {
+			Pattern string `json:"pattern"`
+			Path    string `json:"path"`
+			Glob    string `json:"glob"`
+		}
+		if json.Unmarshal(toolInput, &p) != nil {
+			return deny("unreadable grep")
+		}
+		if secretScopeRe.MatchString(p.Path) || secretScopeRe.MatchString(p.Glob) {
+			return deny("grep of a secret path is blocked")
+		}
+		return allow("search")
+	case "Glob":
+		// pattern IS a path glob here; both it and an optional path scope can
+		// target a secret file.
+		var p struct {
+			Pattern string `json:"pattern"`
+			Path    string `json:"path"`
+		}
+		if json.Unmarshal(toolInput, &p) != nil {
+			return deny("unreadable glob")
+		}
+		if secretScopeRe.MatchString(p.Pattern) || secretScopeRe.MatchString(p.Path) {
+			return deny("glob of a secret path is blocked")
+		}
+		return allow("search")
 	default:
 		return deny("tool not permitted")
 	}
@@ -370,6 +403,16 @@ func isPRCreate(cmd string) bool {
 
 // secretPathRe matches a token/substring naming a secret file or path.
 var secretPathRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|credentials|secret|\.ssh/)`)
+
+// secretScopeRe matches a Grep/Glob path or glob that targets a secret-shaped
+// file OR a secret directory. It mirrors the Read(**/...) deny globs in
+// policy.go (so search cannot reach what Read cannot), and - unlike secretArgRe,
+// which scans a whole Bash command for a file arg - it also matches a bare
+// secret DIRECTORY (`.ssh`, `.aws`) that a Glob/Grep scope could enumerate even
+// with no trailing file. Over-matching (a source path merely CONTAINING
+// "secret"/"token") errs toward deny (fail-closed); the agent can still search
+// with an unscoped pattern.
+var secretScopeRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|\.keystore|\.ovpn|credentials|secret|token|\.ssh(?:/|$)|\.aws(?:/|$))`)
 
 // secretArgRe matches a secret path at an argument boundary (start-of-string, a
 // path separator, whitespace, or a shell operator), so ANY reading command hits
