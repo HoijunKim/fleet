@@ -2,6 +2,8 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -262,6 +264,12 @@ func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, err := h.cfg.Store.RotateRefreshToken(r.Context(), oldHash, newHash, h.cfg.Now().Add(h.cfg.RefreshTTL))
 	if err != nil {
+		if errors.Is(err, pgstore.ErrRefreshReuse) {
+			// Reuse of a rotated token: the family was revoked server-side. Log the
+			// security event but keep the client response opaque (same 401 as any
+			// invalid token), and never log the token hash.
+			slog.Warn("refresh token reuse detected; family revoked")
+		}
 		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
 		return
 	}

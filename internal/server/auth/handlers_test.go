@@ -31,11 +31,13 @@ type fakeStore struct {
 	users   map[int64]pgstore.User
 	refresh map[string]refreshRow
 	seq     int
+	fam     int
 }
 type refreshRow struct {
-	userID  string
-	revoked bool
-	expires time.Time
+	userID   string
+	revoked  bool
+	expires  time.Time
+	familyID string
 }
 
 func newFakeStore() *fakeStore {
@@ -53,23 +55,42 @@ func (f *fakeStore) UpsertUserByGitHub(ctx context.Context, id pgstore.GitHubIde
 	return u, nil
 }
 func (f *fakeStore) CreateRefreshToken(ctx context.Context, userID, hash string, exp time.Time) error {
-	f.refresh[hash] = refreshRow{userID: userID, expires: exp}
+	f.fam++
+	f.refresh[hash] = refreshRow{userID: userID, expires: exp, familyID: fmt.Sprintf("fam-%d", f.fam)}
 	return nil
 }
+
+// revokeFamily marks every token in familyID revoked (mirrors the real store).
+func (f *fakeStore) revokeFamily(familyID string) {
+	for h, r := range f.refresh {
+		if r.familyID == familyID {
+			r.revoked = true
+			f.refresh[h] = r
+		}
+	}
+}
+
 func (f *fakeStore) RotateRefreshToken(ctx context.Context, oldHash, newHash string, exp time.Time) (string, error) {
 	row, ok := f.refresh[oldHash]
-	if !ok || row.revoked || time.Now().After(row.expires) {
+	if !ok {
+		return "", fmt.Errorf("invalid") // unknown token
+	}
+	if row.revoked {
+		f.revokeFamily(row.familyID) // reuse: revoke the whole family
+		return "", pgstore.ErrRefreshReuse
+	}
+	if time.Now().After(row.expires) {
 		return "", fmt.Errorf("invalid")
 	}
 	row.revoked = true
 	f.refresh[oldHash] = row
-	f.refresh[newHash] = refreshRow{userID: row.userID, expires: exp}
+	f.refresh[newHash] = refreshRow{userID: row.userID, expires: exp, familyID: row.familyID}
 	return row.userID, nil
 }
+
 func (f *fakeStore) RevokeRefreshToken(ctx context.Context, hash string) error {
 	if row, ok := f.refresh[hash]; ok {
-		row.revoked = true
-		f.refresh[hash] = row
+		f.revokeFamily(row.familyID) // logout ends the whole chain
 	}
 	return nil
 }
@@ -195,11 +216,18 @@ func TestOAuthFullFlow(t *testing.T) {
 	if rf.Refresh == "" || rf.Refresh == ex.Refresh {
 		t.Fatal("refresh not rotated")
 	}
-	// Reusing the old refresh must fail.
+	// Reusing the old refresh must fail (opaque 401) AND revoke the family.
 	body, _ = json.Marshal(map[string]string{"refresh_token": ex.Refresh})
 	resp, _ = client.Post(srv.URL+"/auth/refresh", "application/json", strings.NewReader(string(body)))
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("reused refresh status = %d, want 401", resp.StatusCode)
+	}
+	// Family revocation: the rotated (live) token now fails too - a stolen token
+	// cannot outlive the reuse of any token in its chain.
+	body, _ = json.Marshal(map[string]string{"refresh_token": rf.Refresh})
+	resp, _ = client.Post(srv.URL+"/auth/refresh", "application/json", strings.NewReader(string(body)))
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("post-reuse rotated token status = %d, want 401 (family revoked)", resp.StatusCode)
 	}
 
 	// 5. logout -> 204.

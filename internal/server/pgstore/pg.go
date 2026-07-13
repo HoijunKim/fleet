@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,8 +30,14 @@ func (p *Pg) Close() { p.pool.Close() }
 // Ping verifies a live connection to the database (used by the readiness probe).
 func (p *Pg) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
 
-// errRefreshInvalid marks a refresh token that exists but is revoked/expired.
+// errRefreshInvalid marks a refresh token that is unknown or expired (a normal
+// failure, not an attack). Revoked-token reuse is ErrRefreshReuse instead.
 var errRefreshInvalid = errors.New("refresh token invalid")
+
+// ErrRefreshReuse is returned when an already-rotated (revoked) refresh token is
+// presented again. This is a reuse signal (the token was likely stolen), so
+// RotateRefreshToken revokes the whole family before returning it.
+var ErrRefreshReuse = errors.New("refresh token reuse detected")
 
 // UpsertUserByGitHub inserts or updates a user keyed by github_id and ensures a
 // user_versions counter row exists.
@@ -56,16 +63,20 @@ RETURNING id, github_id, login, email, avatar_url`,
 	return u, nil
 }
 
-// CreateRefreshToken stores a hashed refresh token.
+// CreateRefreshToken stores a hashed refresh token, starting a fresh rotation
+// family (each login is its own lineage).
 func (p *Pg) CreateRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
 	_, err := p.pool.Exec(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`,
-		uuid.NewString(), userID, tokenHash, expiresAt)
+		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, family_id) VALUES ($1, $2, $3, $4, $5)`,
+		uuid.NewString(), userID, tokenHash, expiresAt, uuid.NewString())
 	return err
 }
 
-// RotateRefreshToken validates oldHash (present, not revoked, not expired),
-// revokes it, and inserts newHash for the same user, all in one transaction.
+// RotateRefreshToken rotates oldHash to newHash in one transaction. A valid
+// token is revoked and newHash inserted into the SAME family. Presenting an
+// already-revoked token is treated as reuse: the whole family is revoked and
+// ErrRefreshReuse is returned. Unknown or expired tokens return errRefreshInvalid
+// and leave any family untouched.
 func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, expiresAt time.Time) (string, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -73,24 +84,38 @@ func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, ex
 	}
 	defer tx.Rollback(ctx)
 
-	var userID string
+	var userID, familyID string
 	var revoked bool
 	var exp time.Time
 	err = tx.QueryRow(ctx,
-		`SELECT user_id, revoked, expires_at FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE`, oldHash).
-		Scan(&userID, &revoked, &exp)
+		`SELECT user_id, revoked, expires_at, family_id FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE`, oldHash).
+		Scan(&userID, &revoked, &exp, &familyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errRefreshInvalid // unknown token: no known family to revoke
+	}
 	if err != nil {
 		return "", err
 	}
-	if revoked || time.Now().After(exp) {
-		return "", errRefreshInvalid
+	if revoked {
+		// Reuse of an already-rotated/revoked token: revoke the entire family so a
+		// stolen-then-rotated token cannot outlive the theft. Commit the revoke.
+		if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked = true WHERE family_id = $1`, familyID); err != nil {
+			return "", err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return "", err
+		}
+		return "", ErrRefreshReuse
+	}
+	if time.Now().After(exp) {
+		return "", errRefreshInvalid // normal expiry, not an attack: leave the family live
 	}
 	if _, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked = true WHERE token_hash = $1`, oldHash); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)`,
-		uuid.NewString(), userID, newHash, expiresAt); err != nil {
+		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, family_id) VALUES ($1, $2, $3, $4, $5)`,
+		uuid.NewString(), userID, newHash, expiresAt, familyID); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -99,8 +124,12 @@ func (p *Pg) RotateRefreshToken(ctx context.Context, oldHash, newHash string, ex
 	return userID, nil
 }
 
-// RevokeRefreshToken marks a refresh token revoked (idempotent).
+// RevokeRefreshToken revokes the entire family of the given token, so logout
+// ends the whole rotation chain rather than only the presented token. An unknown
+// token matches no family and is a no-op (idempotent).
 func (p *Pg) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
-	_, err := p.pool.Exec(ctx, `UPDATE refresh_tokens SET revoked = true WHERE token_hash = $1`, tokenHash)
+	_, err := p.pool.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked = true
+		 WHERE family_id = (SELECT family_id FROM refresh_tokens WHERE token_hash = $1)`, tokenHash)
 	return err
 }
