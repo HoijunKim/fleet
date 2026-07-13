@@ -415,18 +415,24 @@ var secretPathRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pe
 // agent can still search with an unscoped pattern.
 var secretScopeRe = regexp.MustCompile(`(?i)(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|\.keystore|\.ovpn|credentials|secret|token|\.ssh(?:[/\\]|$)|\.aws(?:[/\\]|$))`)
 
-// secretGlobBasenames are canonical secret file names, one representative per
-// Read(**/...) deny glob in policy.go. A Grep/Glob whose FILENAME segment
-// matches any of these via path.Match targets a secret - so a wildcard glob
-// (`*.k*`, `id_*`, `cred*`, `.en*`) is caught even though the literal secret
-// token never appears in the query string. The two bare names `secret`/`token`
-// cover Read's `*secret*`/`*token*` globs: an extensioned query (`*.go`,
-// `*.json`) cannot match a bare name, so ordinary searches stay allowed, while a
-// name-targeting query (`*sec*`, `*tok*`, `*`) is denied.
-var secretGlobBasenames = []string{
-	".env", ".env.prod", "id_rsa", "id_ed25519", "id_dsa", "credentials", ".netrc",
-	"server.pem", "server.key", "cert.p12", "cert.pfx", "vpn.ovpn", "app.keystore",
-	"secret", "token",
+// secretExts are file extensions whose contents are secret (mirrors the
+// Read(**/*.pem) family in policy.go). Matched STEM-INDEPENDENTLY: a glob like
+// `production.ke*` or `privkey.p*` targets a key regardless of stem, so a
+// fixed-canonical-filename check (which only caught `server.key`) is not enough
+// - the extension pattern is matched on its own via path.Match.
+var secretExts = []string{"pem", "key", "p12", "pfx", "keystore", "ovpn"}
+
+// secretNames are representative secret file names (exact + standard variants).
+// A filename glob (or, when it carries a literal stem, its extension-stripped
+// stem) is path.Match-ed against these, so wildcard forms (`id_*`, `.e*.local`,
+// `cred*`, `*sec*`) are caught even though the literal token never appears. Bare
+// `secret`/`token`/`credentials` are tested only through hasLiteral-guarded
+// segments/stems, so a pure-wildcard scope (`*`, `*.json` -> stem `*`) does not
+// explode into an allow-everything deny.
+var secretNames = []string{
+	"id_rsa", "id_ed25519", "id_dsa", ".netrc", "credentials", "secret", "token",
+	".env", ".env.local", ".env.production", ".env.development", ".env.test",
+	".env.staging", ".env.prod", ".env.dev",
 }
 
 // secretDirNames are secret directories a Grep/Glob scope must not enumerate.
@@ -434,12 +440,15 @@ var secretDirNames = []string{".ssh", ".aws"}
 
 // scopeTargetsSecret reports whether a Grep/Glob path or glob argument targets a
 // secret-shaped file or directory. A glob is a PATTERN that can resolve to a
-// secret file without containing the secret token literally (`*.k*` -> a
-// `.key`), so a substring scan alone (the old bug) is bypassable. It therefore:
-// (1) runs the literal secretScopeRe scan, then (2) normalizes `\`->`/`, expands
-// brace alternations, splits into path segments, and path.Match-es the filename
-// segment against secretGlobBasenames and every segment against secretDirNames.
-// A malformed pattern is a hit (fail-closed).
+// secret without containing the token literally, so a substring scan alone is
+// bypassable. It (1) runs the literal secretScopeRe scan, then (2) normalizes
+// `\`->`/`, expands brace alternations (failing CLOSED if that truncates),
+// splits into path segments, and - for any segment carrying a literal character
+// - matches secret DIR names and, for the filename segment, a secret EXTENSION
+// (stem-independent) or a secret NAME, all via path.Match. Pure-wildcard
+// segments (`*`, `**`) are inherently unclassifiable enumeration and are not
+// denied (a bare listing yields names, not contents; Read still gates the
+// files). Malformed patterns are hits (fail-closed).
 func scopeTargetsSecret(s string) bool {
 	if s == "" {
 		return false
@@ -447,28 +456,62 @@ func scopeTargetsSecret(s string) bool {
 	if secretScopeRe.MatchString(s) {
 		return true
 	}
-	norm := strings.ReplaceAll(s, `\`, "/")
-	for _, g := range expandBraces(norm) {
+	exps, truncated := expandBraces(strings.ReplaceAll(s, `\`, "/"))
+	if truncated {
+		return true // an over-large brace glob is evasion-shaped; fail closed
+	}
+	for _, g := range exps {
 		segs := strings.Split(g, "/")
 		for i, seg := range segs {
-			if seg == "" || seg == "**" || seg == "." || seg == ".." {
+			if seg == "" || seg == "**" || seg == "." || seg == ".." || !hasLiteral(seg) {
 				continue
-			}
-			if i == len(segs)-1 {
-				for _, name := range secretGlobBasenames {
-					if matchGlob(seg, name) {
-						return true
-					}
-				}
 			}
 			for _, dir := range secretDirNames {
 				if matchGlob(seg, dir) {
 					return true
 				}
 			}
+			if i == len(segs)-1 && lastSegHitsSecret(seg) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// lastSegHitsSecret reports whether a filename glob targets a secret file by
+// extension (stem-independent) or by name. The caller guarantees seg has a
+// literal character.
+func lastSegHitsSecret(seg string) bool {
+	if dot := strings.LastIndexByte(seg, '.'); dot >= 0 {
+		ext := seg[dot+1:]
+		for _, se := range secretExts {
+			if matchGlob(ext, se) {
+				return true
+			}
+		}
+	}
+	stem := seg
+	if dot := strings.LastIndexByte(seg, '.'); dot > 0 { // keep a leading-dot dotfile whole
+		stem = seg[:dot]
+	}
+	stemLit := hasLiteral(stem)
+	for _, name := range secretNames {
+		if matchGlob(seg, name) || (stemLit && matchGlob(stem, name)) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasLiteral reports whether s contains a non-wildcard character. A pure
+// wildcard (`*`, `**`, `*?`) matches every candidate unconditionally, so it must
+// not be tested against bare secret names (that would deny every `*.<ext>` glob)
+// - such segments are treated as unclassifiable enumeration and allowed.
+func hasLiteral(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool {
+		return r != '*' && r != '?'
+	}) >= 0
 }
 
 // matchGlob reports whether pattern matches name via path.Match; a malformed
@@ -481,31 +524,83 @@ func matchGlob(pattern, name string) bool {
 	return ok
 }
 
-// expandBraces expands shell brace alternations (`{a,b}`) into concrete
-// alternatives so path.Match - which has no brace support - can test each
-// (`*.{key,pem}` -> `*.key`, `*.pem`). Bounded to guard against a blow-up;
-// unbalanced braces are left literal.
-func expandBraces(s string) []string {
-	i := strings.IndexByte(s, '{')
-	if i < 0 {
-		return []string{s}
+// expandBraces expands shell brace alternations (`{a,b}`, nested) to a fixed
+// point so path.Match - which has no brace support - can test each concrete
+// alternative (`*.{key,pem}` -> `*.key`, `*.pem`). Returns (expansions,
+// truncated); truncated is true if it exceeds the cap, and the caller treats
+// truncation as a secret hit (fail-closed) so a brace-bomb that buries a secret
+// alternative past the cap cannot fail open. Unbalanced `{` is dropped literally
+// to make progress.
+func expandBraces(s string) ([]string, bool) {
+	out := []string{s}
+	for {
+		idx := -1
+		for i, g := range out {
+			if strings.IndexByte(g, '{') >= 0 {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return out, false
+		}
+		g := out[idx]
+		open := strings.IndexByte(g, '{')
+		closeIdx := matchingBrace(g, open)
+		if closeIdx < 0 { // unbalanced: drop the '{' and continue
+			out[idx] = g[:open] + g[open+1:]
+			continue
+		}
+		pre, body, post := g[:open], g[open+1:closeIdx], g[closeIdx+1:]
+		alts := splitTopComma(body)
+		expanded := make([]string, 0, len(alts))
+		for _, a := range alts {
+			expanded = append(expanded, pre+a+post)
+		}
+		out = append(out[:idx:idx], append(expanded, out[idx+1:]...)...)
+		if len(out) > 256 {
+			return out, true
+		}
 	}
-	j := strings.IndexByte(s[i:], '}')
-	if j < 0 {
-		return []string{s} // unbalanced; treat literally
-	}
-	j += i
-	pre, body, post := s[:i], s[i+1:j], s[j+1:]
-	var out []string
-	for _, alt := range strings.Split(body, ",") {
-		for _, rest := range expandBraces(post) {
-			out = append(out, pre+alt+rest)
-			if len(out) >= 64 {
-				return out
+}
+
+// matchingBrace returns the index of the '}' closing the '{' at open (respecting
+// nesting), or -1 if unbalanced.
+func matchingBrace(s string, open int) int {
+	depth := 0
+	for i := open; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
 			}
 		}
 	}
-	return out
+	return -1
+}
+
+// splitTopComma splits body on commas at brace-depth 0 so a nested group's
+// commas stay with it.
+func splitTopComma(body string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i := 0; i < len(body); i++ {
+		switch body[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+		case ',':
+			if depth == 0 {
+				out = append(out, body[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, body[start:])
 }
 
 // secretArgRe matches a secret path at an argument boundary (start-of-string, a
