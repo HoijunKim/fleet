@@ -178,3 +178,23 @@ func TestConcurrentObserveHTTP(t *testing.T) {
 		t.Fatalf("lost updates under concurrency:\n%s", render(m))
 	}
 }
+
+func TestRuntimeMetrics(t *testing.T) {
+	out := render(New("v", "go"))
+	for _, want := range []string{
+		"# TYPE go_goroutines gauge",
+		"go_goroutines ",
+		"# TYPE go_memstats_heap_alloc_bytes gauge",
+		"# TYPE go_memstats_heap_sys_bytes gauge",
+		"# TYPE go_memstats_alloc_bytes_total counter",
+		"# TYPE go_gc_runs_total counter",
+		"# TYPE process_start_time_seconds gauge",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "process_start_time_seconds 0\n") {
+		t.Fatal("process_start_time_seconds should be a non-zero unix start")
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,6 +42,7 @@ func newHist() *hist { return &hist{counts: make([]uint64, len(buckets)+1)} }
 // receiver so handlers and middleware can call unconditionally.
 type Metrics struct {
 	version, goVersion string
+	startUnix          int64 // process start (unix seconds) for process_start_time_seconds
 
 	mu    sync.Mutex
 	reqs  map[httpKey]uint64
@@ -61,6 +63,7 @@ func New(version, goVersion string) *Metrics {
 	return &Metrics{
 		version:   version,
 		goVersion: goVersion,
+		startUnix: time.Now().Unix(),
 		reqs:      map[httpKey]uint64{},
 		hists:     map[histKey]*hist{},
 	}
@@ -235,6 +238,16 @@ func (m *Metrics) Render(w io.Writer) {
 		writeGauge(&b, "fleet_db_pool_idle_connections", "Idle DB pool connections.", int64(ps.Idle))
 		writeGauge(&b, "fleet_db_pool_acquired_connections", "Acquired DB pool connections.", int64(ps.Acquired))
 	}
+
+	// Go runtime metrics, sampled fresh at scrape (standard Prometheus names).
+	writeGauge(&b, "go_goroutines", "Number of goroutines.", int64(runtime.NumGoroutine()))
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	writeGauge(&b, "go_memstats_heap_alloc_bytes", "Heap bytes allocated and in use.", int64(ms.HeapAlloc))
+	writeGauge(&b, "go_memstats_heap_sys_bytes", "Heap bytes obtained from the OS.", int64(ms.HeapSys))
+	writeCounter(&b, "go_memstats_alloc_bytes_total", "Total bytes allocated, cumulative.", int64(ms.TotalAlloc))
+	writeCounter(&b, "go_gc_runs_total", "Completed GC cycles.", int64(ms.NumGC))
+	writeGauge(&b, "process_start_time_seconds", "Process start time, unix seconds.", m.startUnix)
 
 	_, _ = io.WriteString(w, b.String())
 }
