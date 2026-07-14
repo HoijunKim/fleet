@@ -50,9 +50,14 @@ func (p *Pg) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
 func (p *Pg) Stat() *pgxpool.Stat { return p.pool.Stat() }
 
 // PruneRefreshTokens deletes expired refresh tokens and returns the number
-// removed. An expired token can never rotate (RotateRefreshToken rejects it), so
-// these rows are dead weight; revoked-but-not-expired rows are RETAINED as the
-// reuse-detection tripwires for an active family. A single atomic DELETE that
+// removed. An expired token can never mint access (RotateRefreshToken rejects it
+// on the expiry check), so these rows are dead weight. Revoked-but-not-expired
+// rows are RETAINED as the slice-4b reuse-detection tripwires, so any ACTIVE
+// compromise is still caught - a still-usable stolen token is by definition
+// non-expired. (Rotation extends expiry, so an ancestor can be expired while its
+// family's tip is live; the only thing pruning forgoes is the alarm for a stale
+// replay of an already-expired token, which grants nothing anyway - matching the
+// OAuth BCP of dropping reuse records at expiry.) A single atomic DELETE that
 // only touches expired rows, so it never contends with a live rotation.
 func (p *Pg) PruneRefreshTokens(ctx context.Context) (int64, error) {
 	tag, err := p.pool.Exec(ctx, `DELETE FROM refresh_tokens WHERE expires_at < now()`)
