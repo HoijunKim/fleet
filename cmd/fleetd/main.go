@@ -26,6 +26,9 @@ import (
 // process.
 const shutdownTimeout = 10 * time.Second
 
+// gcInterval is how often expired refresh tokens are pruned.
+const gcInterval = 1 * time.Hour
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	// Fly stops a machine with SIGINT (its default) then SIGKILL after
@@ -67,6 +70,15 @@ func run(ctx context.Context) error {
 		return metrics.PoolStats{Total: int(s.TotalConns()), Idle: int(s.IdleConns()), Acquired: int(s.AcquiredConns())}
 	})
 
+	// Prune expired refresh tokens periodically; the goroutine exits when ctx is
+	// cancelled on shutdown.
+	go runGC(ctx, gcInterval, store.PruneRefreshTokens, func(n int64) {
+		if n > 0 {
+			slog.Info("pruned expired refresh tokens", "rows", n)
+		}
+		m.IncRefreshPruned(n)
+	})
+
 	authH := auth.New(auth.Config{
 		Store:       store,
 		GitHub:      auth.NewHTTPGitHub(clientID, clientSecret),
@@ -99,6 +111,33 @@ func run(ctx context.Context) error {
 
 	slog.Info("listening", "addr", addr, "trust_proxy", trustProxy, "metrics", metricsToken != "")
 	return serve(ctx, srv, ln)
+}
+
+// runGC prunes expired refresh tokens once immediately, then every interval,
+// until ctx is cancelled. A prune error is logged (unless ctx is already
+// cancelled) and the loop continues; onPruned reports the rows removed.
+func runGC(ctx context.Context, interval time.Duration, prune func(context.Context) (int64, error), onPruned func(int64)) {
+	tick := func() {
+		n, err := prune(ctx)
+		if err != nil {
+			if ctx.Err() == nil {
+				slog.Error("refresh-token gc failed", "err", err)
+			}
+			return
+		}
+		onPruned(n)
+	}
+	tick() // once at startup
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			tick()
+		}
+	}
 }
 
 // serve runs srv on ln until ctx is cancelled, then drains in-flight requests

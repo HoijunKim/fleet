@@ -75,6 +75,9 @@ func TestAuthAndBuildInfoAndPool(t *testing.T) {
 	m.IncRefreshReuse()
 	m.IncRefreshRotation()
 	m.IncLogin()
+	m.IncRefreshPruned(3)
+	m.IncRefreshPruned(0)  // ignored
+	m.IncRefreshPruned(-1) // ignored
 	m.IncInFlight()
 	m.SetPoolSource(func() PoolStats { return PoolStats{Total: 5, Idle: 3, Acquired: 2} })
 
@@ -84,6 +87,7 @@ func TestAuthAndBuildInfoAndPool(t *testing.T) {
 		"fleet_auth_refresh_reuse_total 2",
 		"fleet_auth_refresh_rotations_total 1",
 		"fleet_auth_logins_total 1",
+		"fleet_auth_refresh_pruned_total 3",
 		"fleet_http_in_flight 1",
 		"fleet_db_pool_total_connections 5",
 		"fleet_db_pool_idle_connections 3",
@@ -112,6 +116,7 @@ func TestNilMetricsNoop(t *testing.T) {
 	m.IncRefreshReuse()
 	m.IncRefreshRotation()
 	m.IncLogin()
+	m.IncRefreshPruned(5)
 	m.SetPoolSource(func() PoolStats { return PoolStats{} })
 	var b strings.Builder
 	m.Render(&b)

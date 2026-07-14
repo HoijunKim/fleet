@@ -199,3 +199,49 @@ func TestRefreshFamilyConcurrentReuseRevokesTip(t *testing.T) {
 		t.Error(msg)
 	}
 }
+
+func TestPruneRefreshTokens(t *testing.T) {
+	pg := testPg(t)
+	ctx := context.Background()
+	u, err := pg.UpsertUserByGitHub(ctx, GitHubIdentity{GitHubID: 111, Login: "u111"})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	ins := func(hash string, exp time.Time, revoked bool) {
+		if _, err := pg.pool.Exec(ctx,
+			`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, revoked, family_id)
+			 VALUES (gen_random_uuid(), $1, $2, $3, $4, gen_random_uuid())`, u.ID, hash, exp, revoked); err != nil {
+			t.Fatalf("insert %s: %v", hash, err)
+		}
+	}
+	past := time.Now().Add(-time.Hour)
+	future := time.Now().Add(time.Hour)
+	ins("exp-live", past, false)
+	ins("exp-revoked", past, true)
+	ins("live", future, false)
+	ins("revoked-valid", future, true) // reuse tripwire - must survive
+
+	n, err := pg.PruneRefreshTokens(ctx)
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("pruned %d, want 2 (the two expired rows)", n)
+	}
+
+	var survivors, expired int
+	if err := pg.pool.QueryRow(ctx,
+		`SELECT count(*) FROM refresh_tokens WHERE token_hash IN ('live','revoked-valid')`).Scan(&survivors); err != nil {
+		t.Fatal(err)
+	}
+	if survivors != 2 {
+		t.Fatalf("survivors = %d, want 2 (live + revoked-valid retained)", survivors)
+	}
+	if err := pg.pool.QueryRow(ctx,
+		`SELECT count(*) FROM refresh_tokens WHERE token_hash IN ('exp-live','exp-revoked')`).Scan(&expired); err != nil {
+		t.Fatal(err)
+	}
+	if expired != 0 {
+		t.Fatalf("expired survivors = %d, want 0", expired)
+	}
+}

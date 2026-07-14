@@ -50,6 +50,7 @@ type Metrics struct {
 	reuse     atomic.Int64
 	rotations atomic.Int64
 	logins    atomic.Int64
+	pruned    atomic.Int64
 
 	poolMu sync.Mutex
 	pool   func() PoolStats
@@ -116,6 +117,14 @@ func (m *Metrics) IncRefreshRotation() {
 func (m *Metrics) IncLogin() {
 	if m != nil {
 		m.logins.Add(1)
+	}
+}
+
+// IncRefreshPruned adds n expired refresh tokens pruned by the GC job (nil-safe;
+// ignores a non-positive n).
+func (m *Metrics) IncRefreshPruned(n int64) {
+	if m != nil && n > 0 {
+		m.pruned.Add(n)
 	}
 }
 
@@ -215,6 +224,7 @@ func (m *Metrics) Render(w io.Writer) {
 	writeCounter(&b, "fleet_auth_refresh_reuse_total", "Refresh-token reuse events detected.", m.reuse.Load())
 	writeCounter(&b, "fleet_auth_refresh_rotations_total", "Refresh-token rotations.", m.rotations.Load())
 	writeCounter(&b, "fleet_auth_logins_total", "Successful logins.", m.logins.Load())
+	writeCounter(&b, "fleet_auth_refresh_pruned_total", "Expired refresh tokens pruned.", m.pruned.Load())
 
 	m.poolMu.Lock()
 	fn := m.pool
