@@ -35,7 +35,6 @@ export interface GHSignal {
 
 const IDLE_DAYS = 14;
 const DEADLINE_NEAR_DAYS = 3;
-const MAX_ITEMS = 8;
 
 const SEV_ORDER: Record<Severity, number> = { high: 3, med: 2, low: 1 };
 const SEV_WEIGHT: Record<Severity, number> = { high: 100, med: 40, low: 10 };
@@ -133,6 +132,9 @@ export function deriveAttention(
     });
   }
 
+  // Return ALL ranked items; the caller decides how many to display and shows a
+  // "+N more" affordance for the rest, so a fleet with many problems never looks
+  // fully handled.
   items.sort((a, b) => b.rank - a.rank);
-  return items.slice(0, MAX_ITEMS);
+  return items;
 }

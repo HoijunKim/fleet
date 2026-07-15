@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    AskAI, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles,
+    AskAI, AIAvailable, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles,
   } from "../../wailsjs/go/main/App";
   import { onMount } from "svelte";
   import { renderBrief } from "./markdown";
@@ -8,6 +8,7 @@
   import { daysUntil } from "./pm";
   import {
     available, consent, running, openOverlay, setProject as agentSetProject, initAgentSession,
+    ask as agentAsk,
   } from "./agentSession";
 
   // The selected code repo. Chat resets when the path changes.
@@ -20,12 +21,21 @@
   let loading = false;
   let loadedPath = "";
   let genId = 0;
+  let aiAvailable = false; // single-shot AskAI provider ready
+
+  // Can we run ANY AI here - agentic (claude CLI) or single-shot (any provider)?
+  $: canAsk = $available || aiAvailable;
 
   // The agentic deep-dive now lives in the shared agentSession store and runs
   // in <AgentOverlay/> (mounted once in App). This component only LAUNCHES it;
   // the single-shot fallback below is used when agentic isn't available.
   onMount(async () => {
     await initAgentSession();
+    try {
+      aiAvailable = await AIAvailable();
+    } catch {
+      aiAvailable = false;
+    }
   });
 
   function cancelAsk() {
@@ -219,8 +229,14 @@
   // agentic mode. The agentic path launches the shared overlay instead of
   // running inline; the single-shot fallback still runs inline here.
   function dispatch(text: string) {
-    if ($available && $consent) { agentSetProject(project); openOverlay(project); }
-    else ask(text);
+    if ($available && $consent) {
+      agentSetProject(project);
+      openOverlay(project);
+      if (text.trim()) agentAsk(text); // run the typed question, not an empty overlay
+    } else {
+      ask(text);
+    }
+    question = "";
   }
 
   function submit() {
@@ -244,12 +260,14 @@
   {#if turns.length === 0}
     <div class="rchat-intro">
       <p class="rchat-hint">Ask about this repo - I read its recent commits, uncommitted diff, and exported symbols.</p>
-      {#if !$available}
+      {#if !$available && aiAvailable}
         <p class="rchat-note">Agentic deep-dive (live activity, approvals, cost) needs the Claude (Claude Code) provider with the claude CLI installed - using single-shot mode for now.</p>
+      {:else if !canAsk}
+        <p class="rchat-note">AI is not configured. Add a provider and API key in Settings, or install the Claude CLI, to ask about this repo.</p>
       {/if}
       <div class="rchat-starters">
         {#each STARTERS as s}
-          <button class="rchat-starter" on:click={() => dispatch(s)} disabled={loading || $running}>{s}</button>
+          <button class="rchat-starter" on:click={() => dispatch(s)} disabled={loading || $running || !canAsk}>{s}</button>
         {/each}
       </div>
     </div>
@@ -281,13 +299,13 @@
     <input
       class="input"
       type="text"
-      placeholder="Ask about this repo..."
+      placeholder={canAsk ? "Ask about this repo..." : "AI not configured (see Settings)"}
       bind:value={question}
       on:keydown={onKey}
-      disabled={loading || $running}
+      disabled={loading || $running || !canAsk}
       aria-label="Ask about this repo"
     />
-    <button class="btn btn-primary btn-sm" on:click={submit} disabled={(loading || $running) || !question.trim()}>Ask</button>
+    <button class="btn btn-primary btn-sm" on:click={submit} disabled={(loading || $running) || !question.trim() || !canAsk}>Ask</button>
   </div>
 </div>
 

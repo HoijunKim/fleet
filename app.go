@@ -1305,6 +1305,7 @@ func (a *App) runAgent(repoDir, systemPrompt, sessionKey, question string) strin
 		defer srv.Stop(nil)
 		defer os.RemoveAll(tmpDir)
 		defer cancel()
+		sawResult := false
 		err := agent.Driver{}.Run(ctx, opts, func(ev agent.Event) {
 			switch ev.Kind {
 			case agent.KindInit:
@@ -1325,6 +1326,7 @@ func (a *App) runAgent(repoDir, systemPrompt, sessionKey, question string) strin
 					"tool": ev.ToolName, "input": string(ev.ToolInput),
 				})
 			case agent.KindResult:
+				sawResult = true
 				wruntime.EventsEmit(a.ctx, "agent:done", map[string]any{
 					"result": ev.Result, "costUsd": ev.CostUSD,
 					"inputTokens": ev.InputTokens, "outputTokens": ev.OutputTokens,
@@ -1333,6 +1335,12 @@ func (a *App) runAgent(repoDir, systemPrompt, sessionKey, question string) strin
 		})
 		if err != nil {
 			wruntime.EventsEmit(a.ctx, "agent:error", err.Error())
+			return
+		}
+		if !sawResult {
+			// The CLI exited cleanly but never emitted a final result line: still
+			// emit a terminal event so the overlay does not hang on "working...".
+			wruntime.EventsEmit(a.ctx, "agent:done", map[string]any{"result": ""})
 		}
 	}()
 	return ""

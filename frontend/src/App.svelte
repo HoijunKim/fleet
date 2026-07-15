@@ -735,6 +735,7 @@
   <div class="main">
     <ProjectTable
       projects={visible}
+      total={projects.length}
       {selectedId}
       {selectedIds}
       {scanned}

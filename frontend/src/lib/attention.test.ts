@@ -136,10 +136,10 @@ describe("deriveAttention", () => {
     expect(deriveAttention([base({ deadline: iso(1) })], new Map())[0].actions).toContain("open");
   });
 
-  it("caps at 8 items", () => {
+  it("returns all ranked items (display cap is the caller's job)", () => {
     const many = Array.from({ length: 20 }, (_, i) =>
       base({ id: "/p" + i, name: "p" + i, repoPath: "/p" + i, path: "/p" + i, todo: 12 }),
     );
-    expect(deriveAttention(many, new Map()).length).toBe(8);
+    expect(deriveAttention(many, new Map()).length).toBe(20);
   });
 });

@@ -45,6 +45,7 @@
   // signals - the same signals the AI brief reasons over, but structured so each
   // item carries the one-click actions relevant to it (see attention.ts).
   $: attention = deriveAttention(projects, ghByPath);
+  const ATT_MAX = 8; // rows shown; the rest surface as a "+N more" line
 
   // Per-row actions: read-only/navigational except push, which is the user's
   // explicit click on their own repo (reported via a toast either way). Each
@@ -459,7 +460,7 @@
         <div class="ov-empty">All clear. Nothing needs attention right now.</div>
       {:else}
         <ul class="ov-list">
-          {#each attention as it, i (it.id)}
+          {#each attention.slice(0, ATT_MAX) as it, i (it.id)}
             <li in:fly={flyUp(i)} class="att-li">
               <button class="ov-row" on:click={() => onOpen(it.id)} title="Open {it.name}">
                 <span class="ov-name">{it.name}</span>
@@ -489,6 +490,9 @@
             </li>
           {/each}
         </ul>
+        {#if attention.length > ATT_MAX}
+          <div class="att-more">+{attention.length - ATT_MAX} more need attention</div>
+        {/if}
       {/if}
     </section>
 
@@ -651,6 +655,7 @@
     transition: background var(--t), color var(--t);
   }
   .att-action:hover { background: rgba(110, 168, 254, 0.22); }
+  .att-more { color: var(--muted); font-size: 12px; padding: 8px 2px 2px; }
   .notion-li { display: flex; align-items: center; gap: 6px; }
   .notion-li .ov-row { flex: 1; min-width: 0; }
   .notion-done {

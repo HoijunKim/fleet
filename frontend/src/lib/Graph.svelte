@@ -1,3 +1,10 @@
+<script context="module" lang="ts">
+  // Node layout persists across view switches (the graph unmounts when you tab
+  // away): saved on destroy, restored on the next mount, so a user's manual
+  // arrangement and Connect-mode work is not thrown away every time.
+  const savedPos = new Map<string, { x: number; y: number; vx: number; vy: number }>();
+</script>
+
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { fade } from "svelte/transition";
@@ -193,7 +200,7 @@
     const count = tmp.length;
     const spread = 60 + count * 12;
     tmp.forEach((n, i) => {
-      const old = prev.get(n.id);
+      const old = prev.get(n.id) || savedPos.get(n.id);
       if (old) {
         n.x = old.x;
         n.y = old.y;
@@ -564,6 +571,8 @@
     destroyed = true;
     if (rafId) cancelAnimationFrame(rafId);
     rafId = 0;
+    // Persist the current layout so it survives a view switch + remount.
+    for (const n of byId.values()) savedPos.set(n.id, { x: n.x, y: n.y, vx: n.vx, vy: n.vy });
   });
 </script>
 

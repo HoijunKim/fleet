@@ -4,6 +4,9 @@
   import { flyUp } from "./motion";
 
   export let projects: any[] = [];
+  // Total project count BEFORE filtering, so the empty state can tell "you have
+  // no projects" apart from "your filter matched nothing".
+  export let total = 0;
   export let selectedId: string = "";
   export let scanned: boolean = false;
   export let sortKey: string = "";
@@ -58,8 +61,13 @@
 <div class="table-wrap">
   {#if scanned && projects.length === 0}
     <div class="empty-state">
-      <div>No projects yet.</div>
-      <div class="hint">Add roots in Settings or use "+ Project".</div>
+      {#if total === 0}
+        <div>No projects yet.</div>
+        <div class="hint">Add roots in Settings or use "+ Project".</div>
+      {:else}
+        <div>No projects match your filters.</div>
+        <div class="hint">Clear the search and filter chips to see all {total}.</div>
+      {/if}
     </div>
   {:else}
     <table class="repo-table">
