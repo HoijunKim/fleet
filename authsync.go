@@ -321,7 +321,9 @@ func (a *App) runSync() error {
 func (a *App) startSync(ctx context.Context) {
 	go func() {
 		if refresh, _ := a.creds.LoadRefresh(); refresh != "" {
-			if tok, err := a.cloudClient.Refresh(refresh); err == nil {
+			tok, err := a.cloudClient.Refresh(refresh)
+			switch {
+			case err == nil:
 				_ = a.creds.SaveRefresh(tok.Refresh)
 				a.authMu.Lock()
 				a.signedIn = true
@@ -331,7 +333,13 @@ func (a *App) startSync(ctx context.Context) {
 				a.authMu.Unlock()
 				a.emitAuth()
 				a.triggerSync()
+			case errors.Is(err, cloud.ErrRefreshFailed):
+				// Token permanently rejected: drop it so we stop silently retrying
+				// a dead token on every launch. signOutLocally clears the token and
+				// broadcasts signed-out so the user can re-authenticate.
+				a.signOutLocally()
 			}
+			// A transient error (network/5xx) leaves the token in place to retry.
 		}
 	}()
 	go a.syncLoop(ctx)
