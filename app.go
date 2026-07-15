@@ -321,6 +321,12 @@ func (a *App) Checkout(path, branch string) string {
 func (a *App) CommitAll(path, msg string) string { return errMsg(git.CommitAll(a.runner, path, msg)) }
 func (a *App) Push(path string) string           { return errMsg(git.Push(a.runner, path)) }
 
+// MergeUpstream and RebaseUpstream integrate a diverged upstream into the
+// current branch. On a conflict they abort and return a human message rather
+// than stranding the working tree mid-operation (see git.integrateUpstream).
+func (a *App) MergeUpstream(path string) string  { return errMsg(git.MergeUpstream(a.runner, path)) }
+func (a *App) RebaseUpstream(path string) string { return errMsg(git.RebaseUpstream(a.runner, path)) }
+
 // RepoDiff returns the repo's uncommitted working changes (capped), for the
 // AI deep-dive prompt.
 func (a *App) RepoDiff(path string) string { return git.Diff(a.runner, path) }
@@ -330,6 +336,16 @@ func (a *App) StagedDiff(path string) string { return git.StagedDiff(a.runner, p
 
 func (a *App) DiffFile(path, file string) string {
 	out, err := git.DiffFile(a.runner, path, file)
+	if err != nil {
+		return out + "\n[error: " + err.Error() + "]"
+	}
+	return out
+}
+
+// DiffAll returns the whole working-tree diff (all changed files) for the
+// combined "view all changes" modal. Uncapped, mirroring DiffFile.
+func (a *App) DiffAll(path string) string {
+	out, err := git.WorktreeDiff(a.runner, path)
 	if err != nil {
 		return out + "\n[error: " + err.Error() + "]"
 	}

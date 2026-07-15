@@ -94,6 +94,10 @@ export function DetectEditors() {
   return window['go']['main']['App']['DetectEditors']();
 }
 
+export function DiffAll(arg1) {
+  return window['go']['main']['App']['DiffAll'](arg1);
+}
+
 export function DiffFile(arg1, arg2) {
   return window['go']['main']['App']['DiffFile'](arg1, arg2);
 }
@@ -146,6 +150,10 @@ export function Log(arg1, arg2) {
   return window['go']['main']['App']['Log'](arg1, arg2);
 }
 
+export function MergeUpstream(arg1) {
+  return window['go']['main']['App']['MergeUpstream'](arg1);
+}
+
 export function NotionAvailable() {
   return window['go']['main']['App']['NotionAvailable']();
 }
@@ -192,6 +200,10 @@ export function Push(arg1) {
 
 export function ReadRepoFile(arg1, arg2) {
   return window['go']['main']['App']['ReadRepoFile'](arg1, arg2);
+}
+
+export function RebaseUpstream(arg1) {
+  return window['go']['main']['App']['RebaseUpstream'](arg1);
 }
 
 export function RemoveEdge(arg1) {

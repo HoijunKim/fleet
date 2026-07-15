@@ -1,18 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { DiffFile } from "../../wailsjs/go/main/App";
+  import { DiffFile, DiffAll } from "../../wailsjs/go/main/App";
   import Logo from "./Logo.svelte";
 
   export let path: string;
   export let file: string;
+  // When true, show the whole working-tree diff (all changed files) instead of
+  // a single file's diff. `file` is ignored in that mode.
+  export let all = false;
   export let onClose: () => void;
+
+  $: title = all ? "All changes" : file;
 
   let diff = "";
   let loading = true;
 
   onMount(async () => {
     try {
-      diff = await DiffFile(path, file);
+      diff = all ? await DiffAll(path) : await DiffFile(path, file);
     } catch (e) {
       diff = "[error: " + String(e) + "]";
     } finally {
@@ -59,7 +64,7 @@
   <div class="modal diff-modal" on:click|stopPropagation>
     <div class="modal-head">
       <Logo size={16} />
-      <h3 class="modal-title diff-title">{file}</h3>
+      <h3 class="modal-title diff-title">{title}</h3>
       <button class="btn btn-secondary btn-sm modal-close" on:click={onClose} aria-label="Close">x</button>
     </div>
 

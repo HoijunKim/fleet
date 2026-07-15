@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Fetch, Pull, OpenEditor, OpenTerminal, RenameProject } from "../../wailsjs/go/main/App";
+  import { Fetch, Pull, Push, MergeUpstream, RebaseUpstream, OpenEditor, OpenTerminal, RenameProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { scale } from "svelte/transition";
   import { ddayLabel } from "./pm";
@@ -38,8 +38,9 @@
     if (requestTab) activeTab = requestTab as typeof activeTab;
   }
 
-  // Diff viewer state - the file whose diff is open (null = closed).
-  let diffFile: string | null = null;
+  // Diff viewer state - which diff is open (null = closed). `all` shows the
+  // whole working-tree diff; otherwise `file` is the single file to diff.
+  let diffView: { file: string; all: boolean } | null = null;
   let lastId = "";
 
   // Inline project rename (manual projects only). renaming = the header title
@@ -49,13 +50,16 @@
   let renameVal = "";
   let savingName = false;
 
-  $: diffOpen = diffFile !== null;
+  $: diffOpen = diffView !== null;
   $: isCode = !!project && project.type === "code";
+  // Upstream diverged: local has commits to push AND remote has commits to
+  // integrate. The Pull button stays --ff-only; this drives the Merge/Rebase UI.
+  $: diverged = !!project && project.hasUpstream && project.ahead > 0 && project.behind > 0;
 
   // Reset transient panel state when the selection changes.
   $: if (project && project.id !== lastId) {
     lastId = project.id;
-    diffFile = null;
+    diffView = null;
     renaming = false;
     savingName = false;
   }
@@ -81,10 +85,13 @@
     : "nogit";
 
   function openDiff(f: string) {
-    diffFile = f;
+    diffView = { file: f, all: false };
+  }
+  function openDiffAll() {
+    diffView = { file: "", all: true };
   }
   function closeDiff() {
-    diffFile = null;
+    diffView = null;
   }
 
   // Rename is offered for manual projects only; a code project's name comes from
@@ -128,6 +135,24 @@
     const e = await Pull(project.path);
     if (e) toastError("Pull " + project.name + ": " + e);
     else toastSuccess("Pulled " + project.name);
+    onRepoChanged(project.path);
+  }
+  async function doPush() {
+    const e = await Push(project.path);
+    if (e) toastError("Push " + project.name + ": " + e);
+    else toastSuccess("Pushed " + project.name);
+    onRepoChanged(project.path);
+  }
+  async function doMerge() {
+    const e = await MergeUpstream(project.path);
+    if (e) toastError("Merge " + project.name + ": " + e);
+    else toastSuccess("Merged upstream into " + project.name);
+    onRepoChanged(project.path);
+  }
+  async function doRebase() {
+    const e = await RebaseUpstream(project.path);
+    if (e) toastError("Rebase " + project.name + ": " + e);
+    else toastSuccess("Rebased " + project.name + " onto upstream");
     onRepoChanged(project.path);
   }
   async function doEdit() {
@@ -294,6 +319,16 @@
                   </div>
                 {/if}
                 <GitHubBadge remote={project.remote || ""} path={project.path} />
+                {#if project.hasUpstream}
+                  <div class="dl-row">
+                    <span class="dl-label">Upstream</span>
+                    <span class="dl-value sync-state">
+                      {#if project.ahead > 0}<span class="sync-pill ahead" title="commits to push">&uarr;{project.ahead}</span>{/if}
+                      {#if project.behind > 0}<span class="sync-pill behind" title="commits to pull">&darr;{project.behind}</span>{/if}
+                      {#if project.ahead === 0 && project.behind === 0}<span class="pm-dash">up to date</span>{/if}
+                    </span>
+                  </div>
+                {/if}
                 {#if project.dirtyFiles && project.dirtyFiles.length}
                   <div class="dl-row">
                     <span class="dl-label">Changed ({project.dirtyFiles.length})</span>
@@ -301,6 +336,7 @@
                       {#each project.dirtyFiles as f}
                         <button class="df" on:click={() => openDiff(f)} title="View diff">{f}</button>
                       {/each}
+                      <button class="df df-all" on:click={openDiffAll} title="View every change as one diff">View all changes</button>
                     </div>
                   </div>
                 {/if}
@@ -313,9 +349,28 @@
               <div class="detail-actions">
                 <button class="btn btn-primary btn-sm" on:click={doFetch}>Fetch</button>
                 <button class="btn btn-primary btn-sm" on:click={doPull}>Pull</button>
+                <button
+                  class="btn btn-primary btn-sm"
+                  on:click={doPush}
+                  disabled={!project.hasUpstream}
+                  title={project.hasUpstream ? "Push commits to upstream" : "No upstream set for this branch"}
+                >Push{project.ahead > 0 ? " " + project.ahead : ""}</button>
                 <button class="btn btn-secondary btn-sm" on:click={doEdit}>Editor</button>
                 <button class="btn btn-secondary btn-sm" on:click={doTerm}>Terminal</button>
               </div>
+
+              {#if diverged}
+                <div class="diverged-banner">
+                  <div class="diverged-msg">
+                    <strong>Diverged</strong> - {project.ahead} local ahead, {project.behind} on upstream.
+                    <span class="diverged-hint">Merge keeps both histories; Rebase replays your commits on top. Conflicts abort safely.</span>
+                  </div>
+                  <div class="diverged-actions">
+                    <button class="btn btn-secondary btn-sm" on:click={doMerge}>Merge</button>
+                    <button class="btn btn-secondary btn-sm" on:click={doRebase}>Rebase</button>
+                  </div>
+                </div>
+              {/if}
 
               <div class="detail-sep"></div>
               <StashPanel path={project.path} name={project.name} onChanged={onRepoChanged} />
@@ -380,8 +435,8 @@
     </div>
   </aside>
 
-  {#if diffFile !== null}
-    <DiffModal path={project.path} file={diffFile} onClose={closeDiff} />
+  {#if diffView !== null}
+    <DiffModal path={project.path} file={diffView.file} all={diffView.all} onClose={closeDiff} />
   {/if}
 {:else}
   <aside class="detail-empty">

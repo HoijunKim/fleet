@@ -109,6 +109,18 @@ func TestFetchAndPullReturnErrTextOnFailure(t *testing.T) {
 	if msg := a.Pull("/x"); msg == "" {
 		t.Error("Pull should return error text on failure")
 	}
+	if msg := a.Push("/x"); msg == "" {
+		t.Error("Push should return error text on failure")
+	}
+}
+
+func TestDiffAllReturnsWorktreeDiff(t *testing.T) {
+	// WorktreeDiff runs `git diff HEAD`; the fake keys canned output by argv[0].
+	a := &App{runner: fakeRunner{out: map[string]string{"diff": "@@ -1 +1 @@\n-old\n+new\n"}}}
+	got := a.DiffAll("/x")
+	if !strings.Contains(got, "+new") || strings.Contains(got, "[error:") {
+		t.Errorf("DiffAll returned %q, want the runner's diff with no error suffix", got)
+	}
 }
 
 func TestRemoteToHTTPS(t *testing.T) {

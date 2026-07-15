@@ -49,6 +49,8 @@ export function DeleteTask(arg1:string,arg2:string):Promise<string>;
 
 export function DetectEditors():Promise<Array<main.EditorOption>>;
 
+export function DiffAll(arg1:string):Promise<string>;
+
 export function DiffFile(arg1:string,arg2:string):Promise<string>;
 
 export function EditTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
@@ -75,6 +77,8 @@ export function LoadRepo(arg1:string):Promise<main.RepoView>;
 
 export function Log(arg1:string,arg2:number):Promise<Array<main.CommitView>>;
 
+export function MergeUpstream(arg1:string):Promise<string>;
+
 export function NotionAvailable():Promise<boolean>;
 
 export function NotionComplete(arg1:string,arg2:string):Promise<string>;
@@ -98,6 +102,8 @@ export function Pull(arg1:string):Promise<string>;
 export function Push(arg1:string):Promise<string>;
 
 export function ReadRepoFile(arg1:string,arg2:string):Promise<string>;
+
+export function RebaseUpstream(arg1:string):Promise<string>;
 
 export function RemoveEdge(arg1:string):Promise<string>;
 
