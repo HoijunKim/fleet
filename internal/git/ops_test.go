@@ -1,6 +1,7 @@
 package git
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hoijun/fleet/internal/repo"
@@ -57,8 +58,8 @@ func TestCommitAllStagesFirst(t *testing.T) {
 	if err := CommitAll(f, "/x", "msg"); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.last) != 2 || f.last[0][0] != "add" || f.last[1][0] != "commit" {
-		t.Errorf("expected add then commit, got %v", f.last)
+	if len(f.last) != 3 || f.last[0][0] != "ls-files" || f.last[1][0] != "add" || f.last[2][0] != "commit" {
+		t.Errorf("expected conflict-check then add then commit, got %v", f.last)
 	}
 }
 
@@ -81,5 +82,20 @@ func TestStashList(t *testing.T) {
 	l, err := StashList(f, "/x")
 	if err != nil || len(l) != 2 {
 		t.Fatalf("l=%v err=%v", l, err)
+	}
+}
+
+func TestCommitAllBlocksOnConflict(t *testing.T) {
+	f := &opFake{out: map[string]string{
+		"ls-files -u": "100644 abc123 1\tfoo.go\n100644 def456 2\tfoo.go\n",
+	}}
+	err := CommitAll(f, "/x", "msg")
+	if err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("expected a conflict error, got %v", err)
+	}
+	for _, args := range f.last {
+		if args[0] == "add" || args[0] == "commit" {
+			t.Fatalf("must not %v when conflicted", args)
+		}
 	}
 }

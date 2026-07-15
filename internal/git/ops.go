@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -75,10 +76,18 @@ func CurrentBranch(dir string) string {
 }
 
 // Checkout switches to branch.
-func Checkout(r Runner, dir, branch string) error { _, err := r.Run(dir, "checkout", branch); return err }
+func Checkout(r Runner, dir, branch string) error {
+	_, err := r.Run(dir, "checkout", branch)
+	return err
+}
 
 // CommitAll stages everything then commits with msg.
 func CommitAll(r Runner, dir, msg string) error {
+	// Refuse to commit with unresolved merge conflicts: `add -A` would otherwise
+	// stage the conflict markers. `ls-files -u` lists unmerged (conflicted) entries.
+	if u, err := r.Run(dir, "ls-files", "-u"); err == nil && strings.TrimSpace(u) != "" {
+		return errors.New("resolve merge conflicts before committing")
+	}
 	if _, err := r.Run(dir, "add", "-A"); err != nil {
 		return err
 	}
