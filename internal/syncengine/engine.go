@@ -2,6 +2,8 @@ package syncengine
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -17,10 +19,11 @@ type Engine struct {
 	statePath string
 	remoteOf  func(path string) string
 
-	mu           sync.Mutex
-	state        State
-	loaded       bool
-	lastConflict bool
+	mu            sync.Mutex
+	state         State
+	loaded        bool
+	lastConflict  bool
+	lostLocalEdit bool
 }
 
 // New builds an Engine. remoteOf resolves a code project's git remote URL from
@@ -43,6 +46,44 @@ func (e *Engine) TookRemoteEdit() bool {
 	v := e.lastConflict
 	e.lastConflict = false
 	return v
+}
+
+// LostLocalEdit returns (and clears) whether the last sync overwrote a local
+// record that had UNSYNCED changes. When true, the clobbered local version was
+// backed up (see conflictsPath) so the user can recover it.
+func (e *Engine) LostLocalEdit() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	v := e.lostLocalEdit
+	e.lostLocalEdit = false
+	return v
+}
+
+// conflictsPath is where clobbered local records are appended (one JSON object
+// per line) for recovery, next to the sync state file.
+func (e *Engine) conflictsPath() string {
+	return filepath.Join(filepath.Dir(e.statePath), "sync-conflicts.jsonl")
+}
+
+// backupConflict appends the about-to-be-overwritten local record to the
+// conflicts file so a clobbered unsynced edit is recoverable, never silently
+// lost. Best-effort: a write failure does not abort the sync.
+func (e *Engine) backupConflict(localID string, rec store.Record, payload []byte) {
+	line, err := json.Marshal(struct {
+		At      string          `json:"at"`
+		LocalID string          `json:"localId"`
+		Name    string          `json:"name"`
+		Payload json.RawMessage `json:"payload"`
+	}{At: time.Now().UTC().Format(time.RFC3339), LocalID: localID, Name: rec.Name, Payload: payload})
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(e.conflictsPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.Write(append(line, '\n'))
 }
 
 // SyncOnce performs one push/pull cycle: push dirty docs (and tombstones for
@@ -156,6 +197,15 @@ func (e *Engine) SyncOnce(access string) error {
 			var rec store.Record
 			if err := json.Unmarshal(d.Payload, &rec); err != nil {
 				return err
+			}
+			// If the local record has UNSYNCED changes (its current hash differs
+			// from the last-synced hash), this newer remote would clobber them.
+			// Back up the local version so the loss is recoverable, not silent.
+			if local, ok := snap[localID]; ok {
+				if lp, err := json.Marshal(local); err == nil && payloadHash(lp) != e.state.Docs[d.DocID].Hash {
+					e.backupConflict(localID, local, lp)
+					e.lostLocalEdit = true
+				}
 			}
 			if err := e.store.Put(localID, rec); err != nil {
 				return err

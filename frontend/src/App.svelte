@@ -670,6 +670,8 @@
       if (v) sync = v;
     }));
     unsubs.push(EventsOn("sync:remoteEdit", () => toastInfo("Updated on another device")));
+    unsubs.push(EventsOn("sync:conflict", () =>
+      toastError("A local edit was overwritten by a newer version from another device. The overwritten copy was saved to sync-conflicts.jsonl for recovery.")));
   });
 
   onDestroy(() => {

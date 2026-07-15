@@ -311,8 +311,16 @@ func (a *App) runSync() error {
 		return err
 	}
 	a.setSyncState("synced", "")
-	if a.engine.TookRemoteEdit() && a.ctx != nil {
-		wruntime.EventsEmit(a.ctx, "sync:remoteEdit", nil)
+	// Capture both flags (each clears itself), then surface the stronger one: a
+	// clobbered UNSYNCED local edit (recoverable) outranks a plain remote update.
+	lost := a.engine.LostLocalEdit()
+	remote := a.engine.TookRemoteEdit()
+	if a.ctx != nil {
+		if lost {
+			wruntime.EventsEmit(a.ctx, "sync:conflict", nil)
+		} else if remote {
+			wruntime.EventsEmit(a.ctx, "sync:remoteEdit", nil)
+		}
 	}
 	return nil
 }

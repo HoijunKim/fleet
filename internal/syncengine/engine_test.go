@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -363,4 +364,44 @@ func mustMarshal(t *testing.T, rec store.Record) []byte {
 		t.Fatalf("marshal record: %v", err)
 	}
 	return b
+}
+
+func TestSyncBacksUpClobberedLocalEdit(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	eA, stA, _ := newEngine(t, ts.URL)
+	_ = stA.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "orig" })
+	_ = eA.SyncOnce("tok") // server has m-1
+
+	eB, stB, statePathB := newEngine(t, ts.URL)
+	_ = eB.SyncOnce("tok") // B pulls m-1
+
+	// B makes an UNSYNCED local edit (older), A makes a NEWER edit and syncs.
+	_ = stB.Update("m-1", func(r *store.Record) { r.Notes = "B unsynced note" })
+	time.Sleep(3 * time.Millisecond)
+	_ = stA.Update("m-1", func(r *store.Record) { r.Notes = "A wins" })
+	if err := eA.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+
+	// B syncs: its push is rejected, A's newer version clobbers B's unsynced edit.
+	if err := eB.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if !eB.LostLocalEdit() {
+		t.Fatal("expected LostLocalEdit after B's unsynced edit was clobbered")
+	}
+	if rec, _ := stB.Get("m-1"); rec.Notes != "A wins" {
+		t.Fatalf("B should now hold A's version, got %q", rec.Notes)
+	}
+	backup := filepath.Join(filepath.Dir(statePathB), "sync-conflicts.jsonl")
+	data, err := os.ReadFile(backup)
+	if err != nil {
+		t.Fatalf("conflicts backup not written: %v", err)
+	}
+	if !strings.Contains(string(data), "B unsynced note") {
+		t.Fatalf("backup must contain the clobbered local edit, got: %s", data)
+	}
 }
