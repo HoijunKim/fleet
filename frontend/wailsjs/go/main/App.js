@@ -98,6 +98,10 @@ export function DiffFile(arg1, arg2) {
   return window['go']['main']['App']['DiffFile'](arg1, arg2);
 }
 
+export function EditTask(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['EditTask'](arg1, arg2, arg3, arg4);
+}
+
 export function Fetch(arg1) {
   return window['go']['main']['App']['Fetch'](arg1);
 }
@@ -192,6 +196,10 @@ export function ReadRepoFile(arg1, arg2) {
 
 export function RemoveEdge(arg1) {
   return window['go']['main']['App']['RemoveEdge'](arg1);
+}
+
+export function RenameProject(arg1, arg2) {
+  return window['go']['main']['App']['RenameProject'](arg1, arg2);
 }
 
 export function ReorderTasks(arg1, arg2) {

@@ -603,6 +603,27 @@ select.input option { background: var(--surface); color: var(--text); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Inline (not inline-block) so the wrapping h3.detail-title still owns the
+   ellipsis truncation; the button just makes the name clickable to rename. */
+.detail-title-btn {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+}
+.detail-title-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
+.detail-rename {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  font-size: 15px;
+  font-weight: 600;
+}
 
 .detail-body { padding: 14px 16px; }
 
@@ -1941,8 +1962,27 @@ select.input option { background: var(--surface); color: var(--text); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 1px 3px;
+  margin: 0 -3px;
+  border-radius: var(--r-btn);
+  font-family: inherit;
+  cursor: text;
+  transition: background var(--t);
 }
+.pm-task-title:hover { background: var(--raised); }
 .pm-task.done .pm-task-title { color: var(--faint); text-decoration: line-through; }
+
+/* Inline task edit: the row wraps so the title keeps a usable width on a narrow
+   panel; the due picker + Save + cancel drop to a second line when they don't fit.
+   Cancel reuses the del "x". */
+.pm-task.editing { background: var(--raised); flex-wrap: wrap; row-gap: 6px; }
+.pm-task.editing:hover { background: var(--raised); }
+.pm-edit-title { flex: 1 1 150px; min-width: 0; height: 26px; font-size: 13px; }
+.pm-edit-due { flex: 0 0 auto; width: 132px; height: 26px; color-scheme: dark; }
+.pm-edit-cancel { opacity: 1; }
 .pm-task-due {
   flex: 0 0 auto;
   font-family: var(--font-mono);

@@ -918,3 +918,65 @@ func TestSearchAllRoundRobinFairness(t *testing.T) {
 		t.Fatalf("expected interleaved aaa/zzz/aaa, got %+v", hits)
 	}
 }
+
+func TestEditTask(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("p")
+	tid := a.addTaskReturnID(t, id, "old title")
+	a.ToggleTask(id, tid) // mark done; edit must not reset it
+	if msg := a.EditTask(id, tid, "new title", "2026-08-01"); msg != "" {
+		t.Fatalf("EditTask: %s", msg)
+	}
+	p := a.projectByID(t, id)
+	if p.Tasks[0].Title != "new title" || p.Tasks[0].Due != "2026-08-01" {
+		t.Errorf("task not edited: %+v", p.Tasks[0])
+	}
+	if !p.Tasks[0].Done {
+		t.Error("EditTask must not change the done state")
+	}
+	if msg := a.EditTask(id, tid, "  ", ""); msg == "" {
+		t.Error("empty title must be rejected")
+	}
+	if a.projectByID(t, id).Tasks[0].Title != "new title" {
+		t.Error("a rejected edit must not mutate the task")
+	}
+	// A surrounding-whitespace title is stored trimmed.
+	if msg := a.EditTask(id, tid, "  padded  ", ""); msg != "" {
+		t.Fatalf("EditTask: %s", msg)
+	}
+	if got := a.projectByID(t, id).Tasks[0].Title; got != "padded" {
+		t.Errorf("title should be stored trimmed, got %q", got)
+	}
+	// An unknown taskID is a no-op success and touches no existing task.
+	if msg := a.EditTask(id, "no-such-task", "ghost", "2026-01-01"); msg != "" {
+		t.Errorf("editing a missing task should be a no-op success, got %q", msg)
+	}
+	if got := a.projectByID(t, id).Tasks[0].Title; got != "padded" {
+		t.Errorf("a missing-task edit must not mutate other tasks, got %q", got)
+	}
+}
+
+func TestRenameProject(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("old name")
+	if msg := a.RenameProject(id, "new name"); msg != "" {
+		t.Fatalf("RenameProject: %s", msg)
+	}
+	if got := a.projectByID(t, id).Name; got != "new name" {
+		t.Errorf("not renamed: %q", got)
+	}
+	if msg := a.RenameProject(id, "  "); msg == "" {
+		t.Error("empty name must be rejected")
+	}
+	// A code project's name comes from its folder; RenameProject must leave a
+	// non-manual record untouched (and not error).
+	if err := a.store.Update("/some/code/path", func(r *store.Record) { r.Name = "folder" }); err != nil {
+		t.Fatal(err)
+	}
+	if msg := a.RenameProject("/some/code/path", "hijacked"); msg != "" {
+		t.Fatalf("RenameProject on a code project should be a no-op success: %s", msg)
+	}
+	if got, _ := a.store.Get("/some/code/path"); got.Name != "folder" {
+		t.Errorf("RenameProject must not rename a non-manual project, got %q", got.Name)
+	}
+}

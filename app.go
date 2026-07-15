@@ -522,6 +522,36 @@ func (a *App) AddTask(projectID, title, due string) string {
 	}))
 }
 
+// EditTask updates a task's title and due date, leaving its status/done state
+// unchanged. An empty title is rejected; a missing taskID is a no-op success.
+func (a *App) EditTask(projectID, taskID, title, due string) string {
+	if strings.TrimSpace(title) == "" {
+		return "error: task title cannot be empty"
+	}
+	return errMsg(a.store.Update(projectID, func(r *store.Record) {
+		for i := range r.Tasks {
+			if r.Tasks[i].ID == taskID {
+				r.Tasks[i].Title = strings.TrimSpace(title)
+				r.Tasks[i].Due = due
+			}
+		}
+	}))
+}
+
+// RenameProject renames a MANUAL project. Code projects take their name from
+// the scanned folder, so a rename on one is a no-op (the UI only offers it for
+// manual projects). An empty name is rejected.
+func (a *App) RenameProject(id, name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "error: name cannot be empty"
+	}
+	return errMsg(a.store.Update(id, func(r *store.Record) {
+		if r.Manual {
+			r.Name = strings.TrimSpace(name)
+		}
+	}))
+}
+
 // ToggleTask flips a task's done state, keeping Status in sync with Done.
 func (a *App) ToggleTask(projectID, taskID string) string {
 	return errMsg(a.store.Update(projectID, func(r *store.Record) {

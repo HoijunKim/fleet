@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { AddTask, SetTaskStatus, ReorderTasks, DeleteTask, UpdateProject } from "../../wailsjs/go/main/App";
+  import { AddTask, EditTask, SetTaskStatus, ReorderTasks, DeleteTask, UpdateProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { ddayLabel } from "./pm";
   import TagChips from "./TagChips.svelte";
@@ -23,6 +23,12 @@
   let newDue = "";
   let busy = false;
   let confirming = false;
+
+  // Inline task edit: the task whose title/due is open for editing (null = none),
+  // plus working copies of its fields so typing does not fight the reactive prop.
+  let editId: string | null = null;
+  let editTitle = "";
+  let editDue = "";
   let notesTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Re-sync locals whenever the selected project changes.
@@ -44,6 +50,7 @@
     confirming = false;
     newTitle = "";
     newDue = "";
+    editId = null;
   }
 
   $: tasks = project && project.tasks ? project.tasks : [];
@@ -133,6 +140,28 @@
     else onChanged(project.id);
   }
 
+  // Open the inline editor for a task, seeding the working copies from its
+  // current fields.
+  function startEdit(t: any) {
+    editId = t.id;
+    editTitle = t.title || "";
+    editDue = t.due || "";
+  }
+  function cancelEdit() {
+    editId = null;
+  }
+  async function saveEdit(taskId: string) {
+    const title = editTitle.trim();
+    if (!title) { toastError("Task title cannot be empty"); return; }
+    const err = await EditTask(project.id, taskId, title, editDue);
+    if (err) toastError("Edit task: " + err);
+    else { editId = null; onChanged(project.id); }
+  }
+  function onEditKey(e: KeyboardEvent, taskId: string) {
+    if (e.key === "Enter") { e.preventDefault(); saveEdit(taskId); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+  }
+
   // Drag-to-reorder: native HTML5 DnD, no library. Guard against empty/
   // single-item lists and no-op drops (same id, or dropped outside a task).
   let dragId: string | null = null;
@@ -198,7 +227,8 @@
           class="pm-task"
           class:done={t.status === "done"}
           class:dragging={dragId === t.id}
-          draggable={true}
+          class:editing={editId === t.id}
+          draggable={editId !== t.id}
           on:dragstart={(e) => onDragStart(e, t.id)}
           on:dragover={onDragOver}
           on:drop={(e) => onDrop(e, t.id)}
@@ -209,12 +239,33 @@
             on:click={() => cycleStatus(t)}
             aria-label={"Status: " + (t.status || "todo") + " (click to cycle)"}
           >{t.status || "todo"}</button>
-          <span class="pm-task-title">{t.title}</span>
-          {#if t.due}
-            {@const d = ddayLabel(t.due)}
-            <span class="pm-task-due {d ? d.cls : ''}">{d ? d.text : t.due}</span>
+          {#if editId === t.id}
+            <!-- svelte-ignore a11y_autofocus -->
+            <input
+              class="input pm-edit-title"
+              type="text"
+              bind:value={editTitle}
+              on:keydown={(e) => onEditKey(e, t.id)}
+              aria-label="Edit task title"
+              autofocus
+            />
+            <input
+              class="input pm-edit-due"
+              type="date"
+              bind:value={editDue}
+              on:keydown={(e) => onEditKey(e, t.id)}
+              aria-label="Edit task due date"
+            />
+            <button class="btn btn-secondary btn-sm" on:click={() => saveEdit(t.id)}>Save</button>
+            <button class="pm-task-del pm-edit-cancel" on:click={cancelEdit} aria-label="Cancel edit">x</button>
+          {:else}
+            <button class="pm-task-title" on:click={() => startEdit(t)} title="Click to edit">{t.title}</button>
+            {#if t.due}
+              {@const d = ddayLabel(t.due)}
+              <span class="pm-task-due {d ? d.cls : ''}">{d ? d.text : t.due}</span>
+            {/if}
+            <button class="pm-task-del" on:click={() => removeTask(t.id)} aria-label="Delete task">x</button>
           {/if}
-          <button class="pm-task-del" on:click={() => removeTask(t.id)} aria-label="Delete task">x</button>
         </li>
       {/each}
     </ul>

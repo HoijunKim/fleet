@@ -51,6 +51,8 @@ export function DetectEditors():Promise<Array<main.EditorOption>>;
 
 export function DiffFile(arg1:string,arg2:string):Promise<string>;
 
+export function EditTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
 export function Fetch(arg1:string):Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
@@ -98,6 +100,8 @@ export function Push(arg1:string):Promise<string>;
 export function ReadRepoFile(arg1:string,arg2:string):Promise<string>;
 
 export function RemoveEdge(arg1:string):Promise<string>;
+
+export function RenameProject(arg1:string,arg2:string):Promise<string>;
 
 export function ReorderTasks(arg1:string,arg2:Array<string>):Promise<string>;
 

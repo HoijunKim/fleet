@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Fetch, Pull, OpenEditor, OpenTerminal } from "../../wailsjs/go/main/App";
+  import { Fetch, Pull, OpenEditor, OpenTerminal, RenameProject } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { scale } from "svelte/transition";
   import { ddayLabel } from "./pm";
@@ -42,6 +42,13 @@
   let diffFile: string | null = null;
   let lastId = "";
 
+  // Inline project rename (manual projects only). renaming = the header title
+  // is swapped for an input; renameVal holds the working copy; savingName gates
+  // re-entrancy while the rename RPC is in flight.
+  let renaming = false;
+  let renameVal = "";
+  let savingName = false;
+
   $: diffOpen = diffFile !== null;
   $: isCode = !!project && project.type === "code";
 
@@ -49,6 +56,8 @@
   $: if (project && project.id !== lastId) {
     lastId = project.id;
     diffFile = null;
+    renaming = false;
+    savingName = false;
   }
 
   // Read-only Overview values.
@@ -76,6 +85,37 @@
   }
   function closeDiff() {
     diffFile = null;
+  }
+
+  // Rename is offered for manual projects only; a code project's name comes from
+  // its scanned folder and RenameProject is a no-op on it.
+  function startRename() {
+    if (project.type !== "manual") return;
+    renameVal = project.name || "";
+    renaming = true;
+  }
+  function cancelRename() {
+    renaming = false;
+  }
+  async function saveRename() {
+    // Guard the blur-fires-after-unmount race: Enter and Escape both drop
+    // `renaming` before the input unmounts, and that unmount triggers on:blur.
+    // Bail if we are no longer editing (blur cannot re-save or clobber an
+    // Escape) or if a save is already in flight.
+    if (!renaming || savingName) return;
+    const name = renameVal.trim();
+    if (!name) { toastError("Name cannot be empty"); return; }
+    if (name === project.name) { renaming = false; return; }
+    savingName = true;
+    const e = await RenameProject(project.id, name);
+    savingName = false;
+    if (e) { toastError("Rename: " + e); return; } // keep the editor open to retry
+    renaming = false;
+    onProjectChanged(project.id);
+  }
+  function onRenameKey(e: KeyboardEvent) {
+    if (e.key === "Enter") { e.preventDefault(); saveRename(); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
   }
 
   async function doFetch() {
@@ -107,7 +147,24 @@
     <div class="detail-card">
       <div class="detail-head">
         <span class="dot {dotClass}"></span>
-        <h3 class="detail-title">{project.name}</h3>
+        {#if renaming}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            class="input detail-rename"
+            type="text"
+            bind:value={renameVal}
+            on:keydown={onRenameKey}
+            on:blur={saveRename}
+            aria-label="Project name"
+            autofocus
+          />
+        {:else if project.type === "manual"}
+          <h3 class="detail-title">
+            <button class="detail-title-btn" on:click={startRename} title="Click to rename">{project.name}</button>
+          </h3>
+        {:else}
+          <h3 class="detail-title">{project.name}</h3>
+        {/if}
         <span class="type-badge {project.type}">{project.type}</span>
       </div>
 
