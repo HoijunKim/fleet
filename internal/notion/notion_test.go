@@ -227,3 +227,32 @@ func TestAvailable(t *testing.T) {
 		t.Error("token+db must be available")
 	}
 }
+
+func TestTasksPaginates(t *testing.T) {
+	page := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		if page == 1 {
+			_, _ = io.WriteString(w, `{"results":[{"url":"u1","properties":{"Name":{"type":"title","title":[{"plain_text":"a"}]}}}],"has_more":true,"next_cursor":"cur2"}`)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), "cur2") {
+			t.Errorf("page 2 must forward the cursor, body=%s", body)
+		}
+		_, _ = io.WriteString(w, `{"results":[{"url":"u2","properties":{"Name":{"type":"title","title":[{"plain_text":"b"}]}}}],"has_more":false,"next_cursor":null}`)
+	}))
+	defer srv.Close()
+
+	c := Client{Token: "t", BaseURL: srv.URL, HTTP: srv.Client()}
+	tasks, err := c.Tasks("db")
+	if err != nil {
+		t.Fatalf("Tasks: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks across 2 pages, got %d", len(tasks))
+	}
+	if page != 2 {
+		t.Fatalf("expected 2 page requests, got %d", page)
+	}
+}

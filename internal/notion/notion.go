@@ -58,31 +58,58 @@ func (c Client) Tasks(databaseID string) ([]Task, error) {
 	if base == "" {
 		base = "https://api.notion.com/v1"
 	}
-	req, err := http.NewRequest(http.MethodPost, base+"/databases/"+databaseID+"/query",
-		bytes.NewReader([]byte(`{"page_size":50}`)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Notion-Version", version)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg := strings.TrimSpace(string(data))
-		if len(msg) > 300 {
-			msg = msg[:300]
+	// Follow Notion's cursor pagination so a board with more than one page of
+	// rows is not silently truncated. Bounded by maxPages as a runaway guard.
+	const maxPages = 10 // up to ~1000 rows at page_size 100
+	var all []Task
+	cursor := ""
+	for page := 0; page < maxPages; page++ {
+		body := `{"page_size":100}`
+		if cursor != "" {
+			b, _ := json.Marshal(map[string]any{"page_size": 100, "start_cursor": cursor})
+			body = string(b)
 		}
-		return nil, fmt.Errorf("notion http %d: %s", resp.StatusCode, msg)
+		req, err := http.NewRequest(http.MethodPost, base+"/databases/"+databaseID+"/query",
+			bytes.NewReader([]byte(body)))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+		req.Header.Set("Notion-Version", version)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			msg := strings.TrimSpace(string(data))
+			if len(msg) > 300 {
+				msg = msg[:300]
+			}
+			return nil, fmt.Errorf("notion http %d: %s", resp.StatusCode, msg)
+		}
+		tasks, err := parseResults(data)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, tasks...)
+
+		var meta struct {
+			HasMore    bool   `json:"has_more"`
+			NextCursor string `json:"next_cursor"`
+		}
+		_ = json.Unmarshal(data, &meta)
+		if !meta.HasMore || meta.NextCursor == "" {
+			break
+		}
+		cursor = meta.NextCursor
 	}
-	return parseResults(data)
+	return all, nil
 }
 
 // Complete checks a page's checkbox property to true (marks a task done). Only
