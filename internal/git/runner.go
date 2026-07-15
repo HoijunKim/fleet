@@ -2,7 +2,9 @@ package git
 
 import (
 	"bytes"
+	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/hoijun/fleet/internal/winhide"
 )
@@ -25,5 +27,13 @@ func (ExecRunner) Run(dir string, args ...string) (string, error) {
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
 	err := cmd.Run()
+	if err != nil {
+		// Surface git's own diagnostic (e.g. "Permission denied (publickey)",
+		// "Updates were rejected", "Your local changes would be overwritten")
+		// instead of the bare "exit status N" from os/exec.
+		if msg := strings.TrimSpace(errBuf.String()); msg != "" {
+			return out.String(), fmt.Errorf("%s: %w", msg, err)
+		}
+	}
 	return out.String(), err
 }
