@@ -69,7 +69,7 @@ export async function initAgentSession(): Promise<void> {
     EventsOn("agent:done", (d: any) => {
       if (stale()) return;
       cost.set({ costUsd: d?.costUsd ?? 0, inputTokens: d?.inputTokens ?? 0, outputTokens: d?.outputTokens ?? 0 });
-      const answer = get(stream).trim() || String(d?.result ?? "(no answer)");
+      const answer = get(stream).trim() || String(d?.result ?? "").trim() || "(no answer)";
       turns.update((t) => [...t, { role: "assistant", text: answer }]); saveChat();
       stream.set(""); activity.set([]); pending.set(null); running.set(false);
     });
