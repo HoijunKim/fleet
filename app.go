@@ -900,17 +900,42 @@ func (a *App) SearchAll(query string) []SearchHit {
 		return out
 	}
 	cfg := a.cfgSnapshot()
-	for _, r := range scan.Discover(cfg.Roots, cfg.ScanDepth, false) {
+	repos := scan.Discover(cfg.Roots, cfg.ScanDepth, false)
+	// Gather up to searchPerRepo hits per repo, then round-robin merge up to the
+	// global cap, so an alphabetically-early repo cannot starve later repos of
+	// the result budget (every matching repo gets representation).
+	perRepo := make([][]SearchHit, len(repos))
+	for i, r := range repos {
 		hits, _ := git.Grep(a.runner, r.Path, query)
 		for _, h := range hits {
-			out = append(out, SearchHit{Repo: r.Name, RepoPath: r.Path, File: h.File, Line: h.Line, Text: h.Text})
-			if len(out) >= 500 {
-				return out
+			perRepo[i] = append(perRepo[i], SearchHit{Repo: r.Name, RepoPath: r.Path, File: h.File, Line: h.Line, Text: h.Text})
+			if len(perRepo[i]) >= searchPerRepoCap {
+				break
 			}
+		}
+	}
+	for round := 0; len(out) < searchGlobalCap; round++ {
+		added := false
+		for i := range perRepo {
+			if round < len(perRepo[i]) {
+				out = append(out, perRepo[i][round])
+				added = true
+				if len(out) >= searchGlobalCap {
+					break
+				}
+			}
+		}
+		if !added {
+			break
 		}
 	}
 	return out
 }
+
+const (
+	searchPerRepoCap = 60  // max hits taken from a single repo before round-robin
+	searchGlobalCap  = 500 // total hits returned to the UI
+)
 
 // FileHit is one cross-repo file-name search result.
 type FileHit struct {
@@ -928,15 +953,34 @@ func (a *App) SearchFiles(query string) []FileHit {
 		return out
 	}
 	cfg := a.cfgSnapshot()
-	for _, r := range scan.Discover(cfg.Roots, cfg.ScanDepth, false) {
+	repos := scan.Discover(cfg.Roots, cfg.ScanDepth, false)
+	// Same round-robin fairness as SearchAll so early repos don't starve later
+	// ones of the file-hit budget.
+	perRepo := make([][]FileHit, len(repos))
+	for i, r := range repos {
 		files, _ := git.ListFiles(a.runner, r.Path)
 		for _, f := range files {
 			if strings.Contains(strings.ToLower(f), q) {
-				out = append(out, FileHit{Repo: r.Name, RepoPath: r.Path, File: f})
-				if len(out) >= 500 {
-					return out
+				perRepo[i] = append(perRepo[i], FileHit{Repo: r.Name, RepoPath: r.Path, File: f})
+				if len(perRepo[i]) >= searchPerRepoCap {
+					break
 				}
 			}
+		}
+	}
+	for round := 0; len(out) < searchGlobalCap; round++ {
+		added := false
+		for i := range perRepo {
+			if round < len(perRepo[i]) {
+				out = append(out, perRepo[i][round])
+				added = true
+				if len(out) >= searchGlobalCap {
+					break
+				}
+			}
+		}
+		if !added {
+			break
 		}
 	}
 	return out

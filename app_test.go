@@ -882,3 +882,39 @@ func TestDetectEditors(t *testing.T) {
 		t.Fatalf("code: %+v", code)
 	}
 }
+
+type dirGrepFake struct{ byDir map[string]string }
+
+func (f dirGrepFake) Run(dir string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "grep" {
+		return f.byDir[dir], nil
+	}
+	return "", nil
+}
+
+func TestSearchAllRoundRobinFairness(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"aaa", "zzz"} {
+		if err := os.MkdirAll(filepath.Join(root, name, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	a := &App{cfg: cfg, runner: dirGrepFake{byDir: map[string]string{
+		filepath.Join(root, "aaa"): "f1:1:x\nf2:2:x\n",
+		filepath.Join(root, "zzz"): "g1:1:x\n",
+	}}, store: newTestStore(t)}
+	hits := a.SearchAll("x")
+	repos := map[string]int{}
+	for _, h := range hits {
+		repos[h.Repo]++
+	}
+	if repos["aaa"] != 2 || repos["zzz"] != 1 {
+		t.Fatalf("both repos must be represented, got %v", repos)
+	}
+	// Round-robin interleaves: aaa, zzz, aaa (a later repo is not starved).
+	if len(hits) != 3 || hits[0].Repo != "aaa" || hits[1].Repo != "zzz" || hits[2].Repo != "aaa" {
+		t.Fatalf("expected interleaved aaa/zzz/aaa, got %+v", hits)
+	}
+}
