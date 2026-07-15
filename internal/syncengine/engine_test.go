@@ -192,6 +192,42 @@ func TestSyncOfflineNoCorruption(t *testing.T) {
 	}
 }
 
+// TestResetClearsStateAndRepushes guards the account-deletion path: Reset must
+// drop the persisted + in-memory sync bookkeeping so the next sign-in (a fresh
+// server user) re-pushes every local record instead of treating it as already
+// synced.
+func TestResetClearsStateAndRepushes(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	dir := t.TempDir()
+	st, _ := store.Open(filepath.Join(dir, "projects.json"))
+	statePath := filepath.Join(dir, "sync.json")
+	e := New(st, cloud.New(ts.URL), statePath, func(string) string { return "" })
+	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "p" })
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	pushesBefore := f.pushes
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("state file should exist after a sync: %v", err)
+	}
+
+	e.Reset()
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Error("Reset should delete the state file")
+	}
+
+	// A fresh sync now re-pushes the local record (empty bookkeeping = all dirty).
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if f.pushes <= pushesBefore {
+		t.Errorf("Reset should force a re-push on the next sync (pushes %d -> %d)", pushesBefore, f.pushes)
+	}
+}
+
 // TestSyncDetachedCodeDocNotRepushed guards the "detached record" rule: a pulled
 // code-project doc with no local repo on this machine is retained under its own
 // doc_id and must NOT, on a subsequent sync, be re-pushed under a fresh

@@ -4,9 +4,10 @@
   import Logo from "./Logo.svelte";
 
   export let path: string;
-  export let file: string;
+  // The single file to diff. Ignored (and defaulted) when `all` is set.
+  export let file = "";
   // When true, show the whole working-tree diff (all changed files) instead of
-  // a single file's diff. `file` is ignored in that mode.
+  // a single file's diff.
   export let all = false;
   export let onClose: () => void;
 

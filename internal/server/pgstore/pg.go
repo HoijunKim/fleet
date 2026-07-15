@@ -200,3 +200,25 @@ func (p *Pg) revokeFamilyOnce(ctx context.Context, tokenHash string) error {
 	}
 	return tx.Commit(ctx)
 }
+
+// DeleteAccount irreversibly removes everything tied to a user in one
+// transaction: their documents, version counter, refresh tokens (all families),
+// and the user row itself. Either all of it goes or none does.
+func (p *Pg) DeleteAccount(ctx context.Context, userID string) error {
+	tx, err := p.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, q := range []string{
+		`DELETE FROM documents WHERE user_id = $1`,
+		`DELETE FROM user_versions WHERE user_id = $1`,
+		`DELETE FROM refresh_tokens WHERE user_id = $1`,
+		`DELETE FROM users WHERE id = $1`,
+	} {
+		if _, err := tx.Exec(ctx, q, userID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}

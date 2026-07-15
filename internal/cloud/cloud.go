@@ -160,6 +160,29 @@ func (c *Client) Logout(refresh string) error {
 	return nil
 }
 
+// DeleteAccount irreversibly deletes the caller's account and all of its synced
+// data. It authenticates with an access token (not the refresh token) since the
+// server derives the user from the bearer.
+func (c *Client) DeleteAccount(access string) error {
+	req, err := http.NewRequest(http.MethodDelete, c.BaseURL+"/account", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+access)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ErrUnauthorized
+	}
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("delete account: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // Pull returns documents with version > since plus the new cursor.
 func (c *Client) Pull(since int64, access string) ([]Doc, int64, error) {
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/sync?since="+strconv.FormatInt(since, 10), nil)

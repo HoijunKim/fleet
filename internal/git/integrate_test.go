@@ -140,6 +140,41 @@ func TestWorktreeDiffIncludesTrackedAndUntracked(t *testing.T) {
 	}
 }
 
+func TestCloneCreatesWorkingCopy(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	base := t.TempDir()
+	seed := filepath.Join(base, "seed")
+	bare := filepath.Join(base, "src.git")
+	dest := filepath.Join(base, "clone")
+
+	// Seed a repo with one file and push it to a bare "remote".
+	if err := os.MkdirAll(seed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitOK(t, seed, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, seed, "config", "user.email", "s@t")
+	gitOK(t, seed, "config", "user.name", "S")
+	writeFile(t, seed, "README.md", "hello\n")
+	gitOK(t, seed, "add", "-A")
+	gitOK(t, seed, "commit", "-m", "init")
+	gitOK(t, seed, "branch", "-M", "master")
+	gitOK(t, base, "init", "--bare", bare)
+	gitOK(t, seed, "remote", "add", "origin", bare)
+	gitOK(t, seed, "push", "-u", "origin", "master")
+
+	if err := Clone(ExecRunner{}, bare, dest); err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, ".git")); err != nil {
+		t.Error("clone did not create a .git dir")
+	}
+	if _, err := os.Stat(filepath.Join(dest, "README.md")); err != nil {
+		t.Error("clone did not check out the seeded file")
+	}
+}
+
 func TestMergeUpstreamCleanDiverge(t *testing.T) {
 	wB := setupDiverged(t, false)
 	if err := MergeUpstream(ExecRunner{}, wB); err != nil {

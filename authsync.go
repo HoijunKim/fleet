@@ -184,6 +184,38 @@ func (a *App) SignOut() string {
 	return ""
 }
 
+// DeleteAccount irreversibly deletes the signed-in user's cloud account and all
+// server-side synced data, then signs out locally. Local project data on this
+// machine is left untouched (export it first if wanted). Returns "" on success
+// or an error message.
+func (a *App) DeleteAccount() string {
+	a.authMu.Lock()
+	sess := a.session
+	signedIn := a.signedIn
+	a.authMu.Unlock()
+	if !signedIn || sess == nil {
+		return "not signed in"
+	}
+	if err := sess.WithAccess(func(access string) error {
+		return a.cloudClient.DeleteAccount(access)
+	}); err != nil {
+		if errors.Is(err, cloud.ErrRefreshFailed) {
+			// The refresh token is dead (often because a prior attempt already
+			// deleted the account). Clear local state like runSync does rather
+			// than leave the app believing it is still signed in.
+			a.signOutLocally()
+			return "session expired, please sign in again"
+		}
+		return err.Error()
+	}
+	a.signOutLocally()
+	// The account is gone; the persisted sync bookkeeping now points at a user
+	// that no longer exists. Reset it so a fresh sign-in re-syncs from scratch
+	// instead of skipping every record as "already synced".
+	a.engine.Reset()
+	return ""
+}
+
 // SyncNow runs one sync immediately and returns "" or an error message.
 func (a *App) SyncNow() string {
 	switch err := a.runSync(); {

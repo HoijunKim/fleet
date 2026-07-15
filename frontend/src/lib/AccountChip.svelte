@@ -3,19 +3,22 @@
   export let avatarUrl: string = "";
   export let onSignOut: () => void;
   export let onSyncNow: () => void;
+  export let onDeleteAccount: () => void = () => {};
 
   let open = false;
   let imgOk = true;
+  let confirmingDelete = false;
   function toggle() {
     open = !open;
+    if (!open) confirmingDelete = false;
   }
   function onWindowClick(e: MouseEvent) {
     if (!open) return;
     const t = e.target as HTMLElement;
-    if (!t.closest(".acct")) open = false;
+    if (!t.closest(".acct")) { open = false; confirmingDelete = false; }
   }
   function onWindowKey(e: KeyboardEvent) {
-    if (open && e.key === "Escape") open = false;
+    if (open && e.key === "Escape") { open = false; confirmingDelete = false; }
   }
   function initial(): string {
     return (login || "?").slice(0, 1).toUpperCase();
@@ -36,9 +39,17 @@
   </button>
   {#if open}
     <div class="acct-menu" role="menu">
-      <button class="acct-item" role="menuitem" on:click={() => { open = false; onSyncNow(); }}>Sync now</button>
+      <button class="acct-item" role="menuitem" on:click={() => { open = false; confirmingDelete = false; onSyncNow(); }}>Sync now</button>
       <div class="acct-div"></div>
-      <button class="acct-item" role="menuitem" on:click={() => { open = false; onSignOut(); }}>Sign out</button>
+      <button class="acct-item" role="menuitem" on:click={() => { open = false; confirmingDelete = false; onSignOut(); }}>Sign out</button>
+      <div class="acct-div"></div>
+      {#if confirmingDelete}
+        <div class="acct-confirm">Delete account and all synced data?</div>
+        <button class="acct-item" role="menuitem" on:click={() => (confirmingDelete = false)}>Cancel</button>
+        <button class="acct-item acct-danger" role="menuitem" on:click={() => { open = false; confirmingDelete = false; onDeleteAccount(); }}>Delete account</button>
+      {:else}
+        <button class="acct-item acct-danger" role="menuitem" on:click={() => (confirmingDelete = true)}>Delete account</button>
+      {/if}
     </div>
   {/if}
 </div>
@@ -110,4 +121,7 @@
   .acct-item:hover, .acct-item:focus-visible { background: var(--accent-soft); color: var(--accent); }
   .acct-item:focus-visible { outline: none; }
   .acct-div { height: 1px; background: var(--border); margin: 4px 2px; }
+  .acct-danger { color: var(--err); }
+  .acct-danger:hover, .acct-danger:focus-visible { background: rgba(240, 101, 92, 0.12); color: var(--err); }
+  .acct-confirm { padding: 6px 10px 2px; font-size: 11px; color: var(--muted); line-height: 1.4; }
 </style>

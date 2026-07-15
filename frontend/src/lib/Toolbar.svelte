@@ -34,6 +34,7 @@
   export let onSignIn: () => void = () => {};
   export let onSignOut: () => void = () => {};
   export let onSyncNow: () => void = () => {};
+  export let onDeleteAccount: () => void = () => {};
   export let onRetrySync: () => void = () => {};
 
   // Bulk git actions collapse into one dropdown so the bar stays a single row.
@@ -123,7 +124,7 @@
         {onSignIn}
       />
       {#if authSignedIn}
-        <AccountChip login={authLogin} avatarUrl={authAvatar} {onSignOut} {onSyncNow} />
+        <AccountChip login={authLogin} avatarUrl={authAvatar} {onSignOut} {onSyncNow} {onDeleteAccount} />
       {:else}
         <SignIn {onSignIn} busy={authBusy} />
       {/if}

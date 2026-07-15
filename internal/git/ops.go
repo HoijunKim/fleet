@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -98,6 +99,13 @@ func CommitAll(r Runner, dir, msg string) error {
 
 // Push runs git push.
 func Push(r Runner, dir string) error { _, err := r.Run(dir, "push"); return err }
+
+// Clone clones url into dest. The runner's dir is irrelevant to `git clone`, so
+// it runs from dest's parent; git creates dest itself.
+func Clone(r Runner, url, dest string) error {
+	_, err := r.Run(filepath.Dir(dest), "clone", url, dest)
+	return err
+}
 
 // MergeUpstream merges the tracked upstream (@{u}) into the current branch,
 // creating a merge commit when the histories diverged. See integrateUpstream

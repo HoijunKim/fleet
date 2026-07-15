@@ -94,12 +94,14 @@ func NewRouter(opts Options) http.Handler {
 	}
 
 	sync := Sync{Store: opts.Store}
+	account := Account{Store: opts.Store}
 	userLimit := NewRateLimiter(20, 40, opts.TrustProxy) // per-user on sync
 	r.Group(func(r chi.Router) {
 		r.Use(AuthMiddleware(opts.SigningKey))
 		r.Use(userLimit.ByUser)
 		r.Get("/sync", sync.Get)
 		r.Post("/sync", sync.Post)
+		r.Delete("/account", account.Delete)
 	})
 
 	return r

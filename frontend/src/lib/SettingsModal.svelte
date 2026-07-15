@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData } from "../../wailsjs/go/main/App";
   import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { editorSelection } from "./editorSelection";
@@ -16,6 +16,21 @@
   let loading = true;
   let tab: "general" | "ai" | "integrations" = "general";
   let aiOk = false;
+  let exporting = false;
+
+  // Export the local store to a JSON file the user picks (native save dialog).
+  async function doExport() {
+    if (exporting) return;
+    exporting = true;
+    try {
+      const res = await ExportData();
+      if (res === "" ) toastSuccess("Data exported");
+      else if (res === "cancelled") { /* user dismissed the dialog */ }
+      else toastError("Export: " + res);
+    } finally {
+      exporting = false;
+    }
+  }
 
   // Load the real Config object so we bind to whatever field names it declares.
   async function load() {
@@ -251,6 +266,17 @@
             <span class="toggle-track"><span class="toggle-thumb"></span></span>
             <span class="toggle-text">Show non-git folders</span>
           </label>
+        </div>
+
+        <div class="detail-sep"></div>
+        <div class="field">
+          <span class="field-label">Data</span>
+          <div class="set-data-row">
+            <button class="btn btn-secondary btn-sm" on:click={doExport} disabled={exporting}>
+              {exporting ? "Exporting..." : "Export data (JSON)"}
+            </button>
+            <span class="ai-hint">Save all projects and tasks to a JSON file on this machine.</span>
+          </div>
         </div>
       {:else if tab === "ai"}
         <div class="field">

@@ -700,6 +700,33 @@ select.input option { background: var(--surface); color: var(--text); }
 .sync-pill.ahead { color: var(--ok); border-color: rgba(64, 196, 99, 0.35); background: rgba(64, 196, 99, 0.08); }
 .sync-pill.behind { color: var(--dirty); border-color: rgba(227, 165, 58, 0.35); background: rgba(227, 165, 58, 0.08); }
 
+/* Synced-but-uncloned projects (from another device). */
+.uncloned {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--raised);
+}
+.uncloned-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.uncloned-sub { font-size: 11px; color: var(--muted); }
+.uncloned-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.uncloned-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.uncloned-name { font-size: 13px; color: var(--text); font-weight: 600; flex: 0 0 auto; }
+.uncloned-meta {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  padding: 1px 6px; border-radius: var(--r-pill); background: var(--bg); border: 1px solid var(--border);
+}
+.uncloned-remote {
+  font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 340px;
+}
+.uncloned-spacer { flex: 1 1 auto; }
+.uncloned-nocl { font-size: 11px; color: var(--faint); font-style: italic; }
+
+/* Settings > Data row. */
+.set-data-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
 /* Diverged banner: shown when local and upstream both have unshared commits. */
 .diverged-banner {
   display: flex;

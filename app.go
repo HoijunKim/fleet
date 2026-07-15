@@ -530,6 +530,144 @@ func (a *App) UpdateProject(id, status string, priority int, deadline, notes str
 // code project loses its project-management data but is still discovered).
 func (a *App) DeleteProject(id string) string { return errMsg(a.store.Delete(id)) }
 
+// UnclonedView is a project that synced from another device but has no local
+// repo on this machine (a "detached" record, keyed by its portable git:/local:
+// doc id rather than a filesystem path).
+type UnclonedView struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Remote    string `json:"remote"` // https clone URL, or "" when unknown
+	TaskCount int    `json:"taskCount"`
+	CanClone  bool   `json:"canClone"`
+}
+
+// SyncedUncloned lists detached records: sync docs for code projects whose repo
+// is not present locally. A cloned repo is keyed by its filesystem path, so a
+// record whose store id still carries the portable git:/local: prefix is one
+// that arrived from another device and was never reconciled to a local clone.
+func (a *App) SyncedUncloned() []UnclonedView {
+	roots := a.cfgSnapshot().Roots
+	out := []UnclonedView{}
+	for id, rec := range a.store.Snapshot() {
+		if !strings.HasPrefix(id, "git:") && !strings.HasPrefix(id, "local:") {
+			continue
+		}
+		remote, canClone := unclonedRemote(id)
+		// "Uncloned" means not on disk. Once its repo has been cloned into a scan
+		// root (where CloneUncloned puts it), drop it from the list even before
+		// the sync engine reconciles the detached record.
+		if canClone && clonedInRoots(roots, remote) {
+			continue
+		}
+		out = append(out, UnclonedView{
+			ID: id, Name: rec.Name, Remote: remote,
+			TaskCount: len(rec.Tasks), CanClone: canClone,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// clonedInRoots reports whether a folder for remote's repo already exists in one
+// of the scan roots - the same destination CloneUncloned would use.
+func clonedInRoots(roots []string, remote string) bool {
+	base := cloneBase(remote)
+	if base == "" {
+		return false
+	}
+	for _, root := range roots {
+		if fi, err := os.Stat(filepath.Join(root, base)); err == nil && fi.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// unclonedRemote rebuilds an https clone URL from a git: doc id
+// (git:host/owner/repo -> https://host/owner/repo), or returns ("", false) for a
+// local: id, which was synced without any known remote.
+func unclonedRemote(id string) (string, bool) {
+	if rest := strings.TrimPrefix(id, "git:"); rest != id {
+		return "https://" + rest, true
+	}
+	return "", false
+}
+
+// cloneBase is the destination directory name for a clone: the repo segment of
+// the remote URL, without any trailing ".git". It returns "" for a degenerate
+// segment (empty, ".", "..", or one containing a path separator) so a
+// pathological doc id can never resolve dest to a scan root's parent.
+func cloneBase(remote string) string {
+	remote = strings.TrimSuffix(remote, "/")
+	if i := strings.LastIndex(remote, "/"); i >= 0 {
+		remote = remote[i+1:]
+	}
+	remote = strings.TrimSuffix(remote, ".git")
+	if remote == "" || remote == "." || remote == ".." ||
+		strings.ContainsAny(remote, `/\`) {
+		return ""
+	}
+	return remote
+}
+
+// CloneUncloned clones a detached git: record's repo into destRoot (or the first
+// configured Root when destRoot is empty). It refuses a record with no known
+// remote and never overwrites an existing directory. On success a later scan
+// discovers the clone and the sync engine reconciles the detached record to it.
+func (a *App) CloneUncloned(id, destRoot string) string {
+	remote, ok := unclonedRemote(id)
+	if !ok {
+		return "error: this project has no known remote to clone"
+	}
+	if strings.TrimSpace(destRoot) == "" {
+		roots := a.cfgSnapshot().Roots
+		if len(roots) == 0 {
+			return "error: no scan root configured to clone into"
+		}
+		destRoot = roots[0]
+	}
+	base := cloneBase(remote)
+	if base == "" {
+		return "error: could not derive a folder name from " + remote
+	}
+	dest := filepath.Join(destRoot, base)
+	if _, err := os.Stat(dest); err == nil {
+		return "error: " + dest + " already exists"
+	}
+	return errMsg(git.Clone(a.runner, remote, dest))
+}
+
+// ExportData writes the full local store (every project and its tasks) to a
+// user-chosen JSON file. Returns "" on success, "cancelled" if the save dialog
+// is dismissed, or an error string. Local only - no network.
+func (a *App) ExportData() string {
+	dest, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{
+		Title:           "Export fleet data",
+		DefaultFilename: "fleet-export-" + time.Now().Format("2006-01-02") + ".json",
+		Filters:         []wruntime.FileFilter{{DisplayName: "JSON", Pattern: "*.json"}},
+	})
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	if strings.TrimSpace(dest) == "" {
+		return "cancelled"
+	}
+	if err := a.writeExport(dest); err != nil {
+		return "error: " + err.Error()
+	}
+	return ""
+}
+
+// writeExport serializes the whole store to dest as pretty JSON. Split from the
+// dialog so the export payload is testable without a native file picker.
+func (a *App) writeExport(dest string) error {
+	data, err := json.MarshalIndent(a.store.Snapshot(), "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dest, data, 0o644)
+}
+
 // AddTask appends a task to a project.
 func (a *App) AddTask(projectID, title, due string) string {
 	tid := nextID("t-")

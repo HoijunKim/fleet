@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -111,6 +112,100 @@ func TestFetchAndPullReturnErrTextOnFailure(t *testing.T) {
 	}
 	if msg := a.Push("/x"); msg == "" {
 		t.Error("Push should return error text on failure")
+	}
+}
+
+func TestSyncedUncloned(t *testing.T) {
+	a := newTestApp(t)
+	// A locally-present code project is keyed by its path - NOT detached.
+	if err := a.store.Update("C:/repos/here", func(r *store.Record) { r.Name = "local-here" }); err != nil {
+		t.Fatal(err)
+	}
+	// A detached git: record: listed and cloneable, with its remote rebuilt.
+	if err := a.store.Update("git:github.com/o/r", func(r *store.Record) {
+		r.Name = "remote-one"
+		r.Tasks = []store.Task{{ID: "t1", Title: "x"}}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A detached local: record: listed but not cloneable (no known remote).
+	if err := a.store.Update("local:abc123", func(r *store.Record) { r.Name = "no-remote" }); err != nil {
+		t.Fatal(err)
+	}
+	a.AddProject("manual-one") // manual record - not detached
+
+	got := a.SyncedUncloned()
+	if len(got) != 2 {
+		t.Fatalf("want 2 detached records, got %d: %+v", len(got), got)
+	}
+	by := map[string]UnclonedView{}
+	for _, v := range got {
+		by[v.ID] = v
+	}
+	if g := by["git:github.com/o/r"]; g.Remote != "https://github.com/o/r" || !g.CanClone || g.TaskCount != 1 {
+		t.Errorf("git: record wrong: %+v", g)
+	}
+	if l := by["local:abc123"]; l.CanClone || l.Remote != "" {
+		t.Errorf("local: record must not be cloneable: %+v", l)
+	}
+
+	// Once the repo is cloned into a scan root, it drops off the uncloned list.
+	root := a.cfgSnapshot().Roots[0]
+	if err := os.MkdirAll(filepath.Join(root, "r"), 0o755); err != nil { // matches cloneBase("https://github.com/o/r")
+		t.Fatal(err)
+	}
+	after := a.SyncedUncloned()
+	for _, v := range after {
+		if v.ID == "git:github.com/o/r" {
+			t.Error("a git: record whose repo is already cloned must not be listed")
+		}
+	}
+	if len(after) != 1 { // only the local: record remains
+		t.Errorf("want 1 remaining after clone, got %d: %+v", len(after), after)
+	}
+}
+
+func TestCloneUnclonedGuards(t *testing.T) {
+	a := newTestApp(t)
+	// A local: record has no remote to clone.
+	if msg := a.CloneUncloned("local:abc", ""); !strings.Contains(msg, "remote") {
+		t.Errorf("local: clone should be refused, got %q", msg)
+	}
+	// An existing destination is never overwritten.
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "r"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if msg := a.CloneUncloned("git:github.com/o/r", root); !strings.Contains(msg, "already exists") {
+		t.Errorf("existing dest should be refused, got %q", msg)
+	}
+	// A pathological doc id whose repo segment is ".." must not resolve a dest
+	// outside the root.
+	if msg := a.CloneUncloned("git:github.com/o/..", root); !strings.Contains(msg, "folder name") {
+		t.Errorf("a '..' repo segment should be refused, got %q", msg)
+	}
+}
+
+func TestWriteExportProducesValidJSON(t *testing.T) {
+	a := newTestApp(t)
+	id := a.AddProject("exported")
+	a.addTaskReturnID(t, id, "a task")
+
+	dest := filepath.Join(t.TempDir(), "out.json")
+	if err := a.writeExport(dest); err != nil {
+		t.Fatalf("writeExport: %v", err)
+	}
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	var m map[string]store.Record
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("export is not valid JSON: %v", err)
+	}
+	rec, ok := m[id]
+	if !ok || rec.Name != "exported" || len(rec.Tasks) != 1 {
+		t.Errorf("export missing the project/task: %+v", m)
 	}
 }
 

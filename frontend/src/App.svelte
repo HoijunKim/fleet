@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, SignOut, SyncNow, SyncState } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, SignOut, SyncNow, SyncState, DeleteAccount } from "../wailsjs/go/main/App";
   import { EventsOn } from "../wailsjs/runtime/runtime";
   import Toolbar from "./lib/Toolbar.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
@@ -14,6 +14,7 @@
   import Today from "./lib/Today.svelte";
   import Graph from "./lib/Graph.svelte";
   import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
+  import UnclonedProjects from "./lib/UnclonedProjects.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import AgentOverlay from "./lib/AgentOverlay.svelte";
   import { setProject as agentSetProject, isFleet } from "./lib/agentSession";
@@ -63,6 +64,11 @@
   async function syncNow() {
     const err = await SyncNow();
     if (err) toastError("Sync: " + err);
+  }
+  async function deleteAccount() {
+    const err = await DeleteAccount();
+    if (err) toastError("Delete account: " + err);
+    else toastSuccess("Account deleted");
   }
 
   let paletteOpen = false;
@@ -703,6 +709,7 @@
   onSignIn={signIn}
   onSignOut={signOut}
   onSyncNow={syncNow}
+  onDeleteAccount={deleteAccount}
   onRetrySync={syncNow}
 />
 
@@ -720,6 +727,8 @@
     onHighPriorityToggle={() => (highPriorityOnly = !highPriorityOnly)}
     onTagFilter={(t) => (tagFilter = t)}
   />
+
+  <UnclonedProjects onCloned={loadAll} />
 
   {#if selectedCount > 0}
     <div class="bulk-bar">

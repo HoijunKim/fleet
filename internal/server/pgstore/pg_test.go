@@ -127,6 +127,47 @@ func TestLogoutRevokesFamily(t *testing.T) {
 	}
 }
 
+func TestDeleteAccountRemovesEverything(t *testing.T) {
+	pg := testPg(t)
+	ctx := context.Background()
+	u, err := pg.UpsertUserByGitHub(ctx, GitHubIdentity{GitHubID: 202, Login: "u202"})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	exp := time.Now().Add(24 * time.Hour)
+	if err := pg.CreateRefreshToken(ctx, u.ID, "d0", exp); err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	if _, _, err := pg.Push(ctx, u.ID, []Doc{{Kind: "project", DocID: "p1", Payload: []byte(`{}`), UpdatedAt: "2026-01-01T00:00:00Z"}}); err != nil {
+		t.Fatalf("push doc: %v", err)
+	}
+
+	if err := pg.DeleteAccount(ctx, u.ID); err != nil {
+		t.Fatalf("DeleteAccount: %v", err)
+	}
+
+	// Documents gone.
+	docs, _, err := pg.Pull(ctx, u.ID, 0)
+	if err != nil {
+		t.Fatalf("pull after delete: %v", err)
+	}
+	if len(docs) != 0 {
+		t.Errorf("expected no documents after delete, got %d", len(docs))
+	}
+	// Refresh token gone: rotating it is now an unknown token, not reuse.
+	if _, err := pg.RotateRefreshToken(ctx, "d0", "d1", exp); err == nil || errors.Is(err, ErrRefreshReuse) {
+		t.Errorf("token after account delete: err = %v, want a plain not-found error", err)
+	}
+	// User row gone: re-upserting the same GitHub id mints a fresh user id.
+	u2, err := pg.UpsertUserByGitHub(ctx, GitHubIdentity{GitHubID: 202, Login: "u202"})
+	if err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+	if u2.ID == u.ID {
+		t.Errorf("user row was not deleted: re-upsert reused id %s", u.ID)
+	}
+}
+
 func TestExpiredRefreshIsInvalidNotReuse(t *testing.T) {
 	pg := testPg(t)
 	ctx := context.Background()

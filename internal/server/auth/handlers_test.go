@@ -102,6 +102,7 @@ func (f *fakeStore) Pull(ctx context.Context, userID string, since int64) ([]pgs
 func (f *fakeStore) Push(ctx context.Context, userID string, docs []pgstore.Doc) ([]pgstore.PushResult, int64, error) {
 	return nil, 0, nil
 }
+func (f *fakeStore) DeleteAccount(ctx context.Context, userID string) error { return nil }
 
 func newTestServer(h *Handlers) *httptest.Server {
 	mux := http.NewServeMux()

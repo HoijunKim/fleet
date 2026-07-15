@@ -53,4 +53,7 @@ type Store interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	Pull(ctx context.Context, userID string, since int64) ([]Doc, int64, error)
 	Push(ctx context.Context, userID string, docs []Doc) ([]PushResult, int64, error)
+	// DeleteAccount irreversibly removes a user: their documents, version
+	// counter, refresh tokens, and the user row, in a single transaction.
+	DeleteAccount(ctx context.Context, userID string) error
 }

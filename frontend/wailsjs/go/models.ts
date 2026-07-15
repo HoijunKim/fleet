@@ -565,6 +565,27 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	
+	export class UnclonedView {
+	    id: string;
+	    name: string;
+	    remote: string;
+	    taskCount: number;
+	    canClone: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new UnclonedView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.remote = source["remote"];
+	        this.taskCount = source["taskCount"];
+	        this.canClone = source["canClone"];
+	    }
+	}
 
 }
 

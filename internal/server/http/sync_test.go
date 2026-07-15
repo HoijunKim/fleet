@@ -15,12 +15,14 @@ import (
 
 // syncFakeStore implements pgstore.Store with canned sync data.
 type syncFakeStore struct {
-	pulled   []pgstore.Doc
-	cursor   int64
-	gotPush  []pgstore.Doc
-	pushRes  []pgstore.PushResult
-	pushCurs int64
-	pingErr  error
+	pulled    []pgstore.Doc
+	cursor    int64
+	gotPush   []pgstore.Doc
+	pushRes   []pgstore.PushResult
+	pushCurs  int64
+	pingErr   error
+	deletedID string // records the userID passed to DeleteAccount
+	deleteErr error
 }
 
 func (f *syncFakeStore) Ping(ctx context.Context) error { return f.pingErr }
@@ -41,6 +43,13 @@ func (f *syncFakeStore) Pull(ctx context.Context, userID string, since int64) ([
 func (f *syncFakeStore) Push(ctx context.Context, userID string, docs []pgstore.Doc) ([]pgstore.PushResult, int64, error) {
 	f.gotPush = docs
 	return f.pushRes, f.pushCurs, nil
+}
+func (f *syncFakeStore) DeleteAccount(ctx context.Context, userID string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deletedID = userID
+	return nil
 }
 
 func authedClient(t *testing.T, srv *httptest.Server, key []byte) (*http.Client, string) {

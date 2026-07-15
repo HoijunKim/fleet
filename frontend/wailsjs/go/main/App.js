@@ -74,12 +74,20 @@ export function Checkout(arg1, arg2) {
   return window['go']['main']['App']['Checkout'](arg1, arg2);
 }
 
+export function CloneUncloned(arg1, arg2) {
+  return window['go']['main']['App']['CloneUncloned'](arg1, arg2);
+}
+
 export function CommitActivity(arg1, arg2) {
   return window['go']['main']['App']['CommitActivity'](arg1, arg2);
 }
 
 export function CommitAll(arg1, arg2) {
   return window['go']['main']['App']['CommitAll'](arg1, arg2);
+}
+
+export function DeleteAccount() {
+  return window['go']['main']['App']['DeleteAccount']();
 }
 
 export function DeleteProject(arg1) {
@@ -104,6 +112,10 @@ export function DiffFile(arg1, arg2) {
 
 export function EditTask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['EditTask'](arg1, arg2, arg3, arg4);
+}
+
+export function ExportData() {
+  return window['go']['main']['App']['ExportData']();
 }
 
 export function Fetch(arg1) {
@@ -296,6 +308,10 @@ export function SyncNow() {
 
 export function SyncState() {
   return window['go']['main']['App']['SyncState']();
+}
+
+export function SyncedUncloned() {
+  return window['go']['main']['App']['SyncedUncloned']();
 }
 
 export function ToggleTask(arg1, arg2) {

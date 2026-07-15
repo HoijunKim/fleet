@@ -59,6 +59,21 @@ func (e *Engine) LostLocalEdit() bool {
 	return v
 }
 
+// Reset discards all sync bookkeeping - the in-memory doc map and the persisted
+// state file - so the next SyncOnce starts from an empty cursor and treats every
+// local record as new. Used after account deletion: the next sign-in is a
+// different server user, and the stale "already synced" hashes would otherwise
+// make SyncOnce skip pushing the local records to the new (empty) account.
+func (e *Engine) Reset() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state = State{Docs: map[string]DocState{}}
+	e.loaded = false
+	e.lastConflict = false
+	e.lostLocalEdit = false
+	_ = os.Remove(e.statePath)
+}
+
 // conflictsPath is where clobbered local records are appended (one JSON object
 // per line) for recovery, next to the sync state file.
 func (e *Engine) conflictsPath() string {

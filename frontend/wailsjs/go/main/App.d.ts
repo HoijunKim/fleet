@@ -39,9 +39,13 @@ export function CancelAgent():Promise<void>;
 
 export function Checkout(arg1:string,arg2:string):Promise<string>;
 
+export function CloneUncloned(arg1:string,arg2:string):Promise<string>;
+
 export function CommitActivity(arg1:string,arg2:number):Promise<Array<main.DayCountView>>;
 
 export function CommitAll(arg1:string,arg2:string):Promise<string>;
+
+export function DeleteAccount():Promise<string>;
 
 export function DeleteProject(arg1:string):Promise<string>;
 
@@ -54,6 +58,8 @@ export function DiffAll(arg1:string):Promise<string>;
 export function DiffFile(arg1:string,arg2:string):Promise<string>;
 
 export function EditTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function ExportData():Promise<string>;
 
 export function Fetch(arg1:string):Promise<string>;
 
@@ -150,6 +156,8 @@ export function StashPop(arg1:string):Promise<string>;
 export function SyncNow():Promise<string>;
 
 export function SyncState():Promise<main.SyncStateView>;
+
+export function SyncedUncloned():Promise<Array<main.UnclonedView>>;
 
 export function ToggleTask(arg1:string,arg2:string):Promise<string>;
 
