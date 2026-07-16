@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, SignOut, SyncNow, SyncState, DeleteAccount } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, CancelAuth, SignOut, SyncNow, SyncState, DeleteAccount } from "../wailsjs/go/main/App";
   import { EventsOn } from "../wailsjs/runtime/runtime";
   import Toolbar from "./lib/Toolbar.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
@@ -19,7 +19,7 @@
   import AgentOverlay from "./lib/AgentOverlay.svelte";
   import { setProject as agentSetProject, isFleet } from "./lib/agentSession";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
-  import { STATUS_ORDER, deadlineSort, daysUntil } from "./lib/pm";
+  import { STATUS_ORDER, deadlineSort, daysUntil, allTags } from "./lib/pm";
 
   // Each row is a ProjectView with (for code projects) live git fields merged in.
   let projects: any[] = [];
@@ -50,12 +50,16 @@
     authBusy = true;
     try {
       const err = await AuthStart();
-      if (err) toastError("Sign in: " + err);
+      // "cancelled" is a soft outcome (the user backed out) - no error toast.
+      if (err && err !== "cancelled") toastError("Sign in: " + err);
     } catch (e) {
       toastError("Sign in: " + errText(e));
     } finally {
       authBusy = false;
     }
+  }
+  function cancelSignIn() {
+    CancelAuth(); // unblocks the in-flight AuthStart, which resolves to "cancelled"
   }
   async function signOut() {
     const err = await SignOut();
@@ -707,6 +711,7 @@
   {authBusy}
   syncState={sync}
   onSignIn={signIn}
+  onCancelSignIn={cancelSignIn}
   onSignOut={signOut}
   onSyncNow={syncNow}
   onDeleteAccount={deleteAccount}
@@ -763,6 +768,7 @@
       onRepoChanged={refreshRepo}
       onProjectChanged={refreshProject}
       onDeleteProject={deleteProject}
+      allTags={allTags(projects)}
       requestTab={detailTab}
       requestNonce={detailNonce}
       bind:diffOpen

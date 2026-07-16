@@ -68,6 +68,11 @@ type App struct {
 	user        cloud.User
 	signedIn    bool
 	session     *cloud.Session
+	// authCancel lets CancelAuth abort an in-flight AuthStart (which otherwise
+	// blocks up to the 3-minute timeout waiting on the loopback callback). Guarded
+	// by authCancelMu; AuthStart installs a fresh channel per attempt.
+	authCancel   chan struct{}
+	authCancelMu sync.Mutex
 	syncMu      sync.Mutex
 	syncView    SyncStateView
 	syncTrigger chan struct{}
@@ -225,6 +230,17 @@ func (a *App) RunCommand(path, line string) string {
 }
 
 func (a *App) GetConfig() config.Config { return a.cfgSnapshot() }
+
+// DirExists reports whether path is an existing directory. Settings uses it to
+// flag a configured Root that is missing (e.g. an unmounted drive). A hint, not
+// a gate: any stat error (missing, permission) returns false.
+func (a *App) DirExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
+}
 
 // SaveConfig persists the config and updates the in-memory copy.
 func (a *App) SaveConfig(c config.Config) string {

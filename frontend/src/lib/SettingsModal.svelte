@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists } from "../../wailsjs/go/main/App";
   import type { config } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { editorSelection } from "./editorSelection";
@@ -32,6 +32,17 @@
     }
   }
 
+  // Roots that don't currently exist on disk (a hint, not a save blocker).
+  let missingRoots: Record<string, boolean> = {};
+  async function checkRoots() {
+    if (!cfg) return;
+    const next: Record<string, boolean> = {};
+    for (const r of cfg.Roots) {
+      next[r] = !(await DirExists(r));
+    }
+    missingRoots = next;
+  }
+
   // Load the real Config object so we bind to whatever field names it declares.
   async function load() {
     loading = true;
@@ -42,6 +53,7 @@
       if (!cfg.AIProvider) cfg.AIProvider = "claude";
       refreshAiOk();
       syncEditorChoice();
+      checkRoots();
     } catch (e) {
       toastError("Load failed: " + String(e));
     } finally {
@@ -142,11 +154,13 @@
     if (!v || !cfg) return;
     cfg.Roots = [...cfg.Roots, v];
     newRoot = "";
+    checkRoots();
   }
 
   function removeRoot(i: number) {
     if (!cfg) return;
     cfg.Roots = cfg.Roots.filter((_, idx) => idx !== i);
+    checkRoots();
   }
 
   function onRootKey(e: KeyboardEvent) {
@@ -161,8 +175,10 @@
     saving = true;
     saveErr = "";
     try {
-      cfg.ScanDepth = Number(cfg.ScanDepth) || 0;
-      cfg.AutoFetchMinutes = Number(cfg.AutoFetchMinutes) || 0;
+      // Clamp to non-negative integers: the `min="0"` input attr is only a soft
+      // hint a user can bypass by typing.
+      cfg.ScanDepth = Math.max(0, Math.floor(Number(cfg.ScanDepth) || 0));
+      cfg.AutoFetchMinutes = Math.max(0, Math.floor(Number(cfg.AutoFetchMinutes) || 0));
       const err = await SaveConfig(cfg);
       if (err) {
         saveErr = err;
@@ -207,12 +223,13 @@
           <div class="root-list">
             {#each cfg.Roots as root, i (i)}
               <div class="root-row">
-                <span class="root-path mono">{root}</span>
+                <span class="root-path mono" class:missing={missingRoots[root]}>{root}</span>
+                {#if missingRoots[root]}<span class="root-missing" title="This folder was not found on disk">not found</span>{/if}
                 <button class="root-x" on:click={() => removeRoot(i)} aria-label="Remove root">x</button>
               </div>
             {/each}
             {#if cfg.Roots.length === 0}
-              <div class="root-empty">No roots configured</div>
+              <div class="root-empty">No roots configured - nothing will be scanned</div>
             {/if}
           </div>
           <div class="root-add">

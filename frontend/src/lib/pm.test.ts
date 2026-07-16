@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { daysUntil, ddayLabel, deadlineSort } from "./pm";
+import { daysUntil, ddayLabel, deadlineSort, allTags } from "./pm";
 
 // Build a "YYYY-MM-DD" string offset by n days from today, using LOCAL date
 // parts (daysUntil parses "YYYY-MM-DD" as local midnight, so toISOString/UTC
@@ -40,5 +40,21 @@ describe("deadlineSort", () => {
   it("sorts sooner first, no-deadline last", () => {
     expect(deadlineSort(dayOffset(1))).toBeLessThan(deadlineSort(dayOffset(9)));
     expect(deadlineSort("")).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("allTags", () => {
+  it("returns the sorted, de-duped, trimmed set across projects", () => {
+    const projects = [
+      { tags: ["web", "urgent"] },
+      { tags: ["  web  ", "backend", ""] },
+      { tags: null },
+      {},
+    ];
+    expect(allTags(projects)).toEqual(["backend", "urgent", "web"]);
+  });
+  it("handles empty input", () => {
+    expect(allTags([])).toEqual([]);
+    expect(allTags(undefined as any)).toEqual([]);
   });
 });

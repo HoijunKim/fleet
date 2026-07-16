@@ -41,3 +41,16 @@ export function tagColor(tag: string): string {
   const hue = Math.abs(hash) % 360;
   return "hsl(" + hue + ", 55%, 55%)";
 }
+
+// allTags is the sorted, de-duped set of tags in use across every project, for
+// the tag-input autocomplete suggestions.
+export function allTags(projects: any[]): string[] {
+  const s = new Set<string>();
+  for (const p of projects || []) {
+    for (const t of (p && p.tags) || []) {
+      const v = String(t).trim();
+      if (v) s.add(v);
+    }
+  }
+  return [...s].sort();
+}

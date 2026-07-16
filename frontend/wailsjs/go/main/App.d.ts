@@ -37,6 +37,8 @@ export function CancelAI():Promise<void>;
 
 export function CancelAgent():Promise<void>;
 
+export function CancelAuth():Promise<void>;
+
 export function Checkout(arg1:string,arg2:string):Promise<string>;
 
 export function CloneUncloned(arg1:string,arg2:string):Promise<string>;
@@ -64,6 +66,8 @@ export function DetectEditors():Promise<Array<main.EditorOption>>;
 export function DiffAll(arg1:string):Promise<string>;
 
 export function DiffFile(arg1:string,arg2:string):Promise<string>;
+
+export function DirExists(arg1:string):Promise<boolean>;
 
 export function EditTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 

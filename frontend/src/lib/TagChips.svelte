@@ -6,15 +6,19 @@
   import { toastError } from "./toasts";
   import { tagColor } from "./pm";
 
-  export let project: any;
+  export let project: any = null;
   // Refresh this project's PM fields after a mutation (same contract as
   // PMSection's onChanged).
   export let onChanged: (id: string) => void;
+  // All tags in use across projects, for the add-input's autocomplete.
+  export let allTags: string[] = [];
 
   let newTag = "";
   let busy = false;
 
   $: tags = (project && project.tags) || [];
+  // Suggest only tags this project doesn't already have.
+  $: suggestions = (allTags || []).filter((t) => !tags.includes(t));
 
   // Chip style derived from tagColor's "hsl(H, S%, L%)" string: full color
   // for the border/text, a low-alpha version (swap hsl -> hsla) for the
@@ -79,6 +83,12 @@
       on:keydown={onKey}
       disabled={busy}
       aria-label="Add tag"
+      list={"tag-suggest-" + (project ? project.id : "")}
     />
+    <datalist id={"tag-suggest-" + (project ? project.id : "")}>
+      {#each suggestions as s (s)}
+        <option value={s}></option>
+      {/each}
+    </datalist>
   </div>
 </div>

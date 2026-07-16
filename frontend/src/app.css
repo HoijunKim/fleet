@@ -1392,6 +1392,17 @@ select.input option { background: var(--surface); color: var(--text); }
   border-radius: var(--r-btn);
 }
 .root-path { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.root-path.missing { color: var(--err); }
+.root-missing {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--err);
+  border: 1px solid rgba(240, 101, 92, 0.4);
+  border-radius: var(--r-pill);
+  padding: 1px 6px;
+}
 .root-x {
   flex: 0 0 auto;
   font-family: var(--font-mono);

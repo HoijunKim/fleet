@@ -70,6 +70,10 @@ export function CancelAgent() {
   return window['go']['main']['App']['CancelAgent']();
 }
 
+export function CancelAuth() {
+  return window['go']['main']['App']['CancelAuth']();
+}
+
 export function Checkout(arg1, arg2) {
   return window['go']['main']['App']['Checkout'](arg1, arg2);
 }
@@ -124,6 +128,10 @@ export function DiffAll(arg1) {
 
 export function DiffFile(arg1, arg2) {
   return window['go']['main']['App']['DiffFile'](arg1, arg2);
+}
+
+export function DirExists(arg1) {
+  return window['go']['main']['App']['DirExists'](arg1);
 }
 
 export function EditTask(arg1, arg2, arg3, arg4) {

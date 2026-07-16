@@ -21,6 +21,8 @@
   export let onProjectChanged: (id: string) => void;
   // Delete a manual project (called with the project id).
   export let onDeleteProject: (id: string) => void;
+  // All tags in use across projects, for TagChips autocomplete (threaded to PMSection).
+  export let allTags: string[] = [];
   // Bindable flag so App.svelte knows whether the diff modal is open (for
   // suppressing overlapping overlays / the Ctrl+K palette).
   export let diffOpen = false;
@@ -420,6 +422,7 @@
               {project}
               onChanged={onProjectChanged}
               onDelete={onDeleteProject}
+              {allTags}
             />
           {/if}
         </div>
@@ -429,6 +432,7 @@
             {project}
             onChanged={onProjectChanged}
             onDelete={onDeleteProject}
+              {allTags}
           />
         </div>
       {/if}

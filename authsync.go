@@ -86,6 +86,37 @@ func validateOAuthCallback(got oauthCapture, wantState string) (code, errMsg str
 	return got.code, ""
 }
 
+// awaitOAuth blocks until the loopback callback fires, the user cancels, or the
+// timeout elapses, returning the capture or a human error string. Split out of
+// AuthStart so the cancel/timeout branches are testable without a real browser
+// or listener.
+func awaitOAuth(ch <-chan oauthCapture, cancel <-chan struct{}, timeout time.Duration) (oauthCapture, string) {
+	select {
+	case got := <-ch:
+		return got, ""
+	case <-cancel:
+		return oauthCapture{}, "cancelled"
+	case <-time.After(timeout):
+		return oauthCapture{}, "sign-in timed out"
+	}
+}
+
+// CancelAuth aborts an in-flight AuthStart, which otherwise blocks up to the
+// sign-in timeout waiting on the browser callback. Non-blocking: a no-op when no
+// sign-in is waiting.
+func (a *App) CancelAuth() {
+	a.authCancelMu.Lock()
+	ch := a.authCancel
+	a.authCancelMu.Unlock()
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
 // AuthStart runs the RFC 8252 native GitHub OAuth flow: a loopback listener on
 // 127.0.0.1:<ephemeral>, PKCE, the system browser, capture of the link_code,
 // token exchange, and refresh-token storage in the OS keychain. Returns "" on
@@ -133,13 +164,25 @@ func (a *App) AuthStart() string {
 	go srv.Serve(ln)
 	defer srv.Shutdown(context.Background())
 
+	// Install the cancel channel BEFORE opening the browser: BrowserOpenURL blocks
+	// while the OS cold-starts the default browser (often the slowest step), and the
+	// UI already shows the Cancel button, so a click during that window must land.
+	// Clear it on return so a stale channel can't absorb a later attempt's cancel.
+	cancel := make(chan struct{}, 1)
+	a.authCancelMu.Lock()
+	a.authCancel = cancel
+	a.authCancelMu.Unlock()
+	defer func() {
+		a.authCancelMu.Lock()
+		a.authCancel = nil
+		a.authCancelMu.Unlock()
+	}()
+
 	wruntime.BrowserOpenURL(a.ctx, login)
 
-	var got oauthCapture
-	select {
-	case got = <-ch:
-	case <-time.After(3 * time.Minute):
-		return "sign-in timed out"
+	got, waitErr := awaitOAuth(ch, cancel, 3*time.Minute)
+	if waitErr != "" {
+		return waitErr
 	}
 	code, errMsg := validateOAuthCallback(got, state)
 	if errMsg != "" {

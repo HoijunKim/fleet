@@ -7,15 +7,76 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/hoijun/fleet/internal/cloud"
 	"github.com/hoijun/fleet/internal/store"
 	"github.com/hoijun/fleet/internal/syncengine"
 )
+
+func TestAwaitOAuth(t *testing.T) {
+	// A delivered callback wins.
+	ch := make(chan oauthCapture, 1)
+	ch <- oauthCapture{code: "c", state: "s"}
+	if got, e := awaitOAuth(ch, make(chan struct{}), time.Second); e != "" || got.code != "c" {
+		t.Errorf("callback path: got %+v, %q", got, e)
+	}
+	// Cancel is reported as the soft "cancelled" sentinel.
+	cancel := make(chan struct{}, 1)
+	cancel <- struct{}{}
+	if _, e := awaitOAuth(make(chan oauthCapture), cancel, time.Second); e != "cancelled" {
+		t.Errorf("cancel path: got %q, want cancelled", e)
+	}
+	// Timeout is reported distinctly.
+	if _, e := awaitOAuth(make(chan oauthCapture), make(chan struct{}), time.Millisecond); e != "sign-in timed out" {
+		t.Errorf("timeout path: got %q", e)
+	}
+}
+
+func TestCancelAuthUnblocksAwait(t *testing.T) {
+	a := &App{authCancel: make(chan struct{}, 1)}
+	done := make(chan string, 1)
+	go func() {
+		_, e := awaitOAuth(make(chan oauthCapture), a.authCancel, time.Minute)
+		done <- e
+	}()
+	a.CancelAuth()
+	select {
+	case e := <-done:
+		if e != "cancelled" {
+			t.Errorf("CancelAuth should yield cancelled, got %q", e)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("CancelAuth did not unblock the wait")
+	}
+	a.CancelAuth() // no-op second call must not panic on a drained buffered channel
+}
+
+func TestDirExists(t *testing.T) {
+	a := &App{}
+	dir := t.TempDir()
+	if !a.DirExists(dir) {
+		t.Error("an existing dir should be true")
+	}
+	if a.DirExists(filepath.Join(dir, "nope")) {
+		t.Error("a missing path should be false")
+	}
+	f := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if a.DirExists(f) {
+		t.Error("a file should not count as a directory")
+	}
+	if a.DirExists("") {
+		t.Error("an empty path should be false")
+	}
+}
 
 // --- PKCE + OAuth-callback validation -----------------------------------
 //

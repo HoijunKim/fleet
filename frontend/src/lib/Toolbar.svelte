@@ -32,6 +32,7 @@
     error: "",
   };
   export let onSignIn: () => void = () => {};
+  export let onCancelSignIn: () => void = () => {};
   export let onSignOut: () => void = () => {};
   export let onSyncNow: () => void = () => {};
   export let onDeleteAccount: () => void = () => {};
@@ -126,7 +127,7 @@
       {#if authSignedIn}
         <AccountChip login={authLogin} avatarUrl={authAvatar} {onSignOut} {onSyncNow} {onDeleteAccount} />
       {:else}
-        <SignIn {onSignIn} busy={authBusy} />
+        <SignIn {onSignIn} onCancel={onCancelSignIn} busy={authBusy} />
       {/if}
     </div>
     <span class="toolbar-div"></span>

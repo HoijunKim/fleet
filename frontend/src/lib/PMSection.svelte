@@ -10,6 +10,8 @@
   export let onChanged: (id: string) => void;
   // Delete a manual project (already confirmed by the caller path).
   export let onDelete: (id: string) => void;
+  // All tags in use across projects, for TagChips autocomplete.
+  export let allTags: string[] = [];
 
   // Local editable copies so typing does not fight the reactive project prop.
   let lastId = "";
@@ -199,7 +201,7 @@
 </script>
 
 <div class="pm">
-  <TagChips {project} {onChanged} />
+  <TagChips {project} {onChanged} {allTags} />
 
   <div class="detail-sep"></div>
 
