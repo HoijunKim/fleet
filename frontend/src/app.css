@@ -26,6 +26,7 @@
   --accent-hover:  #8bbcff;
   --accent-soft:   rgba(110, 168, 254, 0.15);
   --accent-line:   rgba(110, 168, 254, 0.34);
+  --on-accent:     #0a1220; /* text on a filled accent button - dark on the light-blue dark-mode accent */
   --ok:            #40c463;
   --dirty:         #e3a53a;
   --err:           #f0655c;
@@ -65,6 +66,62 @@
   /* Motion */
   --t: 130ms cubic-bezier(0.2, 0, 0.2, 1);
   --t-enter: 180ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Light theme - the same tokens re-pointed. Dark stays the default (no attr);
+   light applies when data-theme="light" is set on the root (see theme.ts). The
+   neutrals keep a slight cool bias toward the accent; status hues are darkened
+   so they read on a light ground. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:            #eef1f6;
+  --surface:       #ffffff;
+  --raised:        #f3f5f9;
+  --border:        #d3dae6;
+  --border-hover:  #b6c0d1;
+  --hairline:      #e4e8f0;
+
+  --text:          #172033;
+  --muted:         #5a6478;
+  --faint:         #858ea0;
+
+  --accent:        #2563c9;
+  --accent-hover:  #1d4fa8;
+  --accent-soft:   rgba(37, 99, 201, 0.10);
+  --accent-line:   rgba(37, 99, 201, 0.28);
+  --on-accent:     #ffffff; /* white text on the darker light-mode accent */
+  --ok:            #1a9c48;
+  --dirty:         #b5771a;
+  --err:           #d13b32;
+  --behind:        #d13b32;
+  --ahead:         #1a9c48;
+  --nogit:         #8a93a5;
+  --remote:        #7c4dd6;
+
+  --ok-soft:       rgba(26, 156, 72, 0.12);
+  --dirty-soft:    rgba(181, 119, 26, 0.13);
+  --err-soft:      rgba(209, 59, 50, 0.12);
+  --nogit-soft:    rgba(138, 147, 165, 0.14);
+  --remote-soft:   rgba(124, 77, 214, 0.12);
+  --ok-line:       rgba(26, 156, 72, 0.30);
+  --dirty-line:    rgba(181, 119, 26, 0.30);
+  --err-line:      rgba(209, 59, 50, 0.30);
+  --remote-line:   rgba(124, 77, 214, 0.32);
+
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.10);
+  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.18);
+}
+
+/* Commit-activity heatmap ramp for light mode: an empty cell must read on the
+   light card, not the dark-mode slate. */
+:root[data-theme="light"] .hm {
+  --hm-l0: #e4e8f0;
+  --hm-l1: rgba(37, 99, 201, 0.18);
+  --hm-l2: rgba(37, 99, 201, 0.40);
+  --hm-l3: rgba(37, 99, 201, 0.66);
+  --hm-l4: #2563c9;
 }
 
 * { box-sizing: border-box; }
@@ -138,11 +195,11 @@ body {
 
 .btn-primary {
   background: linear-gradient(180deg, var(--accent-hover), var(--accent));
-  color: #0a1220;
+  color: var(--on-accent);
   font-weight: 600;
   box-shadow: var(--highlight), 0 1px 2px rgba(0, 0, 0, 0.3);
 }
-.btn-primary:hover { background: linear-gradient(180deg, #a5cbff, var(--accent-hover)); }
+.btn-primary:hover { background: linear-gradient(180deg, var(--accent), var(--accent-hover)); }
 .btn-primary:active { transform: translateY(1px); }
 
 .btn-secondary {
@@ -176,7 +233,7 @@ body {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--ring);
-  background: #0d1220;
+  background: var(--surface);
 }
 .input.mono { font-family: var(--font-mono); }
 
@@ -2489,8 +2546,8 @@ select.input option { background: var(--surface); color: var(--text); }
 /* The agenda is the dashboard's thesis ("what to do now"): give it a clear
    accent spine and wash so the eye lands there first. */
 .ov-card.ov-agenda {
-  background: linear-gradient(180deg, rgba(110, 168, 254, 0.06), transparent 150px), var(--surface);
-  border-color: #33415d;
+  background: linear-gradient(180deg, var(--accent-soft), transparent 150px), var(--surface);
+  border-color: var(--border-hover);
 }
 .ov-card.ov-agenda::before {
   content: "";

@@ -4,6 +4,7 @@
   import SignIn from "./SignIn.svelte";
   import Icon from "./Icon.svelte";
   import Logo from "./Logo.svelte";
+  import { theme, toggleTheme } from "./theme";
 
   export let loadingCount: number = 0;
   // Count of code projects with unfetched upstream commits (behind > 0).
@@ -141,6 +142,14 @@
     </button>
     <button class="icon-btn" on:click={onOpenSettings} title="Settings" aria-label="Settings">
       <Icon name="settings" />
+    </button>
+    <button
+      class="icon-btn"
+      on:click={() => toggleTheme()}
+      title={$theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      aria-label={$theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+    >
+      <Icon name={$theme === "dark" ? "sun" : "moon"} />
     </button>
   </div>
 </header>

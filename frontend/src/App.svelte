@@ -15,11 +15,13 @@
   import Graph from "./lib/Graph.svelte";
   import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
   import UnclonedProjects from "./lib/UnclonedProjects.svelte";
+  import Onboarding from "./lib/Onboarding.svelte";
   import Toasts from "./lib/Toasts.svelte";
   import AgentOverlay from "./lib/AgentOverlay.svelte";
   import { setProject as agentSetProject, isFleet } from "./lib/agentSession";
   import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
   import { STATUS_ORDER, deadlineSort, daysUntil, allTags } from "./lib/pm";
+  import { toggleTheme } from "./lib/theme";
 
   // Each row is a ProjectView with (for code projects) live git fields merged in.
   let projects: any[] = [];
@@ -35,6 +37,9 @@
   // that were removed) are simply ignored by everything that reads this.
   let selectedIds: Set<string> = new Set();
   let scanned = false;
+  // Whether any scan root is configured. Starts true so the onboarding card
+  // doesn't flash before the config loads; refreshAutoFetch sets the real value.
+  let rootsConfigured = true;
   // Top-level view: the fleet-wide Overview (default), the project list, or the
   // interactive dependency Graph.
   let view: "today" | "overview" | "projects" | "graph" = "today";
@@ -515,13 +520,25 @@
   }
 
   // ---- command palette actions -------------------------------------------
+  // Reactive so the auth-dependent entries follow sign-in state.
   $: paletteActions = [
+    { id: "go-today", label: "Go to Today", hint: "view", run: () => { paletteOpen = false; view = "today"; } },
+    { id: "go-overview", label: "Go to Overview", hint: "view", run: () => { paletteOpen = false; view = "overview"; } },
+    { id: "go-projects", label: "Go to Projects", hint: "view", run: () => { paletteOpen = false; view = "projects"; } },
+    { id: "go-graph", label: "Go to Graph", hint: "view", run: () => { paletteOpen = false; view = "graph"; } },
     { id: "add", label: "Add a project", hint: "new", run: () => { paletteOpen = false; addOpen = true; } },
     { id: "refresh", label: "Refresh all projects", hint: "reload", run: () => { paletteOpen = false; manualRefresh(); } },
     { id: "fetchall", label: "Fetch all repositories", hint: "git fetch", run: () => { paletteOpen = false; fetchAll(); } },
     { id: "pullall", label: "Pull all repositories", hint: "git pull", run: () => { paletteOpen = false; pullAll(); } },
     { id: "pushall", label: "Push all ahead repositories", hint: "git push", run: () => { paletteOpen = false; pushAll(); } },
+    { id: "theme", label: "Toggle light / dark theme", hint: "theme", run: () => { paletteOpen = false; toggleTheme(); } },
     { id: "settings", label: "Open settings", hint: "config", run: () => { paletteOpen = false; settingsOpen = true; } },
+    ...(auth.signedIn
+      ? [
+          { id: "syncnow", label: "Sync now", hint: "sync", run: () => { paletteOpen = false; syncNow(); } },
+          { id: "signout", label: "Sign out", hint: "account", run: () => { paletteOpen = false; signOut(); } },
+        ]
+      : [{ id: "signin", label: "Sign in with GitHub", hint: "account", run: () => { paletteOpen = false; signIn(); } }]),
   ];
 
   function onJump(p: any) {
@@ -584,6 +601,7 @@
     try {
       const cfg = await GetConfig();
       setupAutoFetch(cfg.AutoFetchMinutes || 0);
+      rootsConfigured = (cfg.Roots || []).length > 0;
     } catch {
       // ignore config read failures for the timer
     }
@@ -719,6 +737,9 @@
 />
 
 {#if view === "projects"}
+  {#if scanned && !rootsConfigured && projects.length === 0}
+    <Onboarding onAddRoot={() => (settingsOpen = true)} onAddProject={() => (addOpen = true)} />
+  {:else}
   <ProjectsFilterBar
     bind:filter
     bind:filterInput
@@ -774,6 +795,7 @@
       bind:diffOpen
     />
   </div>
+  {/if}
 {:else if view === "graph"}
   <Graph onOpen={openFromOverview} {projects} />
 {:else if view === "overview"}
