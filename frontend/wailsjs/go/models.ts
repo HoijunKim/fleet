@@ -529,6 +529,24 @@ export namespace main {
 	        this.text = source["text"];
 	    }
 	}
+	export class StatusFilesView {
+	    path: string;
+	    staged: boolean;
+	    unstaged: boolean;
+	    conflict: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new StatusFilesView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.staged = source["staged"];
+	        this.unstaged = source["unstaged"];
+	        this.conflict = source["conflict"];
+	    }
+	}
 	export class SymbolsView {
 	    goMainPkgs: string[];
 	    goExported: string[];

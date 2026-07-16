@@ -226,3 +226,113 @@ func StashList(r Runner, dir string) ([]string, error) {
 // Stash saves the working tree; StashPop restores the latest.
 func Stash(r Runner, dir string) error    { _, err := r.Run(dir, "stash", "push"); return err }
 func StashPop(r Runner, dir string) error { _, err := r.Run(dir, "stash", "pop"); return err }
+
+// StashApply restores stash entry i (stash@{i}) WITHOUT removing it; StashDrop
+// deletes entry i. i is the entry's index in StashList (0 is newest).
+func StashApply(r Runner, dir string, i int) error {
+	_, err := r.Run(dir, "stash", "apply", "stash@{"+strconv.Itoa(i)+"}")
+	return err
+}
+func StashDrop(r Runner, dir string, i int) error {
+	_, err := r.Run(dir, "stash", "drop", "stash@{"+strconv.Itoa(i)+"}")
+	return err
+}
+
+// CreateBranch creates branch name and switches to it (git checkout -b).
+func CreateBranch(r Runner, dir, name string) error {
+	_, err := r.Run(dir, "checkout", "-b", name)
+	return err
+}
+
+// DeleteBranch deletes branch name with git's safe delete (-d), which refuses an
+// unmerged branch; that refusal surfaces as the returned error.
+func DeleteBranch(r Runner, dir, name string) error {
+	_, err := r.Run(dir, "branch", "-d", name)
+	return err
+}
+
+// StageFile stages a single path; UnstageFile removes a path from the index,
+// leaving the working-tree change intact.
+func StageFile(r Runner, dir, file string) error {
+	_, err := r.Run(dir, "add", "--", file)
+	return err
+}
+func UnstageFile(r Runner, dir, file string) error {
+	_, err := r.Run(dir, "restore", "--staged", "--", file)
+	return err
+}
+
+// CommitStaged commits only what is already staged (no implicit add). Git errors
+// when nothing is staged, which surfaces to the caller. It also refuses while any
+// path is unmerged, so a conflict cannot be committed with its markers.
+func CommitStaged(r Runner, dir, msg string) error {
+	if u, err := r.Run(dir, "ls-files", "-u"); err == nil && strings.TrimSpace(u) != "" {
+		return errors.New("resolve merge conflicts before committing")
+	}
+	_, err := r.Run(dir, "commit", "-m", msg)
+	return err
+}
+
+// CommitAmend replaces the last commit, folding in whatever is currently staged
+// and using msg as the new message.
+func CommitAmend(r Runner, dir, msg string) error {
+	_, err := r.Run(dir, "commit", "--amend", "-m", msg)
+	return err
+}
+
+// LastCommitMessage returns HEAD's full commit message (for prefilling an amend).
+func LastCommitMessage(r Runner, dir string) (string, error) {
+	out, err := r.Run(dir, "log", "-1", "--pretty=%B")
+	return strings.TrimRight(out, "\n"), err
+}
+
+// FileStatus is a single changed path with its index (staged) and worktree
+// (unstaged) state, from `git status --porcelain=v2`. Conflict marks an unmerged
+// path: it must be resolved externally before it can be staged/committed (staging
+// it blindly would commit the conflict markers).
+type FileStatus struct {
+	Path     string `json:"path"`
+	Staged   bool   `json:"staged"`
+	Unstaged bool   `json:"unstaged"`
+	Conflict bool   `json:"conflict"`
+}
+
+// StatusFiles returns per-file staged/unstaged state for the staging UI. Unlike
+// parseStatus (which flattens to a dirty list) this preserves the XY codes.
+func StatusFiles(r Runner, dir string) ([]FileStatus, error) {
+	out, err := r.Run(dir, "status", "--porcelain=v2")
+	if err != nil {
+		return nil, err
+	}
+	return parseStatusFiles(out), nil
+}
+
+// parseStatusFiles decodes porcelain v2 entries into per-file staging state.
+func parseStatusFiles(out string) []FileStatus {
+	var files []FileStatus
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		switch line[0] {
+		case '1', '2':
+			// "1 XY ..." / "2 XY ..." - XY is the second whitespace field.
+			fields := strings.SplitN(line, " ", 3)
+			if len(fields) < 3 || len(fields[1]) < 2 {
+				continue
+			}
+			xy := fields[1]
+			files = append(files, FileStatus{
+				Path:     changedPath(line),
+				Staged:   xy[0] != '.',
+				Unstaged: xy[1] != '.',
+			})
+		case 'u':
+			// Unmerged: must be resolved externally before it can be committed.
+			files = append(files, FileStatus{Path: changedPath(line), Unstaged: true, Conflict: true})
+		case '?':
+			files = append(files, FileStatus{Path: strings.TrimPrefix(line, "? "), Unstaged: true})
+		}
+	}
+	return files
+}

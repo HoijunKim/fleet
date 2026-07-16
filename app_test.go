@@ -115,6 +115,22 @@ func TestFetchAndPullReturnErrTextOnFailure(t *testing.T) {
 	}
 }
 
+func TestBranchNameValidation(t *testing.T) {
+	a := &App{runner: fakeRunner{out: map[string]string{}}}
+	if msg := a.CreateBranch("/x", ""); !strings.Contains(msg, "empty") {
+		t.Errorf("empty branch name should be rejected, got %q", msg)
+	}
+	if msg := a.CreateBranch("/x", "-evil"); !strings.Contains(msg, "'-'") {
+		t.Errorf("a '-'-prefixed name should be rejected, got %q", msg)
+	}
+	if msg := a.DeleteBranch("/x", "--force"); !strings.Contains(msg, "'-'") {
+		t.Errorf("a '-'-prefixed delete should be rejected, got %q", msg)
+	}
+	if msg := a.CreateBranch("/x", "feature/ok"); msg != "" {
+		t.Errorf("a normal name should pass, got %q", msg)
+	}
+}
+
 func TestSyncedUncloned(t *testing.T) {
 	a := newTestApp(t)
 	// A locally-present code project is keyed by its path - NOT detached.

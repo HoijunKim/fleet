@@ -45,7 +45,15 @@ export function CommitActivity(arg1:string,arg2:number):Promise<Array<main.DayCo
 
 export function CommitAll(arg1:string,arg2:string):Promise<string>;
 
+export function CommitAmend(arg1:string,arg2:string):Promise<string>;
+
+export function CommitStaged(arg1:string,arg2:string):Promise<string>;
+
+export function CreateBranch(arg1:string,arg2:string):Promise<string>;
+
 export function DeleteAccount():Promise<string>;
+
+export function DeleteBranch(arg1:string,arg2:string):Promise<string>;
 
 export function DeleteProject(arg1:string):Promise<string>;
 
@@ -74,6 +82,8 @@ export function GitHubSignals():Promise<Array<main.RepoGHSignal>>;
 export function GitHubURL(arg1:string):Promise<string>;
 
 export function GiveAgentConsent():Promise<string>;
+
+export function LastCommitMessage(arg1:string):Promise<string>;
 
 export function ListEdges():Promise<Array<main.EdgeView>>;
 
@@ -145,13 +155,21 @@ export function SetTaskStatus(arg1:string,arg2:string,arg3:string):Promise<strin
 
 export function SignOut():Promise<string>;
 
+export function StageFile(arg1:string,arg2:string):Promise<string>;
+
 export function StagedDiff(arg1:string):Promise<string>;
 
 export function Stash(arg1:string):Promise<string>;
 
+export function StashApply(arg1:string,arg2:number):Promise<string>;
+
+export function StashDrop(arg1:string,arg2:number):Promise<string>;
+
 export function StashList(arg1:string):Promise<Array<string>>;
 
 export function StashPop(arg1:string):Promise<string>;
+
+export function StatusFiles(arg1:string):Promise<Array<main.StatusFilesView>>;
 
 export function SyncNow():Promise<string>;
 
@@ -160,5 +178,7 @@ export function SyncState():Promise<main.SyncStateView>;
 export function SyncedUncloned():Promise<Array<main.UnclonedView>>;
 
 export function ToggleTask(arg1:string,arg2:string):Promise<string>;
+
+export function UnstageFile(arg1:string,arg2:string):Promise<string>;
 
 export function UpdateProject(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<string>;

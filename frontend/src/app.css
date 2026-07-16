@@ -1745,13 +1745,139 @@ select.input option { background: var(--surface); color: var(--text); }
   max-height: 140px;
   overflow: auto;
 }
-.stash-entry {
+.stash-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 8px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  word-break: break-all;
 }
+.stash-entry {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stash-mini {
+  flex: 0 0 auto;
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color var(--t), color var(--t);
+}
+.stash-mini:hover { border-color: var(--accent); color: var(--accent); }
+.stash-mini.stash-danger:hover { border-color: var(--err); color: var(--err); }
+.stash-mini:disabled { opacity: 0.5; cursor: default; }
+
+/* Branch popover: delete affordance per row + new-branch input. */
+.branch-row { display: flex; align-items: center; }
+.branch-row .branch-opt { flex: 1; min-width: 0; }
+.branch-del {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin-right: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: color var(--t), opacity var(--t);
+}
+.branch-row:hover .branch-del { opacity: 1; }
+.branch-del:hover { color: var(--err); }
+.branch-del-yes { opacity: 1; color: var(--err); font-family: var(--font-sans); }
+.branch-new {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 4px;
+}
+.branch-new-input { flex: 1; min-width: 0; height: 28px; font-size: 12px; }
+
+/* Commit staging groups + amend. */
+.stage-groups { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.stage-group { display: flex; flex-direction: column; gap: 2px; }
+.stage-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.stage-label.staged { color: var(--ok); }
+.stage-file { display: flex; align-items: center; gap: 8px; }
+.stage-toggle {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--t), color var(--t), background var(--t);
+}
+.stage-toggle.add { color: var(--ok); }
+.stage-toggle.add:hover { border-color: var(--ok); background: rgba(64, 196, 99, 0.1); }
+.stage-toggle.del { color: var(--dirty); }
+.stage-toggle.del:hover { border-color: var(--dirty); background: rgba(227, 165, 58, 0.1); }
+.stage-toggle:disabled { opacity: 0.5; cursor: default; }
+.stage-conflict {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid rgba(240, 101, 92, 0.4);
+  background: rgba(240, 101, 92, 0.12);
+  color: var(--err);
+  font-weight: 700;
+  cursor: help;
+}
+.stage-conflict-tag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--err);
+}
+.stage-name.conflict { color: var(--err); }
+.stage-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.amend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0;
+  cursor: pointer;
+}
+.amend-warn { color: var(--err); font-size: 11px; }
 
 /* =========================================================================
    Project list - type badge, tasks, deadline, status chip, priority

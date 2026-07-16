@@ -86,8 +86,24 @@ export function CommitAll(arg1, arg2) {
   return window['go']['main']['App']['CommitAll'](arg1, arg2);
 }
 
+export function CommitAmend(arg1, arg2) {
+  return window['go']['main']['App']['CommitAmend'](arg1, arg2);
+}
+
+export function CommitStaged(arg1, arg2) {
+  return window['go']['main']['App']['CommitStaged'](arg1, arg2);
+}
+
+export function CreateBranch(arg1, arg2) {
+  return window['go']['main']['App']['CreateBranch'](arg1, arg2);
+}
+
 export function DeleteAccount() {
   return window['go']['main']['App']['DeleteAccount']();
+}
+
+export function DeleteBranch(arg1, arg2) {
+  return window['go']['main']['App']['DeleteBranch'](arg1, arg2);
 }
 
 export function DeleteProject(arg1) {
@@ -144,6 +160,10 @@ export function GitHubURL(arg1) {
 
 export function GiveAgentConsent() {
   return window['go']['main']['App']['GiveAgentConsent']();
+}
+
+export function LastCommitMessage(arg1) {
+  return window['go']['main']['App']['LastCommitMessage'](arg1);
 }
 
 export function ListEdges() {
@@ -286,6 +306,10 @@ export function SignOut() {
   return window['go']['main']['App']['SignOut']();
 }
 
+export function StageFile(arg1, arg2) {
+  return window['go']['main']['App']['StageFile'](arg1, arg2);
+}
+
 export function StagedDiff(arg1) {
   return window['go']['main']['App']['StagedDiff'](arg1);
 }
@@ -294,12 +318,24 @@ export function Stash(arg1) {
   return window['go']['main']['App']['Stash'](arg1);
 }
 
+export function StashApply(arg1, arg2) {
+  return window['go']['main']['App']['StashApply'](arg1, arg2);
+}
+
+export function StashDrop(arg1, arg2) {
+  return window['go']['main']['App']['StashDrop'](arg1, arg2);
+}
+
 export function StashList(arg1) {
   return window['go']['main']['App']['StashList'](arg1);
 }
 
 export function StashPop(arg1) {
   return window['go']['main']['App']['StashPop'](arg1);
+}
+
+export function StatusFiles(arg1) {
+  return window['go']['main']['App']['StatusFiles'](arg1);
 }
 
 export function SyncNow() {
@@ -316,6 +352,10 @@ export function SyncedUncloned() {
 
 export function ToggleTask(arg1, arg2) {
   return window['go']['main']['App']['ToggleTask'](arg1, arg2);
+}
+
+export function UnstageFile(arg1, arg2) {
+  return window['go']['main']['App']['UnstageFile'](arg1, arg2);
 }
 
 export function UpdateProject(arg1, arg2, arg3, arg4, arg5) {

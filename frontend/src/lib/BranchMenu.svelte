@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Branches, Checkout } from "../../wailsjs/go/main/App";
+  import { Branches, Checkout, CreateBranch, DeleteBranch } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
 
   export let path: string;
@@ -12,6 +12,8 @@
   let switching = false;
   let open = false;
   let loadedPath = "";
+  let newName = "";
+  let confirmDel = ""; // branch name armed for delete confirm
 
   // Popover position (fixed, so the detail panel's overflow never clips it).
   let mx = 0;
@@ -23,6 +25,8 @@
   $: if (path && path !== loadedPath) {
     loadedPath = path;
     open = false;
+    confirmDel = "";
+    newName = "";
     load();
   }
 
@@ -43,9 +47,13 @@
     }
   }
 
+  function closeMenu() {
+    open = false;
+    confirmDel = ""; // an armed delete never survives closing the popover
+  }
   function toggle() {
     if (open) {
-      open = false;
+      closeMenu();
       return;
     }
     const r = triggerEl.getBoundingClientRect();
@@ -73,10 +81,43 @@
     }
   }
 
+  async function createBranch() {
+    const b = newName.trim();
+    if (!b || switching) return;
+    switching = true;
+    try {
+      const err = await CreateBranch(path, b);
+      if (err) {
+        toastError("New branch: " + err);
+      } else {
+        newName = "";
+        open = false;
+        toastSuccess("Created and switched to " + b);
+        await load();
+        onChanged(path);
+      }
+    } finally {
+      switching = false;
+    }
+  }
+
+  async function deleteBranch(b: string) {
+    confirmDel = "";
+    if (switching) return;
+    switching = true;
+    try {
+      const err = await DeleteBranch(path, b);
+      if (err) toastError("Delete " + b + ": " + err);
+      else { toastSuccess("Deleted " + b); await load(); }
+    } finally {
+      switching = false;
+    }
+  }
+
   function onKey(e: KeyboardEvent) {
     if (e.key === "Escape" && open) {
       e.preventDefault();
-      open = false;
+      closeMenu();
     }
   }
 </script>
@@ -105,21 +146,41 @@
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div
     class="menu-backdrop"
-    on:click={() => (open = false)}
-    on:contextmenu|preventDefault={() => (open = false)}
+    on:click={closeMenu}
+    on:contextmenu|preventDefault={closeMenu}
   ></div>
   <div class="branch-pop" style="left:{mx}px; top:{my}px; min-width:{mw}px" role="listbox">
     {#each all as b (b)}
-      <button
-        class="branch-opt"
-        class:current={b === current}
-        role="option"
-        aria-selected={b === current}
-        on:click={() => choose(b)}
-      >
-        <span class="branch-dot"></span>
-        <span class="branch-opt-name">{b}</span>
-      </button>
+      <div class="branch-row" class:current={b === current} role="presentation">
+        <button
+          class="branch-opt"
+          class:current={b === current}
+          role="option"
+          aria-selected={b === current}
+          on:click={() => choose(b)}
+        >
+          <span class="branch-dot"></span>
+          <span class="branch-opt-name">{b}</span>
+        </button>
+        {#if b !== current}
+          {#if confirmDel === b}
+            <button class="branch-del branch-del-yes" title="Confirm delete" on:click|stopPropagation={() => deleteBranch(b)}>del?</button>
+          {:else}
+            <button class="branch-del" title="Delete branch" aria-label={"Delete " + b} on:click|stopPropagation={() => (confirmDel = b)}>x</button>
+          {/if}
+        {/if}
+      </div>
     {/each}
+    <div class="branch-new">
+      <input
+        class="input branch-new-input"
+        type="text"
+        placeholder="+ New branch"
+        bind:value={newName}
+        on:keydown={(e) => { if (e.key === "Enter") { e.preventDefault(); createBranch(); } }}
+        aria-label="New branch name"
+      />
+      <button class="btn btn-secondary btn-sm" on:click={createBranch} disabled={!newName.trim() || switching}>Create</button>
+    </div>
   </div>
 {/if}

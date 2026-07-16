@@ -378,6 +378,67 @@ func (a *App) StashList(path string) []string {
 func (a *App) Stash(path string) string    { return errMsg(git.Stash(a.runner, path)) }
 func (a *App) StashPop(path string) string { return errMsg(git.StashPop(a.runner, path)) }
 
+// StashApply restores stash entry i without removing it; StashDrop deletes it.
+func (a *App) StashApply(path string, i int) string { return errMsg(git.StashApply(a.runner, path, i)) }
+func (a *App) StashDrop(path string, i int) string  { return errMsg(git.StashDrop(a.runner, path, i)) }
+
+// CreateBranch creates a branch and switches to it; DeleteBranch safe-deletes one.
+func (a *App) CreateBranch(path, name string) string {
+	if e := validBranchName(name); e != "" {
+		return e
+	}
+	return errMsg(git.CreateBranch(a.runner, path, strings.TrimSpace(name)))
+}
+func (a *App) DeleteBranch(path, name string) string {
+	if e := validBranchName(name); e != "" {
+		return e
+	}
+	return errMsg(git.DeleteBranch(a.runner, path, strings.TrimSpace(name)))
+}
+
+// validBranchName rejects an empty name or one that git would parse as a flag
+// (a leading "-"), returning an error string or "" when the name is acceptable.
+func validBranchName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "error: branch name cannot be empty"
+	}
+	if strings.HasPrefix(name, "-") {
+		return "error: branch name cannot start with '-'"
+	}
+	return ""
+}
+
+// StatusFilesView is a changed file's staged/unstaged state for the staging UI.
+type StatusFilesView struct {
+	Path     string `json:"path"`
+	Staged   bool   `json:"staged"`
+	Unstaged bool   `json:"unstaged"`
+	Conflict bool   `json:"conflict"`
+}
+
+// StatusFiles returns per-file staged/unstaged state for the commit-staging UI.
+func (a *App) StatusFiles(path string) []StatusFilesView {
+	fs, _ := git.StatusFiles(a.runner, path)
+	out := make([]StatusFilesView, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, StatusFilesView{Path: f.Path, Staged: f.Staged, Unstaged: f.Unstaged, Conflict: f.Conflict})
+	}
+	return out
+}
+
+// StageFile/UnstageFile move a single path in/out of the index. CommitStaged
+// commits only the index; CommitAmend rewrites the last commit; LastCommitMessage
+// returns HEAD's message for prefilling an amend.
+func (a *App) StageFile(path, file string) string   { return errMsg(git.StageFile(a.runner, path, file)) }
+func (a *App) UnstageFile(path, file string) string { return errMsg(git.UnstageFile(a.runner, path, file)) }
+func (a *App) CommitStaged(path, msg string) string { return errMsg(git.CommitStaged(a.runner, path, msg)) }
+func (a *App) CommitAmend(path, msg string) string  { return errMsg(git.CommitAmend(a.runner, path, msg)) }
+func (a *App) LastCommitMessage(path string) string {
+	msg, _ := git.LastCommitMessage(a.runner, path)
+	return msg
+}
+
 // OpenInBrowser opens the repo's remote (converted to https) in the default browser.
 func (a *App) OpenInBrowser(remote string) string {
 	url := remoteToHTTPS(remote)

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { StashList, Stash, StashPop } from "../../wailsjs/go/main/App";
+  import { StashList, Stash, StashPop, StashApply, StashDrop } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
 
   export let path: string;
@@ -10,21 +10,25 @@
   let entries: string[] = [];
   let busy = false;
   let loadedPath = "";
+  let confirmDrop = -1; // index armed for a Drop confirm, or -1
 
   // Reset when the selected repo changes; reload only if currently expanded.
   $: if (path !== loadedPath) {
     loadedPath = path;
     entries = [];
+    confirmDrop = -1;
     if (open) load();
   }
 
   async function toggle() {
     open = !open;
+    confirmDrop = -1; // any armed Drop is void once the panel is toggled
     if (open) await load();
   }
 
   async function load() {
     const p = path;
+    confirmDrop = -1; // indices may shift; never carry an armed Drop across a reload
     try {
       const res = await StashList(p);
       if (p !== path) return; // selection changed during await -> drop stale result
@@ -37,6 +41,7 @@
 
   async function doStash() {
     if (busy) return;
+    confirmDrop = -1;
     busy = true;
     try {
       const err = await Stash(path);
@@ -53,6 +58,7 @@
 
   async function doPop() {
     if (busy) return;
+    confirmDrop = -1;
     busy = true;
     try {
       const err = await StashPop(path);
@@ -61,6 +67,33 @@
         toastSuccess("Popped stash " + name);
         onChanged(path);
       }
+      await load();
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doApply(i: number) {
+    if (busy) return;
+    busy = true;
+    try {
+      const err = await StashApply(path, i);
+      if (err) toastError("Stash apply: " + err);
+      else { toastSuccess("Applied stash@{" + i + "}"); onChanged(path); }
+      await load();
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function doDrop(i: number) {
+    if (busy) return;
+    busy = true;
+    confirmDrop = -1;
+    try {
+      const err = await StashDrop(path, i);
+      if (err) toastError("Stash drop: " + err);
+      else toastSuccess("Dropped stash@{" + i + "}");
       await load();
     } finally {
       busy = false;
@@ -88,7 +121,16 @@
       {:else}
         <div class="stash-list">
           {#each entries as s, i (i)}
-            <span class="stash-entry">{s}</span>
+            <div class="stash-row">
+              <span class="stash-entry" title={s}>{s}</span>
+              {#if confirmDrop === i}
+                <button class="stash-mini" on:click={() => (confirmDrop = -1)}>Cancel</button>
+                <button class="stash-mini stash-danger" on:click={() => doDrop(i)} disabled={busy}>Drop</button>
+              {:else}
+                <button class="stash-mini" on:click={() => doApply(i)} disabled={busy}>Apply</button>
+                <button class="stash-mini stash-danger" on:click={() => (confirmDrop = i)} disabled={busy}>Drop</button>
+              {/if}
+            </div>
           {/each}
         </div>
       {/if}
