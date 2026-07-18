@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/hoijun/fleet/internal/cloud"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/edges"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/store"
+	"github.com/hoijun/fleet/internal/syncengine"
 )
 
 type fakeRunner struct{ out map[string]string }
@@ -1101,5 +1106,191 @@ func TestRenameProject(t *testing.T) {
 	}
 	if got, _ := a.store.Get("/some/code/path"); got.Name != "folder" {
 		t.Errorf("RenameProject must not rename a non-manual project, got %q", got.Name)
+	}
+}
+
+// StartupHealth is what stands between a user and an app that silently looks
+// like it forgot everything. It must name the affected file and mark the
+// project store as frozen, since that is the one whose writes are refused.
+func TestStartupHealthReportsFailedLoads(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects.json")
+	if err := os.WriteFile(p, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, storeErr := store.Open(p)
+	if storeErr == nil {
+		t.Fatal("precondition: the store should have failed to load")
+	}
+	// A real engine: DiscardCorruptStore resets it, and the App is never built
+	// without one.
+	eng := syncengine.New(st, cloud.New("http://127.0.0.1:0"), filepath.Join(dir, "sync.json"),
+		func(string) string { return "" }, st.Degraded)
+	a := &App{cfg: config.Default(), store: st, dataDir: dir, storeLoadErr: storeErr, engine: eng,
+		syncTrigger: make(chan struct{}, 1)}
+
+	issues := a.StartupHealth()
+	if len(issues) != 1 {
+		t.Fatalf("expected one issue, got %+v", issues)
+	}
+	if issues[0].Scope != "projects" || !issues[0].Frozen {
+		t.Errorf("projects failure must be reported as frozen, got %+v", issues[0])
+	}
+	if issues[0].Error == "" {
+		t.Error("the issue must carry the underlying error")
+	}
+
+	// A healthy app reports nothing at all.
+	if got := newTestApp(t).StartupHealth(); len(got) != 0 {
+		t.Errorf("a healthy app must report no issues, got %+v", got)
+	}
+
+	// The opt-in reset clears the condition and re-enables writes.
+	if msg := a.DiscardCorruptStore(); msg != "" {
+		t.Fatalf("DiscardCorruptStore: %s", msg)
+	}
+	if got := a.StartupHealth(); len(got) != 0 {
+		t.Errorf("expected no issues after the reset, got %+v", got)
+	}
+	if id := a.AddProject("after reset"); id == "" {
+		t.Error("writes must work after the reset")
+	}
+}
+
+// ConflictBackups is the only way a user can see what sync destroyed. It must
+// survive the file being absent, and the truncated last line a crash leaves.
+func TestConflictBackupsListsNewestFirstAndTolerates(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{cfg: config.Default(), dataDir: dir}
+
+	if got := a.ConflictBackups(); len(got) != 0 {
+		t.Errorf("a missing file must yield an empty list, got %+v", got)
+	}
+
+	lines := `{"at":"2026-07-01T10:00:00Z","localId":"m-1","name":"older","payload":{}}
+{"at":"2026-07-02T10:00:00Z","localId":"m-2","name":"newer","payload":{}}
+{"at":"2026-07-03T10:00:00Z","localId":"C:/repos/app","payload":{}}
+{"at":"2026-07-04T10:00:00Z","localId":"m-4","na`
+	if err := os.WriteFile(filepath.Join(dir, "sync-conflicts.jsonl"), []byte(lines), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := a.ConflictBackups()
+	if len(got) != 3 {
+		t.Fatalf("expected the 3 complete entries, got %+v", got)
+	}
+	if got[0].Name != "app" {
+		t.Errorf("newest must come first, and a nameless record falls back to its path, got %+v", got[0])
+	}
+	if got[2].Name != "older" {
+		t.Errorf("oldest must come last, got %+v", got[2])
+	}
+}
+
+// End-to-end over the real NewApp wiring: a corrupt projects.json in the data
+// directory must produce a degraded store, a reported health issue, refused
+// writes, and a sync engine that will not push from it. This is the exact chain
+// that would otherwise turn one bad local file into multi-device data loss.
+func TestNewAppSurfacesACorruptStoreEndToEnd(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("config.Path uses APPDATA on windows; XDG_CONFIG_HOME elsewhere")
+	}
+	dir := t.TempDir()
+	t.Setenv("APPDATA", dir)
+	fleetDir := filepath.Join(dir, "fleet")
+	if err := os.MkdirAll(fleetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const original = "{not json"
+	if err := os.WriteFile(filepath.Join(fleetDir, "projects.json"), []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := NewApp()
+
+	issues := a.StartupHealth()
+	if len(issues) != 1 || issues[0].Scope != "projects" {
+		t.Fatalf("expected a projects issue, got %+v", issues)
+	}
+	if a.store.Degraded() == nil {
+		t.Error("the store should be degraded")
+	}
+	if err := a.store.Put("x", store.Record{Manual: true, Name: "x"}); err == nil {
+		t.Error("writes must be refused while degraded")
+	}
+	if err := a.engine.SyncOnce("tok"); !errors.Is(err, syncengine.ErrLocalDataUnsafe) {
+		t.Errorf("the engine must refuse to sync from a degraded store, got %v", err)
+	}
+
+	// The bytes survived, under a name the banner can point the user at.
+	entries, _ := os.ReadDir(fleetDir)
+	found := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "projects.json.corrupt-") {
+			data, _ := os.ReadFile(filepath.Join(fleetDir, e.Name()))
+			if string(data) != original {
+				t.Errorf("quarantined bytes altered: %q", data)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the corrupt file must be quarantined, not left to be overwritten")
+	}
+}
+
+// "Start fresh" means "this device no longer holds the truth", NOT "delete my
+// projects". Without resetting the sync engine, sync.json still lists every
+// synced doc, none appear in the now-empty store, and the next cycle pushes a
+// tombstone for each - destroying the intact server copy and, on their next
+// pull, every other device. That would invert the entire point of this tier:
+// the unreadable file preserved, the good cloud copy destroyed.
+func TestDiscardCorruptStoreDoesNotTombstoneTheCloud(t *testing.T) {
+	var pushed []cloud.Doc
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var body struct {
+				Docs []cloud.Doc `json:"docs"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			pushed = append(pushed, body.Docs...)
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{}, "cursor": 0})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"docs": []any{}, "cursor": 0})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects.json")
+	if err := os.WriteFile(p, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, storeErr := store.Open(p)
+	if storeErr == nil {
+		t.Fatal("precondition: the store should have failed to load")
+	}
+	// sync.json remembers two projects that synced fine before the corruption.
+	statePath := filepath.Join(dir, "sync.json")
+	state := `{"cursor":7,"docs":{"m-1":{"localId":"m-1","hash":"h1","updatedAt":"2026-07-01T00:00:00Z"},` +
+		`"m-2":{"localId":"m-2","hash":"h2","updatedAt":"2026-07-01T00:00:00Z"}}}`
+	if err := os.WriteFile(statePath, []byte(state), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	eng := syncengine.New(st, cloud.New(srv.URL), statePath, func(string) string { return "" }, st.Degraded)
+	a := &App{cfg: config.Default(), store: st, dataDir: dir, storeLoadErr: storeErr, engine: eng,
+		syncTrigger: make(chan struct{}, 1)}
+
+	if msg := a.DiscardCorruptStore(); msg != "" {
+		t.Fatalf("DiscardCorruptStore: %s", msg)
+	}
+	if err := a.engine.SyncOnce("tok"); err != nil {
+		t.Fatalf("sync after the reset should work: %v", err)
+	}
+
+	for _, d := range pushed {
+		if d.Deleted {
+			t.Errorf("discarding a local file must never delete %q on the server", d.DocID)
+		}
 	}
 }

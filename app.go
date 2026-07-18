@@ -52,6 +52,13 @@ type App struct {
 	aiCancel context.CancelFunc
 	aiGen    int
 
+	// Startup load failures, kept so the UI can say which file could not be read
+	// instead of silently presenting an empty app (see StartupHealth).
+	cfgLoadErr   error
+	storeLoadErr error
+	edgesLoadErr error
+	cfgPath      string
+
 	// agentic deep-dive (drives the claude CLI + PreToolUse approval gate)
 	dataDir      string
 	agentCoord   *agent.Coordinator
@@ -104,12 +111,16 @@ const (
 // NewApp builds the App with the real git runner, loaded config, and the cloud
 // sync stack (API client, keychain-backed credential store, sync engine).
 func NewApp() *App {
-	cfg, cfgPath, _ := config.Load()
+	// Every loader here degrades to something usable, but NONE of them may
+	// degrade silently: an empty app that quietly writes its emptiness back is
+	// how a parse failure becomes permanent data loss. The errors are kept and
+	// surfaced by StartupHealth.
+	cfg, cfgPath, cfgErr := config.Load()
 	dir := filepath.Dir(cfgPath)
 	storePath := filepath.Join(dir, "projects.json")
-	st, _ := store.Open(storePath) // empty store on error; UI still works
+	st, storeErr := store.Open(storePath)
 	edgesPath := filepath.Join(dir, "edges.json")
-	ed, _ := edges.Open(edgesPath) // empty store on error; UI still works
+	ed, edgesErr := edges.Open(edgesPath)
 
 	cl := cloud.New(apiURL())
 	creds := cloud.KeyringStore{Service: "fleet", User: "refresh"}
@@ -117,10 +128,12 @@ func NewApp() *App {
 	eng := syncengine.New(st, cl, syncPath, func(path string) string {
 		u, _ := git.RemoteURL(git.ExecRunner{}, path)
 		return u
-	})
+	}, st.Degraded)
 
 	return &App{
 		cfg: cfg, runner: git.ExecRunner{}, store: st,
+		cfgLoadErr: cfgErr, storeLoadErr: storeErr, edgesLoadErr: edgesErr,
+		cfgPath: cfgPath,
 		ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed,
 		symCache:     map[string]symEntry{},
 		aiRunner:     ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey),
@@ -230,6 +243,110 @@ func (a *App) RunCommand(path, line string) string {
 }
 
 func (a *App) GetConfig() config.Config { return a.cfgSnapshot() }
+
+// HealthIssue is one on-disk file fleet could not load at startup.
+type HealthIssue struct {
+	Scope string `json:"scope"` // "projects" | "config" | "edges"
+	Path  string `json:"path"`
+	Error string `json:"error"`
+	// Frozen is true when the affected store refuses writes until the user
+	// decides what to do. Only the project store freezes; it is the synced data
+	// of record, and an accidental write there propagates everywhere.
+	Frozen bool `json:"frozen"`
+}
+
+// StartupHealth reports the files that failed to load. An empty slice is the
+// normal case and the UI shows nothing.
+func (a *App) StartupHealth() []HealthIssue {
+	out := []HealthIssue{}
+	if a.storeLoadErr != nil {
+		out = append(out, HealthIssue{
+			Scope: "projects", Path: filepath.Join(a.dataDir, "projects.json"),
+			Error: a.storeLoadErr.Error(), Frozen: true,
+		})
+	}
+	if a.cfgLoadErr != nil {
+		out = append(out, HealthIssue{Scope: "config", Path: a.cfgPath, Error: a.cfgLoadErr.Error()})
+	}
+	if a.edgesLoadErr != nil {
+		out = append(out, HealthIssue{
+			Scope: "edges", Path: filepath.Join(a.dataDir, "edges.json"),
+			Error: a.edgesLoadErr.Error(),
+		})
+	}
+	return out
+}
+
+// DiscardCorruptStore abandons an unreadable project store and starts empty,
+// re-enabling writes and sync. Destructive on purpose and only ever reached
+// through an explicit confirmation in the UI - the original bytes remain in the
+// quarantined .corrupt-* file next to it.
+//
+// It resets the sync engine too, and that is not incidental. The user is saying
+// "this device no longer holds the truth", NOT "delete my projects". Without the
+// reset, sync.json still lists every synced doc, none of them appear in the now
+// empty store, and the very next cycle pushes a tombstone for each - destroying
+// the intact server copy and, on their next pull, every other device. Resetting
+// the bookkeeping makes this machine a fresh device instead: it pushes nothing
+// and pulls the whole corpus back down. Same reasoning as DeleteAccount.
+func (a *App) DiscardCorruptStore() string {
+	if a.storeLoadErr == nil {
+		return "" // nothing to discard
+	}
+	if err := a.store.DiscardAndReset(); err != nil {
+		return err.Error()
+	}
+	a.storeLoadErr = nil
+	a.engine.Reset()
+	a.triggerSync()
+	return ""
+}
+
+// RevealDataDir opens fleet's data directory in the OS file manager. It is how
+// the user reaches a quarantined file or a conflict backup, neither of which is
+// otherwise discoverable.
+func (a *App) RevealDataDir() string { return a.RevealInExplorer(a.dataDir) }
+
+// ConflictView is one backed-up local record that sync destroyed.
+type ConflictView struct {
+	LocalID string `json:"localId"`
+	Name    string `json:"name"`
+	When    string `json:"when"`
+}
+
+// ConflictBackups lists the records sync overwrote or deleted, newest first, as
+// recorded in sync-conflicts.jsonl. A missing or unreadable file yields an empty
+// list: this is a recovery aid, never a source of new errors.
+func (a *App) ConflictBackups() []ConflictView {
+	out := []ConflictView{}
+	data, err := os.ReadFile(filepath.Join(a.dataDir, "sync-conflicts.jsonl"))
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var e struct {
+			At      string `json:"at"`
+			LocalID string `json:"localId"`
+			Name    string `json:"name"`
+		}
+		if json.Unmarshal([]byte(line), &e) != nil {
+			continue // a truncated last line is expected after a crash
+		}
+		name := e.Name
+		if name == "" {
+			name = baseName(e.LocalID)
+		}
+		out = append([]ConflictView{{LocalID: e.LocalID, Name: name, When: e.At}}, out...)
+	}
+	return out
+}
+
+// GitOperation reports an in-progress merge or rebase ("merge"/"rebase"/""), so
+// the UI can offer to finish it instead of an action that would destroy it.
+func (a *App) GitOperation(path string) string { return git.OperationInProgress(path) }
 
 // DirExists reports whether path is an existing directory. Settings uses it to
 // flag a configured Root that is missing (e.g. an unmounted drive). A hint, not

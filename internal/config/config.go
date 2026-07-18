@@ -2,11 +2,14 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/hoijun/fleet/internal/fileguard"
 )
 
 // Config is fleet's on-disk configuration.
@@ -95,8 +98,27 @@ func loadFrom(p string) (Config, error) {
 		}
 		return d, nil
 	}
+	// Read and decode in two steps rather than toml.DecodeFile, which folds
+	// open() failures and syntax errors into one error. They call for opposite
+	// responses: a file we could not READ (a permission problem, a backup agent
+	// holding it open, a descriptor limit) is usually intact and must be left
+	// exactly where it is - Quarantine would happily rename it, since that needs
+	// permission on the directory and not on the file, and the user would be
+	// left with a healthy config under a name marked "corrupt".
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return Default(), err
+	}
 	var c Config
-	if _, err := toml.DecodeFile(p, &c); err != nil {
+	if _, err := toml.Decode(string(data), &c); err != nil {
+		// This one really is unparseable, and it holds the only copy of the AI
+		// and Notion keys - they live nowhere else, not in the keychain and not
+		// in an export. Move it aside before the caller (which renders these
+		// defaults as if they were real, and saves them back on the next edit)
+		// can overwrite it.
+		if dest, qerr := fileguard.Quarantine(p); qerr == nil && dest != "" {
+			return Default(), fmt.Errorf("config.toml is not valid TOML (moved to %s): %w", filepath.Base(dest), err)
+		}
 		return Default(), err
 	}
 	// Backfill any fields left empty by an old/partial file.
@@ -116,15 +138,33 @@ func loadFrom(p string) (Config, error) {
 	return c, nil
 }
 
-// Save writes the config to p, creating parent directories as needed.
+// Save writes the config to p, creating parent directories as needed. The write
+// is atomic (temp file + rename), matching every other persister in fleet
+// (store, edges, sync state): encoding straight into the live file would leave a
+// truncated, unparseable config behind if the app died mid-write - and that file
+// holds the only copy of the AI and Notion keys.
 func (c Config) Save(p string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(p)
+	tmp := p + ".tmp"
+	f, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return toml.NewEncoder(f).Encode(c)
+	if err := toml.NewEncoder(f).Encode(c); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, p)
 }

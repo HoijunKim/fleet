@@ -229,3 +229,89 @@ func TestRebaseUpstreamConflictAborts(t *testing.T) {
 		t.Errorf("after aborted rebase HEAD subject = %q, want B2", got)
 	}
 }
+
+// A merge the USER started - in a terminal, outside fleet - must survive a
+// click on the diverged banner. The banner stays lit mid-merge (ahead/behind
+// come from `# branch.ab`, which an in-progress merge does not change), so this
+// is one click away, and the resolved-but-uncommitted work it would abort is
+// unrecoverable: it exists only in the working tree.
+func TestIntegrateRefusesWhenAnOperationIsAlreadyInProgress(t *testing.T) {
+	dir := setupDiverged(t, true)
+
+	// The user starts the merge themselves and resolves the conflict, but has
+	// not committed it yet.
+	if _, err := (ExecRunner{}).Run(dir, "merge", "@{u}"); err == nil {
+		t.Fatal("precondition: the merge should have conflicted")
+	}
+	writeFile(t, dir, "shared.txt", "carefully resolved by hand\n")
+	gitOK(t, dir, "add", "shared.txt")
+	if OperationInProgress(dir) != "merge" {
+		t.Fatal("precondition: the repo should be mid-merge")
+	}
+
+	if err := MergeUpstream(ExecRunner{}, dir); err == nil {
+		t.Fatal("expected a refusal while a merge is in progress")
+	} else if !strings.Contains(err.Error(), "already in progress") {
+		t.Errorf("error should name the cause, got %q", err)
+	}
+
+	// The user's work is untouched: still mid-merge, still their resolution.
+	if OperationInProgress(dir) != "merge" {
+		t.Error("fleet aborted a merge it did not start")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "shared.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(data)) != "carefully resolved by hand" {
+		t.Errorf("the user's resolution was destroyed, file now: %q", data)
+	}
+	// And they can still finish it.
+	gitOK(t, dir, "-c", "user.email=b@test", "-c", "user.name=B", "commit", "--no-edit")
+	assertClean(t, dir)
+}
+
+func TestOperationInProgressReportsNoneOnACleanRepo(t *testing.T) {
+	dir := setupDiverged(t, false)
+	if op := OperationInProgress(dir); op != "" {
+		t.Errorf("clean repo reported %q", op)
+	}
+	if err := MergeUpstream(ExecRunner{}, dir); err != nil {
+		t.Fatalf("a clean diverged merge must still work: %v", err)
+	}
+	assertClean(t, dir)
+}
+
+// The unwind must key off "is an operation in progress", not "are there
+// unmerged entries". A rejecting commit-msg hook (commitlint, husky), a broken
+// commit signer, or an unset identity all make `git merge @{u}` fail AFTER the
+// content is merged: the index is clean, `ls-files -u` is empty, and the repo is
+// left mid-merge. Leaving that behind would also poison every later attempt,
+// since the in-progress guard would then refuse a mess fleet itself made.
+func TestIntegrateRollsBackWhenGitFailsAfterMerging(t *testing.T) {
+	dir := setupDiverged(t, false) // no conflict: the content merges cleanly
+
+	hooks := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooks, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Reject the merge commit itself, the way a commit-message linter does.
+	hook := filepath.Join(hooks, "commit-msg")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := MergeUpstream(ExecRunner{}, dir)
+	if err == nil {
+		t.Skip("git did not run the commit-msg hook here, so there is nothing to roll back")
+	}
+	if unmerged, _ := (ExecRunner{}).Run(dir, "ls-files", "-u"); strings.TrimSpace(unmerged) != "" {
+		t.Fatal("precondition: this failure should leave a fully merged index")
+	}
+	assertClean(t, dir) // the repo must not be left mid-merge
+
+	// And the next attempt is not refused by the in-progress guard.
+	if err := MergeUpstream(ExecRunner{}, dir); err != nil && strings.Contains(err.Error(), "already in progress") {
+		t.Errorf("fleet refused to retry because of wreckage it left itself: %v", err)
+	}
+}

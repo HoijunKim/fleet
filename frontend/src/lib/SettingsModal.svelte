@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists } from "../../wailsjs/go/main/App";
-  import type { config } from "../../wailsjs/go/models";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir } from "../../wailsjs/go/main/App";
+  import type { config, main } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { editorSelection } from "./editorSelection";
   import Logo from "./Logo.svelte";
@@ -17,6 +17,9 @@
   let tab: "general" | "ai" | "integrations" = "general";
   let aiOk = false;
   let exporting = false;
+  // Local records sync destroyed, newest first. The backup file is otherwise
+  // reachable only through a toast that has long since disappeared.
+  let backups: main.ConflictView[] = [];
 
   // Export the local store to a JSON file the user picks (native save dialog).
   async function doExport() {
@@ -54,6 +57,7 @@
       refreshAiOk();
       syncEditorChoice();
       checkRoots();
+      ConflictBackups().then((b) => (backups = b || [])).catch(() => (backups = []));
     } catch (e) {
       toastError("Load failed: " + String(e));
     } finally {
@@ -295,6 +299,32 @@
             <span class="ai-hint">Save all projects and tasks to a JSON file on this machine.</span>
           </div>
         </div>
+
+        {#if backups.length}
+          <div class="field">
+            <span class="field-label">Overwritten copies</span>
+            <span class="ai-hint">
+              Records sync overwrote or deleted here. Each was saved before it went,
+              in sync-conflicts.jsonl.
+            </span>
+            <ul class="set-backups">
+              {#each backups.slice(0, 8) as b, i (b.when + b.localId + i)}
+                <li>
+                  <span class="set-backup-name">{b.name}</span>
+                  <span class="set-backup-when">{b.when}</span>
+                </li>
+              {/each}
+            </ul>
+            <div class="set-data-row">
+              <button class="btn btn-secondary btn-sm" on:click={() => RevealDataDir()}>
+                Open data folder
+              </button>
+              {#if backups.length > 8}
+                <span class="ai-hint">and {backups.length - 8} more</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
       {:else if tab === "ai"}
         <div class="field">
           <span class="field-label">Provider for the Today briefing</span>

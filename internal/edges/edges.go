@@ -10,8 +10,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/hoijun/fleet/internal/fileguard"
 )
 
 // Edge is a single manual relationship between two repos.
@@ -28,22 +31,38 @@ type Store struct {
 	path  string
 	mu    sync.Mutex
 	edges []Edge
+
+	// loadErr is set only when a file we could not read is STILL at path. A file
+	// we could not parse is quarantined instead, which leaves nothing at path to
+	// clobber, so persisting is safe again and loadErr stays nil.
+	loadErr error
 }
 
-// Open loads the store from path. A missing file or a malformed file
-// both yield an empty store with a nil error; the store never fails
-// to open because of a corrupt scratch file on disk.
+// Open loads the store from path. A missing file yields an empty store with a
+// nil error. A file that exists but cannot be read or parsed yields an empty
+// store AND an error: the caller must surface it, because the next Add would
+// otherwise persist that empty slice over the user's real edges. A malformed
+// file is quarantined first, so its bytes are never overwritten.
 func Open(path string) (*Store, error) {
 	s := &Store{path: path}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return s, nil
+		if os.IsNotExist(err) {
+			return s, nil
+		}
+		s.loadErr = fmt.Errorf("edges: read %s: %w", path, err)
+		return s, s.loadErr
 	}
 
 	var loaded []Edge
 	if err := json.Unmarshal(data, &loaded); err != nil {
-		return s, nil
+		dest, qerr := fileguard.Quarantine(path)
+		if qerr != nil || dest == "" {
+			s.loadErr = fmt.Errorf("edges.json is not valid JSON: %w", err)
+			return s, s.loadErr
+		}
+		return s, fmt.Errorf("edges.json is not valid JSON (moved to %s): %w", filepath.Base(dest), err)
 	}
 
 	s.edges = loaded
@@ -145,8 +164,13 @@ func AllowedKind(kind string) bool {
 }
 
 // persistLocked marshals the current edges and atomically writes them
-// to s.path. Callers must hold s.mu.
+// to s.path. Callers must hold s.mu. It refuses to write when a file we could
+// not read is still sitting at s.path: s.edges is the empty fallback, and
+// writing it would destroy edges we never managed to load.
 func (s *Store) persistLocked() error {
+	if s.loadErr != nil {
+		return fmt.Errorf("edges: refusing to write over unreadable data: %w", s.loadErr)
+	}
 	data, err := json.MarshalIndent(s.edges, "", "  ")
 	if err != nil {
 		return fmt.Errorf("edges: marshal: %w", err)

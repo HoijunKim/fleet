@@ -4,10 +4,13 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/hoijun/fleet/internal/fileguard"
 )
 
 // Task is one checklist item on a project.
@@ -39,10 +42,20 @@ type Store struct {
 	path    string
 	mu      sync.RWMutex
 	records map[string]Record
+
+	// loadErr is set when the file existed but could not be read or parsed. The
+	// store stays usable for READS (an empty map), but every write is refused
+	// while it is set: writing would replace the user's real data with the empty
+	// map we fell back to. See saveLocked.
+	loadErr error
+	// quarantined is where the unparseable bytes were moved, when they were.
+	quarantined string
 }
 
 // Open loads the store at path. A missing file yields an empty store with no
-// error. A corrupt file yields an empty (usable) store AND a non-nil error.
+// error. A file that exists but cannot be read or parsed yields a read-only
+// store: the bytes are quarantined (never overwritten), Degraded reports the
+// failure, and every write is refused until DiscardAndReset.
 func Open(path string) (*Store, error) {
 	s := &Store{path: path, records: map[string]Record{}}
 	data, err := os.ReadFile(path)
@@ -50,11 +63,22 @@ func Open(path string) (*Store, error) {
 		if os.IsNotExist(err) {
 			return s, nil
 		}
+		// Unreadable but present (permissions, a locked file, a backup agent
+		// holding it, a descriptor limit): do NOT quarantine. The file itself is
+		// very often perfectly good and the next launch will read it fine -
+		// renaming it here would turn a transient failure into a file the user
+		// has to go find. Refusing to write is enough; DiscardAndReset does the
+		// quarantine if the user ever chooses to move on without it.
+		s.loadErr = err
 		return s, err
 	}
 	var recs map[string]Record
 	if err := json.Unmarshal(data, &recs); err != nil {
-		return s, err
+		s.loadErr = fmt.Errorf("projects.json is not valid JSON: %w", err)
+		if dest, qerr := fileguard.Quarantine(path); qerr == nil {
+			s.quarantined = dest
+		}
+		return s, s.loadErr
 	}
 	migrate(recs)
 	if recs != nil {
@@ -154,9 +178,62 @@ func (s *Store) Delete(id string) error {
 	return s.saveLocked()
 }
 
+// Path returns the file backing this store.
+func (s *Store) Path() string { return s.path }
+
+// Degraded returns the load failure when the store opened in read-only mode, or
+// nil when it holds the real data. Callers that must not act on an empty store
+// (the sync engine, above all) check this first.
+func (s *Store) Degraded() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadErr
+}
+
+// Quarantined returns where the unparseable file was moved, or "" if it was not
+// moved (a read failure, or a healthy store).
+func (s *Store) Quarantined() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.quarantined
+}
+
+// DiscardAndReset clears the degraded flag and writes the current (empty) map,
+// re-enabling writes. It is destructive by design and must only be called on an
+// explicit user opt-in, never automatically: the whole point of the degraded
+// state is that fleet does not decide on its own to move on without the data.
+//
+// "Discard" must still mean "set aside", never "erase". Open quarantines only
+// what it could PARSE and fail - a file it could not READ (a permission
+// problem, a backup agent holding it open) is left untouched and is very often
+// perfectly good. Overwriting that file here would destroy intact data while
+// the UI promises the original was kept, so it is moved aside first and the
+// reset is abandoned if that cannot be done.
+func (s *Store) DiscardAndReset() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.quarantined == "" {
+		dest, err := fileguard.Quarantine(s.path)
+		if err != nil {
+			return fmt.Errorf("cannot set the unreadable file aside, so it will not be replaced: %w", err)
+		}
+		s.quarantined = dest
+	}
+	s.loadErr = nil
+	return s.saveLocked()
+}
+
 // saveLocked writes the store to disk atomically (temp file + rename). The
 // caller MUST already hold s.mu (write lock); this serializes all disk writes.
+//
+// A degraded store refuses to save: s.records is the empty fallback map, not the
+// user's data, so writing it would replace a file we merely failed to PARSE with
+// one that is genuinely empty - turning a recoverable problem into permanent
+// loss on the user's first edit.
 func (s *Store) saveLocked() error {
+	if s.loadErr != nil {
+		return fmt.Errorf("refusing to write over unreadable data: %w", s.loadErr)
+	}
 	data, err := json.MarshalIndent(s.records, "", "  ")
 	if err != nil {
 		return err

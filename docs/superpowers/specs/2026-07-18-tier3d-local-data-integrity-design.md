@@ -23,7 +23,10 @@ the engine alone still loses the local file.
   `Delete` fail loudly instead of writing an empty map over real data. It is
   ALREADY atomic (temp+rename at `:167-171`) - gate it, do not rewrite it.
 - Add `Degraded() error` and `DiscardAndReset() error` (clears `loadErr` after an
-  explicit user opt-in, then saves the empty map).
+  explicit user opt-in, then saves the empty map). It quarantines first if
+  nothing was moved aside yet, and abandons the reset if it cannot: "discard"
+  must mean "set aside", never "erase", and an unreadable-but-present file was
+  deliberately NOT quarantined at Open.
 
 `internal/fileguard` (new, tiny): `Quarantine(path) (string, error)` renames a
 file to `<name>.corrupt-<RFC3339 with : stripped>` and returns the new path. One
@@ -35,7 +38,11 @@ implementation shared by all three loaders so the bytes are never lost.
 - `config.loadFrom` (`:99-101`) quarantines before returning `Default()`, so the
   file holding `OpenAIKey`/`GeminiKey`/`NotionToken` - which exist nowhere else,
   not in the keychain (`app.go:115` stores only the sync refresh token), not in
-  `ExportData` (`app.go:740`) - survives a decode error.
+  `ExportData` (`app.go:740`) - survives a decode error. It reads and decodes in
+  two steps rather than using `toml.DecodeFile`, which folds `open()` failures
+  into the same error as syntax errors: quarantine needs permission on the
+  directory and not on the file, so it would cheerfully rename a perfectly good
+  config that a backup agent happened to be holding.
 
 `internal/config/config.go`: `Save` (`:120-130`) is the one persister that is not
 atomic - `os.Create(p)` (`:124`) truncates the live file in place, so an unclean
@@ -47,7 +54,12 @@ shutdown mid-save is itself a way to produce the corrupt file. Encode to
 on the App struct (set in `NewApp`) and add bound methods:
 - `StartupHealth() []HealthIssue` - `{Scope, Path, Error, Quarantined}` per
   failed loader.
-- `DiscardCorruptStore() string` - explicit opt-in reset.
+- `DiscardCorruptStore() string` - explicit opt-in reset. It also calls
+  `engine.Reset()`, as `DeleteAccount` does: the user is saying "this device no
+  longer holds the truth", not "delete my projects". Without it, `sync.json`
+  still lists every synced doc, none appear in the emptied store, and the next
+  cycle tombstones the intact server copy and every other device - the exact
+  loss this tier exists to prevent, triggered by its own remediation button.
 - `RevealDataDir() string` - wraps the existing `RevealInExplorer` (`:469`) on
   `a.dataDir` (`:127`), which is Go-only today.
 
@@ -129,10 +141,14 @@ that does the damage.
   `.git/MERGE_HEAD`, `.git/rebase-merge`, `.git/rebase-apply` -> `"merge"` /
   `"rebase"` / `""`.
 - `integrateUpstream` checks it FIRST and returns a clear error without running
-  git at all; then delete the unconditional `--abort` at `:139`, keeping only the
-  conflict-path abort at `:133` (fleet's own operation, safe to unwind). Rewrite
-  the doc comment at `:119-124`, which documents the removed behavior as
-  intentional.
+  git at all. The unwind after a failure then keys off `OperationInProgress`
+  rather than `ls-files -u`: the guard has already proved nothing was running
+  before, so anything running after is fleet's own and is safe to abort. Keying
+  off unmerged entries would miss every failure that happens AFTER the content
+  merged - a rejecting `commit-msg` hook, `commit.gpgsign` with a broken signer,
+  an unset identity - each of which leaves a clean index, strands the repo
+  mid-operation (mid-rebase: on a detached HEAD), and would then be permanently
+  refused by the new guard as "someone else's" operation.
 - `app.go`: bind `GitOperation(path) string` next to `MergeUpstream`/
   `RebaseUpstream`.
 - `DetailPanel.svelte`: gate the diverged banner on no operation in progress,

@@ -111,6 +111,22 @@ export namespace main {
 	        this.when = source["when"];
 	    }
 	}
+	export class ConflictView {
+	    localId: string;
+	    name: string;
+	    when: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConflictView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.localId = source["localId"];
+	        this.name = source["name"];
+	        this.when = source["when"];
+	    }
+	}
 	export class DayCountView {
 	    date: string;
 	    count: number;
@@ -262,6 +278,24 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class HealthIssue {
+	    scope: string;
+	    path: string;
+	    error: string;
+	    frozen: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new HealthIssue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scope = source["scope"];
+	        this.path = source["path"];
+	        this.error = source["error"];
+	        this.frozen = source["frozen"];
+	    }
 	}
 	export class NotionDBView {
 	    id: string;

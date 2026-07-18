@@ -13,6 +13,9 @@
     >
       <span class="toast-dot"></span>
       <span class="toast-msg">{t.message}</span>
+      {#if t.action}
+        <button class="toast-action" on:click={t.action.run}>{t.action.label}</button>
+      {/if}
       <button class="toast-x" on:click={() => dismissToast(t.id)} aria-label="Dismiss">x</button>
     </div>
   {/each}

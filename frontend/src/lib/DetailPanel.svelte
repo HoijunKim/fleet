@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Fetch, Pull, Push, MergeUpstream, RebaseUpstream, OpenEditor, OpenTerminal, RenameProject } from "../../wailsjs/go/main/App";
+  import { Fetch, Pull, Push, MergeUpstream, RebaseUpstream, OpenEditor, OpenTerminal, RenameProject, GitOperation } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
   import { scale } from "svelte/transition";
   import { ddayLabel } from "./pm";
@@ -58,12 +58,42 @@
   // integrate. The Pull button stays --ff-only; this drives the Merge/Rebase UI.
   $: diverged = !!project && project.hasUpstream && project.ahead > 0 && project.behind > 0;
 
+  // "merge" / "rebase" when the repo is mid-operation, "" otherwise. Refreshed
+  // on selection and after any action that could start or finish one, since an
+  // operation begun in a terminal is invisible in ahead/behind.
+  let gitOp = "";
+  async function refreshGitOp() {
+    if (!project || !isCode) {
+      gitOp = "";
+      return;
+    }
+    const path = project.path;
+    try {
+      const op = await GitOperation(path);
+      if (project && project.path === path) gitOp = op; // ignore a stale reply
+    } catch {
+      gitOp = "";
+    }
+  }
+
+  // Every repo mutation funnels through here so nothing can refresh the project
+  // while leaving gitOp stale. Committing is the case that matters: it is what
+  // ENDS a merge, and the project object it refreshes keeps the same id, so the
+  // reactive block below does not re-run and the banner would otherwise insist
+  // the merge is still in progress for the rest of the session.
+  function repoChanged(path: string) {
+    onRepoChanged(path);
+    refreshGitOp();
+  }
+
   // Reset transient panel state when the selection changes.
   $: if (project && project.id !== lastId) {
     lastId = project.id;
     diffView = null;
     renaming = false;
     savingName = false;
+    gitOp = "";
+    refreshGitOp();
   }
 
   // Read-only Overview values.
@@ -131,31 +161,31 @@
     const e = await Fetch(project.path);
     if (e) toastError("Fetch " + project.name + ": " + e);
     else toastSuccess("Fetched " + project.name);
-    onRepoChanged(project.path);
+    repoChanged(project.path);
   }
   async function doPull() {
     const e = await Pull(project.path);
     if (e) toastError("Pull " + project.name + ": " + e);
     else toastSuccess("Pulled " + project.name);
-    onRepoChanged(project.path);
+    repoChanged(project.path);
   }
   async function doPush() {
     const e = await Push(project.path);
     if (e) toastError("Push " + project.name + ": " + e);
     else toastSuccess("Pushed " + project.name);
-    onRepoChanged(project.path);
+    repoChanged(project.path);
   }
   async function doMerge() {
     const e = await MergeUpstream(project.path);
     if (e) toastError("Merge " + project.name + ": " + e);
     else toastSuccess("Merged upstream into " + project.name);
-    onRepoChanged(project.path);
+    repoChanged(project.path);
   }
   async function doRebase() {
     const e = await RebaseUpstream(project.path);
     if (e) toastError("Rebase " + project.name + ": " + e);
     else toastSuccess("Rebased " + project.name + " onto upstream");
-    onRepoChanged(project.path);
+    repoChanged(project.path);
   }
   async function doEdit() {
     const e = await OpenEditor(project.path);
@@ -312,7 +342,7 @@
                 </div>
                 <div class="dl-row">
                   <span class="dl-label">Branch</span>
-                  <BranchMenu path={project.path} name={project.name} onChanged={onRepoChanged} />
+                  <BranchMenu path={project.path} name={project.name} onChanged={repoChanged} />
                 </div>
                 {#if project.remote}
                   <div class="dl-row">
@@ -345,7 +375,7 @@
               </div>
 
               <div class="detail-sep"></div>
-              <CommitBox path={project.path} name={project.name} dirtyFiles={project.dirtyFiles} onChanged={onRepoChanged} />
+              <CommitBox path={project.path} name={project.name} dirtyFiles={project.dirtyFiles} onChanged={repoChanged} />
 
               <div class="detail-sep"></div>
               <div class="detail-actions">
@@ -361,11 +391,29 @@
                 <button class="btn btn-secondary btn-sm" on:click={doTerm}>Terminal</button>
               </div>
 
-              {#if diverged}
+              {#if gitOp}
+                <!-- The diverged banner stays lit mid-merge (ahead/behind do not
+                     change while one is in progress), so offering Merge/Rebase
+                     here would put the user one click from an operation fleet
+                     must refuse - and whose only unwind would destroy their
+                     half-finished work. Say what is happening instead. -->
+                <div class="diverged-banner">
+                  <div class="diverged-msg">
+                    <strong>{gitOp === "rebase" ? "Rebase" : "Merge"} in progress</strong>
+                    - started outside fleet.
+                    <span class="diverged-hint">
+                      Finish or abort it in a terminal; fleet will not touch it.
+                    </span>
+                  </div>
+                  <div class="diverged-actions">
+                    <button class="btn btn-secondary btn-sm" on:click={doTerm}>Terminal</button>
+                  </div>
+                </div>
+              {:else if diverged}
                 <div class="diverged-banner">
                   <div class="diverged-msg">
                     <strong>Diverged</strong> - {project.ahead} local ahead, {project.behind} on upstream.
-                    <span class="diverged-hint">Merge keeps both histories; Rebase replays your commits on top. Conflicts abort safely.</span>
+                    <span class="diverged-hint">Merge keeps both histories; Rebase replays your commits on top. A conflict is rolled back, not left half-applied.</span>
                   </div>
                   <div class="diverged-actions">
                     <button class="btn btn-secondary btn-sm" on:click={doMerge}>Merge</button>
@@ -375,7 +423,7 @@
               {/if}
 
               <div class="detail-sep"></div>
-              <StashPanel path={project.path} name={project.name} onChanged={onRepoChanged} />
+              <StashPanel path={project.path} name={project.name} onChanged={repoChanged} />
 
               <div class="detail-sep"></div>
               <HistoryList path={project.path} />
