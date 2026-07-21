@@ -5,7 +5,11 @@ on:
 permissions:
   contents: write
 jobs:
+  test:
+    uses: ./.github/workflows/desktop.yml
+
   build:
+    needs: test
     strategy:
       matrix:
         include:
