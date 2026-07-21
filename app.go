@@ -159,6 +159,19 @@ func (a *App) startup(ctx context.Context) {
 	a.startSync(ctx)
 }
 
+// focus raises the existing window. It is the OnSecondInstanceLaunch callback:
+// a second launch hands its intent to the running instance and exits, rather
+// than opening a second window whose divergent in-memory stores would overwrite
+// this one's on the next save. The nil check is load-bearing - the callback can
+// fire before startup has assigned ctx.
+func (a *App) focus() {
+	if a.ctx == nil {
+		return
+	}
+	wruntime.WindowUnminimise(a.ctx)
+	wruntime.Show(a.ctx)
+}
+
 // RepoView is the JS-serializable view of a repo (repo.Repo's error field does
 // not serialize, so it becomes ErrMsg; last-commit fields are flattened).
 type RepoView struct {

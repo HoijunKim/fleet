@@ -1294,3 +1294,15 @@ func TestDiscardCorruptStoreDoesNotTombstoneTheCloud(t *testing.T) {
 		}
 	}
 }
+
+func TestFocusNilContextIsNoop(t *testing.T) {
+	// OnSecondInstanceLaunch can fire before startup has assigned a.ctx.
+	// focus must return instead of calling into a runtime with no window.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("focus panicked with a nil context: %v", r)
+		}
+	}()
+	a := &App{}
+	a.focus()
+}
