@@ -32,6 +32,14 @@ run this workflow twice - once directly and once through `release.yml`'s
 
 **Job `go`** - matrix `[windows-latest, ubuntu-latest]`:
 
+- The frontend must be built before any Go step. `main.go:15-16` declares
+  `//go:embed all:frontend/dist`, and `frontend/dist/` is gitignored
+  (`.gitignore:4`), so on a fresh checkout every Go command that compiles
+  package `main` - build, vet and test alike - fails with
+  `pattern all:frontend/dist: no matching files found`. The job therefore runs
+  `npm ci && npm run build` in `frontend/` first. `release.yml` does not need
+  this only because `wails build` runs the frontend install/build itself
+  (`wails.json`).
 - `go build ./...`, `go vet ./...`, `go test ./...`.
 - The ubuntu leg installs `libgtk-3-dev libwebkit2gtk-4.1-dev` and passes
   `-tags webkit2_41` to build, vet and test. Package `main` links wails, which
