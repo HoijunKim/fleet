@@ -54,6 +54,10 @@ func run(ctx context.Context) error {
 	trustProxy := envBool("TRUST_PROXY")
 	metricsToken := envOr("METRICS_TOKEN", "")
 
+	if err := validateSigningKey(signingKey); err != nil {
+		return err
+	}
+
 	if err := pgstore.Migrate(databaseURL); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
@@ -167,6 +171,34 @@ func mustEnv(key string) string {
 		os.Exit(1)
 	}
 	return v
+}
+
+// signingKeyMinLen and signingKeyMinDistinct are the floor for JWT_SIGNING_KEY.
+// 32 bytes matches the HS256 output width; the distinct-byte floor rejects
+// keys that pass a length check while carrying almost no entropy ("aaaa...",
+// a repeated word). Both are cheap guards against a key that would make every
+// issued token an offline cracking oracle for minting sub=<any user id>.
+const (
+	signingKeyMinLen      = 32
+	signingKeyMinDistinct = 8
+)
+
+func validateSigningKey(key []byte) error {
+	if len(key) < signingKeyMinLen {
+		return fmt.Errorf("JWT_SIGNING_KEY must be at least %d bytes, got %d", signingKeyMinLen, len(key))
+	}
+	var seen [256]bool
+	distinct := 0
+	for _, b := range key {
+		if !seen[b] {
+			seen[b] = true
+			distinct++
+		}
+	}
+	if distinct < signingKeyMinDistinct {
+		return fmt.Errorf("JWT_SIGNING_KEY has too little entropy: %d distinct bytes, need %d", distinct, signingKeyMinDistinct)
+	}
+	return nil
 }
 
 func envOr(key, def string) string {
