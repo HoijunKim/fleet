@@ -80,9 +80,9 @@ type App struct {
 	// by authCancelMu; AuthStart installs a fresh channel per attempt.
 	authCancel   chan struct{}
 	authCancelMu sync.Mutex
-	syncMu      sync.Mutex
-	syncView    SyncStateView
-	syncTrigger chan struct{}
+	syncMu       sync.Mutex
+	syncView     SyncStateView
+	syncTrigger  chan struct{}
 	// syncRunMu single-flights the actual SyncOnce call: the background loop
 	// and a UI-triggered SyncNow can both call runSync concurrently, and
 	// running two syncs at once on the same Session/Engine risks a double
@@ -133,7 +133,7 @@ func NewApp() *App {
 	return &App{
 		cfg: cfg, runner: git.ExecRunner{}, store: st,
 		cfgLoadErr: cfgErr, storeLoadErr: storeErr, edgesLoadErr: edgesErr,
-		cfgPath: cfgPath,
+		cfgPath:  cfgPath,
 		ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed,
 		symCache:     map[string]symEntry{},
 		aiRunner:     ai.New(cfg.AIProvider, cfg.AIModel, cfg.OpenAIKey, cfg.GeminiKey),
@@ -576,10 +576,16 @@ func (a *App) StatusFiles(path string) []StatusFilesView {
 // StageFile/UnstageFile move a single path in/out of the index. CommitStaged
 // commits only the index; CommitAmend rewrites the last commit; LastCommitMessage
 // returns HEAD's message for prefilling an amend.
-func (a *App) StageFile(path, file string) string   { return errMsg(git.StageFile(a.runner, path, file)) }
-func (a *App) UnstageFile(path, file string) string { return errMsg(git.UnstageFile(a.runner, path, file)) }
-func (a *App) CommitStaged(path, msg string) string { return errMsg(git.CommitStaged(a.runner, path, msg)) }
-func (a *App) CommitAmend(path, msg string) string  { return errMsg(git.CommitAmend(a.runner, path, msg)) }
+func (a *App) StageFile(path, file string) string { return errMsg(git.StageFile(a.runner, path, file)) }
+func (a *App) UnstageFile(path, file string) string {
+	return errMsg(git.UnstageFile(a.runner, path, file))
+}
+func (a *App) CommitStaged(path, msg string) string {
+	return errMsg(git.CommitStaged(a.runner, path, msg))
+}
+func (a *App) CommitAmend(path, msg string) string {
+	return errMsg(git.CommitAmend(a.runner, path, msg))
+}
 func (a *App) LastCommitMessage(path string) string {
 	msg, _ := git.LastCommitMessage(a.runner, path)
 	return msg

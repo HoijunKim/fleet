@@ -53,9 +53,11 @@ func parseStatus(out string) statusResult {
 
 // changedPath extracts the path from a porcelain v2 changed entry. The number
 // of fixed fields before the path depends on the entry type:
-//   "1" (ordinary): 8 leading fields
-//   "2" (rename/copy): 9 leading fields; the path field is "<new>\t<orig>"
-//   "u" (unmerged): 10 leading fields
+//
+//	"1" (ordinary): 8 leading fields
+//	"2" (rename/copy): 9 leading fields; the path field is "<new>\t<orig>"
+//	"u" (unmerged): 10 leading fields
+//
 // For rename entries we keep the new path (before the tab).
 func changedPath(line string) string {
 	var lead int

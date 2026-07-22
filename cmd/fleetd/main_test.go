@@ -45,7 +45,7 @@ func TestValidateSigningKey(t *testing.T) {
 		wantErr bool
 	}{
 		{"empty", "", true},
-		{"short but random", "k9#Lq2vXz7!Pw4Rt6Ym1Bn8Cd3Fg5Hj", true},           // 31 bytes
+		{"short but random", "k9#Lq2vXz7!Pw4Rt6Ym1Bn8Cd3Fg5Hj", true}, // 31 bytes
 		{"long but one repeated byte", strings.Repeat("a", 64), true},
 		{"long but too few distinct bytes", strings.Repeat("abcdefg", 10), true}, // 70 bytes, 7 distinct
 		{"exactly 32 bytes, enough variety", "k9#Lq2vXz7!Pw4Rt6Ym1Bn8Cd3Fg5HjK", false},
