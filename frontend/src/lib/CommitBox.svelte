@@ -2,7 +2,9 @@
   import {
     CommitAll, CommitStaged, CommitAmend, Push, RepoDiff, AskAI,
     StatusFiles, StageFile, UnstageFile, LastCommitMessage,
+    GitOperation, Conflicts, ResolveConflict, ContinueOperation, AbortOperation,
   } from "../../wailsjs/go/main/App";
+  import type { main } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { redactSecrets } from "./redact";
 
@@ -27,28 +29,92 @@
       loadStatus();
     }
   }
+  // An in-progress merge/rebase and its conflicted files. mode is "" when the
+  // repo is not mid-operation, which hides the whole conflict block.
+  let mode = "";
+  let conflicts: main.GitConflictView[] = [];
+
   let loadSeq = 0;
   async function loadStatus() {
     const p = path;
     const seq = ++loadSeq;
     try {
-      const fs = await StatusFiles(p);
+      const [fs, op] = await Promise.all([StatusFiles(p), GitOperation(p)]);
       // Drop a stale result: the selection changed, or a newer load was issued.
       if (p !== path || seq !== loadSeq) return;
       files = fs || [];
+      mode = op || "";
+      conflicts = mode ? (await Conflicts(p)) || [] : [];
+      if (p !== path || seq !== loadSeq) return;
     } catch {
-      if (p === path && seq === loadSeq) files = [];
+      if (p === path && seq === loadSeq) {
+        files = [];
+        mode = "";
+        conflicts = [];
+      }
+    }
+  }
+
+  async function resolve(file: string, side: string) {
+    if (busy) return;
+    busy = true;
+    try {
+      const err = await ResolveConflict(path, file, side);
+      if (err) toastError("Resolve " + file + ": " + err);
+      await loadStatus();
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function finishOp() {
+    if (busy) return;
+    busy = true;
+    try {
+      const err = await ContinueOperation(path);
+      if (err) {
+        toastError((mode === "rebase" ? "Continue rebase: " : "Continue merge: ") + err);
+        await loadStatus();
+        return;
+      }
+      toastSuccess((mode === "rebase" ? "Rebase" : "Merge") + " completed " + name);
+      msg = "";
+      onChanged(path);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function abortOp() {
+    if (busy) return;
+    busy = true;
+    try {
+      const err = await AbortOperation(path);
+      if (err) {
+        toastError((mode === "rebase" ? "Abort rebase: " : "Abort merge: ") + err);
+        return;
+      }
+      toastSuccess((mode === "rebase" ? "Rebase" : "Merge") + " aborted " + name);
+      onChanged(path);
+    } finally {
+      busy = false;
     }
   }
 
   $: staged = files.filter((f) => f.staged);
   $: unstaged = files.filter((f) => f.unstaged);
+  // A conflict must be gone before the operation can be finished, and the label
+  // per file comes from the binding so the ours/theirs swap is never re-derived.
+  $: conflictByPath = new Map(conflicts.map((c) => [c.path, c]));
+  $: hasConflict = conflicts.length > 0;
   $: hasStaged = staged.length > 0;
   $: count = dirtyFiles ? dirtyFiles.length : 0;
   $: clean = count === 0;
-  $: canCommitStaged = !busy && hasStaged && msg.trim().length > 0;
-  $: canCommitAll = !busy && !clean && msg.trim().length > 0;
-  $: canAmend = !busy && msg.trim().length > 0;
+  // While a conflict remains the correct verb is Continue, not Commit: git
+  // refuses a commit with unmerged paths anyway, so the buttons stay disabled.
+  $: canCommitStaged = !busy && !hasConflict && hasStaged && msg.trim().length > 0;
+  $: canCommitAll = !busy && !hasConflict && !clean && msg.trim().length > 0;
+  $: canAmend = !busy && !hasConflict && msg.trim().length > 0;
 
   async function draft() {
     if (drafting || clean) return;
@@ -159,17 +225,44 @@
     {/if}
   </div>
 
+  {#if mode}
+    <div class="op-banner" class:resolved={!hasConflict}>
+      <div class="op-banner-head">
+        <span class="op-title">
+          {mode === "rebase" ? "Rebase" : "Merge"} in progress
+          {#if hasConflict}<span class="op-sub">— {conflicts.length} file{conflicts.length === 1 ? "" : "s"} conflict</span>{/if}
+        </span>
+        <div class="op-actions">
+          <button class="btn btn-primary btn-sm" on:click={finishOp} disabled={busy || hasConflict}
+            title={hasConflict ? "Resolve every conflict first" : "Finish the operation"}>
+            {#if busy}<span class="spinner"></span>{/if} Continue
+          </button>
+          <button class="btn btn-secondary btn-sm" on:click={abortOp} disabled={busy}>Abort</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if !clean}
     <div class="stage-groups">
       {#if unstaged.length}
         <div class="stage-group">
           <span class="stage-label">Unstaged</span>
           {#each unstaged as f (f.path)}
-            <div class="stage-file">
+            <div class="stage-file" class:conflict-row={f.conflict}>
               {#if f.conflict}
-                <span class="stage-conflict" title="Merge conflict - resolve it in your editor or terminal before staging">!</span>
+                <span class="stage-conflict" title="Unmerged - choose a side or edit it and mark resolved">!</span>
                 <span class="stage-name mono conflict">{f.path}</span>
-                <span class="stage-conflict-tag">conflict</span>
+                {#if conflictByPath.get(f.path)}
+                  {@const c = conflictByPath.get(f.path)}
+                  <div class="conflict-choices">
+                    <button class="conflict-btn" on:click={() => resolve(f.path, "mine")} disabled={busy} title="Keep this branch's version">{c?.mineLabel}</button>
+                    <button class="conflict-btn" on:click={() => resolve(f.path, "incoming")} disabled={busy} title="Take the incoming version">{c?.incomingLabel}</button>
+                    <button class="conflict-btn resolved" on:click={() => resolve(f.path, "worktree")} disabled={busy} title="Stage the file as you edited it by hand">Resolved</button>
+                  </div>
+                {:else}
+                  <span class="stage-conflict-tag">conflict</span>
+                {/if}
               {:else}
                 <button class="stage-toggle add" title="Stage" aria-label={"Stage " + f.path} on:click={() => stage(f.path)} disabled={busy}>+</button>
                 <span class="stage-name mono">{f.path}</span>
@@ -240,4 +333,35 @@
   }
   .commit-draft:hover { background: rgba(110, 168, 254, 0.22); }
   .commit-draft:disabled { opacity: 0.6; cursor: default; }
+
+  .op-banner {
+    border: 1px solid var(--dirty);
+    background: var(--accent-soft);
+    border-radius: var(--r-btn);
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+  /* Every conflict cleared: the banner shifts from "attention" to "ready". */
+  .op-banner.resolved { border-color: var(--ok); }
+  .op-banner-head { display: flex; align-items: center; gap: 8px; }
+  .op-title { font-size: 12px; font-weight: 600; color: var(--text); }
+  .op-sub { font-weight: 400; color: var(--dirty); }
+  .op-actions { margin-left: auto; display: flex; gap: 6px; }
+
+  .conflict-choices { margin-left: auto; display: flex; gap: 4px; }
+  .conflict-btn {
+    font: inherit;
+    font-size: 11px;
+    color: var(--text);
+    background: var(--surface-2, var(--accent-soft));
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 1px 8px;
+    cursor: pointer;
+    transition: border-color var(--t), background var(--t);
+  }
+  .conflict-btn:hover { border-color: var(--border-hover); }
+  .conflict-btn.resolved:hover { border-color: var(--ok); }
+  .conflict-btn:disabled { opacity: 0.6; cursor: default; }
+  .conflict-row { flex-wrap: wrap; row-gap: 4px; }
 </style>

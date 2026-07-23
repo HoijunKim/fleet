@@ -413,7 +413,7 @@
                 <div class="diverged-banner">
                   <div class="diverged-msg">
                     <strong>Diverged</strong> - {project.ahead} local ahead, {project.behind} on upstream.
-                    <span class="diverged-hint">Merge keeps both histories; Rebase replays your commits on top. A conflict is rolled back, not left half-applied.</span>
+                    <span class="diverged-hint">Merge keeps both histories; Rebase replays your commits on top. A conflict stops for you to resolve it in the commit panel.</span>
                   </div>
                   <div class="diverged-actions">
                     <button class="btn btn-secondary btn-sm" on:click={doMerge}>Merge</button>
