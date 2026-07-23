@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -116,27 +117,73 @@ func MergeUpstream(r Runner, dir string) error { return integrateUpstream(r, dir
 // tracked upstream (@{u}). See integrateUpstream for the conflict contract.
 func RebaseUpstream(r Runner, dir string) error { return integrateUpstream(r, dir, "rebase") }
 
-// integrateUpstream runs `git <mode> @{u}` (mode is "merge" or "rebase"). On a
-// conflict it does NOT strand the working tree mid-operation: it runs
-// `<mode> --abort` to restore the pre-operation state and returns a conflict
-// error pointing the user at a terminal. Any other failure (dirty tree, no
-// upstream) is surfaced verbatim after a defensive abort that is harmless when
-// nothing is in progress.
+// OperationInProgress reports the git operation the repo is currently in the
+// middle of - "merge", "rebase", or "" for none - by looking for the marker
+// paths git itself uses. It is deliberately filesystem-based rather than a git
+// invocation: it must be cheap enough to call alongside every repo load, and it
+// stays correct for an operation started outside fleet.
+func OperationInProgress(dir string) string {
+	gitDir := filepath.Join(dir, ".git")
+	// A worktree or submodule has a .git FILE pointing at the real directory.
+	if fi, err := os.Stat(gitDir); err == nil && !fi.IsDir() {
+		if data, err := os.ReadFile(gitDir); err == nil {
+			if p, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir: "); ok {
+				gitDir = p
+			}
+		}
+	}
+	for _, m := range []struct{ path, op string }{
+		{"MERGE_HEAD", "merge"},
+		{"rebase-merge", "rebase"},
+		{"rebase-apply", "rebase"},
+	} {
+		if _, err := os.Stat(filepath.Join(gitDir, m.path)); err == nil {
+			return m.op
+		}
+	}
+	return ""
+}
+
+// integrateUpstream runs `git <mode> @{u}` (mode is "merge" or "rebase").
+//
+// It refuses to start when the repo is ALREADY mid-merge or mid-rebase, because
+// the only safe unwind fleet has is `<mode> --abort`, and that would throw away
+// an operation fleet did not start - including conflicts the user has already
+// resolved but not yet committed, which fleet cannot distinguish from its own
+// mess. The diverged banner that leads here stays lit mid-merge (ahead/behind
+// come from `# branch.ab`, which the in-progress merge does not change), so this
+// is reachable in one click, not a corner case.
+//
+// When fleet's OWN invocation fails it never strands the working tree: it rolls
+// back with `<mode> --abort` and reports what happened.
 func integrateUpstream(r Runner, dir, mode string) error {
+	if op := OperationInProgress(dir); op != "" {
+		return fmt.Errorf("a %s is already in progress here; finish or abort it in a terminal first", op)
+	}
 	_, err := r.Run(dir, mode, "@{u}")
 	if err == nil {
 		return nil
 	}
-	// A conflict leaves unmerged index entries (both for a merge and for a
-	// paused rebase). That is our signal to abort and report cleanly.
-	if unmerged, _ := r.Run(dir, "ls-files", "-u"); strings.TrimSpace(unmerged) != "" {
+	// Whether to unwind is decided by what is left in progress, NOT by whether
+	// the index has unmerged entries. Plenty of failures leave a fully merged
+	// index and still strand the repo: a rejecting commit-msg/pre-merge-commit
+	// hook, commit.gpgsign with a broken signer, an unset user identity - git
+	// has applied the content and only failed to write the commit. Keying off
+	// `ls-files -u` would miss every one of those and leave the user mid-merge
+	// (mid-rebase: on a detached HEAD), with the guard above then refusing every
+	// later attempt because it sees an operation it thinks someone else started.
+	//
+	// The guard proved nothing was in progress before this call, so whatever is
+	// in progress now is fleet's own and is safe to roll back.
+	unmerged, _ := r.Run(dir, "ls-files", "-u")
+	if OperationInProgress(dir) != "" {
 		_, _ = r.Run(dir, mode, "--abort")
+	}
+	if strings.TrimSpace(unmerged) != "" {
 		return fmt.Errorf("%s conflict: local and remote changes overlap; resolve in a terminal", mode)
 	}
-	// Not a conflict (dirty tree, no upstream, ...). Abort defensively - harmless
-	// when nothing is in progress - and surface git's own diagnostic, which the
-	// runner already wrapped into err.
-	_, _ = r.Run(dir, mode, "--abort")
+	// Not a conflict (dirty tree, no upstream, a hook, a signing failure, ...).
+	// Surface git's own diagnostic, which the runner already wrapped into err.
 	return err
 }
 

@@ -36,7 +36,9 @@ type AuthStatusView struct {
 }
 
 // SyncStateView is the JS-facing sync-status pill state. State is one of
-// offline, syncing, synced, error, signedout.
+// offline, syncing, synced, error, signedout, paused. "paused" is distinct from
+// "error" because it cannot clear on its own: it means the local data is not
+// trustworthy enough to push, and only the user can resolve that.
 type SyncStateView struct {
 	State          string `json:"state"`
 	LastSyncedUnix int64  `json:"lastSyncedUnix"`
@@ -378,6 +380,13 @@ func (a *App) runSync() error {
 			a.signOutLocally()
 			return err
 		}
+		// Checked before offline/error: this is not a transport problem and it
+		// cannot clear on its own, so the pill must say so rather than imply a
+		// retry will help.
+		if errors.Is(err, syncengine.ErrLocalDataUnsafe) {
+			a.setSyncState("paused", err.Error())
+			return err
+		}
 		if isOffline(err) {
 			a.setSyncState("offline", err.Error())
 		} else {
@@ -391,8 +400,11 @@ func (a *App) runSync() error {
 	lost := a.engine.LostLocalEdit()
 	remote := a.engine.TookRemoteEdit()
 	if a.ctx != nil {
-		if lost {
-			wruntime.EventsEmit(a.ctx, "sync:conflict", nil)
+		if lost != "" {
+			// The payload distinguishes an overwritten record from a deleted one:
+			// the second is the more alarming, and telling the user "updated on
+			// another device" when a project vanished would be worse than silence.
+			wruntime.EventsEmit(a.ctx, "sync:conflict", lost)
 		} else if remote {
 			wruntime.EventsEmit(a.ctx, "sync:remoteEdit", nil)
 		}
@@ -455,7 +467,11 @@ func (a *App) syncLoop(ctx context.Context) {
 			continue
 		}
 		err := a.runSync()
-		if err == nil || errors.Is(err, errNotSignedIn) || errors.Is(err, cloud.ErrRefreshFailed) {
+		// ErrLocalDataUnsafe joins the no-point-retrying set: it needs a user
+		// decision, and backing off exponentially against a condition that cannot
+		// resolve on its own just delays the recovery once they make it.
+		if err == nil || errors.Is(err, errNotSignedIn) || errors.Is(err, cloud.ErrRefreshFailed) ||
+			errors.Is(err, syncengine.ErrLocalDataUnsafe) {
 			backoff = base
 			timer.Reset(interval)
 			continue

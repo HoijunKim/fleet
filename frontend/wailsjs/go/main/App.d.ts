@@ -51,6 +51,8 @@ export function CommitAmend(arg1:string,arg2:string):Promise<string>;
 
 export function CommitStaged(arg1:string,arg2:string):Promise<string>;
 
+export function ConflictBackups():Promise<Array<main.ConflictView>>;
+
 export function CreateBranch(arg1:string,arg2:string):Promise<string>;
 
 export function DeleteAccount():Promise<string>;
@@ -69,6 +71,8 @@ export function DiffFile(arg1:string,arg2:string):Promise<string>;
 
 export function DirExists(arg1:string):Promise<boolean>;
 
+export function DiscardCorruptStore():Promise<string>;
+
 export function EditTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function ExportData():Promise<string>;
@@ -84,6 +88,8 @@ export function GitHubInfo(arg1:string):Promise<main.GitHubView>;
 export function GitHubSignals():Promise<Array<main.RepoGHSignal>>;
 
 export function GitHubURL(arg1:string):Promise<string>;
+
+export function GitOperation(arg1:string):Promise<string>;
 
 export function GiveAgentConsent():Promise<string>;
 
@@ -141,6 +147,8 @@ export function RepoGrep(arg1:string,arg2:string):Promise<string>;
 
 export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
 
+export function RevealDataDir():Promise<string>;
+
 export function RevealInExplorer(arg1:string):Promise<string>;
 
 export function RunCommand(arg1:string,arg2:string):Promise<string>;
@@ -162,6 +170,8 @@ export function SignOut():Promise<string>;
 export function StageFile(arg1:string,arg2:string):Promise<string>;
 
 export function StagedDiff(arg1:string):Promise<string>;
+
+export function StartupHealth():Promise<Array<main.HealthIssue>>;
 
 export function Stash(arg1:string):Promise<string>;
 

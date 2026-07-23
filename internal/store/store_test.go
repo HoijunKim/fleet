@@ -55,17 +55,85 @@ func TestDeleteRemoves(t *testing.T) {
 	}
 }
 
-func TestOpenCorruptReturnsEmptyAndError(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "projects.json")
+// A corrupt file must survive contact with fleet. The store degrades to an
+// empty map for reading, but the bytes are moved aside and every write is
+// refused - otherwise the user's first edit after the failure (or their first
+// look at an app that seems to have forgotten everything) is what makes the
+// loss permanent.
+func TestOpenCorruptQuarantinesAndFreezesWrites(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects.json")
 	if err := os.WriteFile(p, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s, err := Open(p)
 	if err == nil {
-		t.Error("expected error on corrupt file")
+		t.Fatal("expected error on corrupt file")
 	}
 	if s == nil || len(s.Snapshot()) != 0 {
-		t.Error("expected usable empty store on corrupt file")
+		t.Fatal("expected usable empty store on corrupt file")
+	}
+	if s.Degraded() == nil {
+		t.Error("Degraded must report the load failure")
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Error("corrupt file must be moved aside, not left to be overwritten")
+	}
+	q := s.Quarantined()
+	if q == "" {
+		t.Fatal("Quarantined must name where the bytes went")
+	}
+	if data, _ := os.ReadFile(q); string(data) != "{not json" {
+		t.Errorf("quarantined bytes altered: %q", data)
+	}
+	if err := s.Put("a", Record{Manual: true, Name: "a"}); err == nil {
+		t.Error("Put must refuse while degraded")
+	}
+	if err := s.Update("a", func(r *Record) { r.Name = "a" }); err == nil {
+		t.Error("Update must refuse while degraded")
+	}
+	if err := s.Delete("a"); err == nil {
+		t.Error("Delete must refuse while degraded")
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Error("a refused write must not have created a file")
+	}
+
+	// The user opts in explicitly: writes resume and the file comes back empty.
+	if err := s.DiscardAndReset(); err != nil {
+		t.Fatalf("DiscardAndReset: %v", err)
+	}
+	if s.Degraded() != nil {
+		t.Error("Degraded must clear after an explicit reset")
+	}
+	if err := s.Put("a", Record{Manual: true, Name: "a"}); err != nil {
+		t.Errorf("Put after reset: %v", err)
+	}
+	s2, err := Open(p)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if _, ok := s2.Get("a"); !ok {
+		t.Error("writes after reset must persist")
+	}
+}
+
+// An unreadable file is not quarantined (it is usually intact, and the next
+// launch will read it fine) but it must still freeze writes.
+func TestOpenUnreadableFreezesWrites(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "projects.json")
+	if err := os.Mkdir(p, 0o755); err != nil { // portable stand-in for an I/O failure
+		t.Fatal(err)
+	}
+	s, err := Open(p)
+	if err == nil {
+		t.Fatal("expected error on unreadable file")
+	}
+	if s.Degraded() == nil {
+		t.Error("Degraded must report the load failure")
+	}
+	if err := s.Put("a", Record{Manual: true, Name: "a"}); err == nil {
+		t.Error("Put must refuse while degraded")
 	}
 }
 
@@ -220,5 +288,37 @@ func TestGetReturnsIndependentSlices(t *testing.T) {
 	}
 	if again.Tags[0] != "x" {
 		t.Error("Get must return an independent Tags slice (internal state was mutated)")
+	}
+}
+
+// "Discard" must mean "set aside", never "erase". A file that could not be READ
+// is not quarantined at Open (it is very often intact - a permission problem, a
+// backup agent holding it), so DiscardAndReset has to move it aside itself
+// before writing, or it destroys good data while the UI promises the original
+// was kept.
+func TestDiscardAndResetNeverErasesTheOriginal(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects.json")
+	if err := os.Mkdir(p, 0o755); err != nil { // portable stand-in for an I/O failure
+		t.Fatal(err)
+	}
+	s, err := Open(p)
+	if err == nil {
+		t.Fatal("precondition: the store should have failed to load")
+	}
+	if s.Quarantined() != "" {
+		t.Fatal("precondition: an unreadable file is not quarantined at Open")
+	}
+
+	if err := s.DiscardAndReset(); err != nil {
+		t.Fatalf("DiscardAndReset: %v", err)
+	}
+	if q := s.Quarantined(); q == "" {
+		t.Error("the original must be set aside before it is replaced")
+	} else if _, err := os.Stat(q); err != nil {
+		t.Errorf("the set-aside copy must exist: %v", err)
+	}
+	if err := s.Put("a", Record{Manual: true, Name: "a"}); err != nil {
+		t.Errorf("writes must work after the reset: %v", err)
 	}
 }

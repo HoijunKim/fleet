@@ -2,6 +2,7 @@ package syncengine
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -87,7 +88,7 @@ func newEngine(t *testing.T, url string) (*Engine, *store.Store, string) {
 	dir := t.TempDir()
 	st, _ := store.Open(filepath.Join(dir, "projects.json"))
 	statePath := filepath.Join(dir, "sync.json")
-	e := New(st, cloud.New(url), statePath, func(string) string { return "" })
+	e := New(st, cloud.New(url), statePath, func(string) string { return "" }, nil)
 	return e, st, statePath
 }
 
@@ -204,7 +205,7 @@ func TestResetClearsStateAndRepushes(t *testing.T) {
 	dir := t.TempDir()
 	st, _ := store.Open(filepath.Join(dir, "projects.json"))
 	statePath := filepath.Join(dir, "sync.json")
-	e := New(st, cloud.New(ts.URL), statePath, func(string) string { return "" })
+	e := New(st, cloud.New(ts.URL), statePath, func(string) string { return "" }, nil)
 	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "p" })
 	if err := e.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
@@ -242,7 +243,7 @@ func TestSyncDetachedCodeDocNotRepushed(t *testing.T) {
 	dirA := t.TempDir()
 	stA, _ := store.Open(filepath.Join(dirA, "projects.json"))
 	eA := New(stA, cloud.New(ts.URL), filepath.Join(dirA, "sync.json"),
-		func(string) string { return "git@github.com:o/app.git" })
+		func(string) string { return "git@github.com:o/app.git" }, nil)
 	_ = stA.Update("C:/repos/app", func(r *store.Record) { r.Manual = false; r.Name = "app" })
 	if err := eA.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
@@ -255,7 +256,7 @@ func TestSyncDetachedCodeDocNotRepushed(t *testing.T) {
 	dirB := t.TempDir()
 	stB, _ := store.Open(filepath.Join(dirB, "projects.json"))
 	eB := New(stB, cloud.New(ts.URL), filepath.Join(dirB, "sync.json"),
-		func(string) string { return "" })
+		func(string) string { return "" }, nil)
 	if err := eB.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
 	}
@@ -426,8 +427,8 @@ func TestSyncBacksUpClobberedLocalEdit(t *testing.T) {
 	if err := eB.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
 	}
-	if !eB.LostLocalEdit() {
-		t.Fatal("expected LostLocalEdit after B's unsynced edit was clobbered")
+	if kind := eB.LostLocalEdit(); kind != "overwritten" {
+		t.Fatalf("expected LostLocalEdit %q after B's unsynced edit was clobbered, got %q", "overwritten", kind)
 	}
 	if rec, _ := stB.Get("m-1"); rec.Notes != "A wins" {
 		t.Fatalf("B should now hold A's version, got %q", rec.Notes)
@@ -439,5 +440,144 @@ func TestSyncBacksUpClobberedLocalEdit(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "B unsynced note") {
 		t.Fatalf("backup must contain the clobbered local edit, got: %s", data)
+	}
+}
+
+// A store that failed to load reads as empty, and an empty snapshot means the
+// tombstone loop would delete every tracked doc on the server - and, on their
+// next pull, on every other device. One unreadable local file must not become
+// permanent multi-device loss, so the whole cycle aborts before any push.
+func TestSyncRefusesWhenStoreDegraded(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	e, st, statePath := newEngine(t, ts.URL)
+	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "a" })
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.docs["m-1"]; !ok {
+		t.Fatal("precondition: the server should hold m-1")
+	}
+
+	// Reopen against a corrupt file: same state, degraded store.
+	if err := os.WriteFile(st.Path(), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	broken, err := store.Open(st.Path())
+	if err == nil {
+		t.Fatal("precondition: the store should have failed to load")
+	}
+	e2 := New(broken, cloud.New(ts.URL), statePath, func(string) string { return "" }, broken.Degraded)
+
+	if err := e2.SyncOnce("tok"); !errors.Is(err, ErrLocalDataUnsafe) {
+		t.Fatalf("expected ErrLocalDataUnsafe, got %v", err)
+	}
+	if d, ok := f.docs["m-1"]; !ok || d.Deleted {
+		t.Error("a degraded store must never tombstone the server copy")
+	}
+}
+
+// The store loaded cleanly but is empty AND its file is gone: the data went
+// somewhere fleet did not send it. Deleting your last project, by contrast,
+// leaves projects.json holding an empty map - that case must still sync.
+func TestSyncRefusesWhenStoreFileVanished(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	e, st, _ := newEngine(t, ts.URL)
+	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "a" })
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The file disappears under a live engine (a cleaned APPDATA, a half
+	// restore); the in-memory store is reopened empty from nothing.
+	if err := os.Remove(st.Path()); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := store.Open(st.Path())
+	if err != nil {
+		t.Fatalf("a missing file must open cleanly: %v", err)
+	}
+	e.store = empty
+
+	if err := e.SyncOnce("tok"); !errors.Is(err, ErrLocalDataUnsafe) {
+		t.Fatalf("expected ErrLocalDataUnsafe, got %v", err)
+	}
+	if d := f.docs["m-1"]; d.Deleted {
+		t.Error("a vanished store file must never tombstone the server copy")
+	}
+}
+
+// The counterpart: really deleting the last project leaves the file in place,
+// and that tombstone must still reach the server.
+func TestSyncStillTombstonesAfterDeletingLastProject(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	e, st, _ := newEngine(t, ts.URL)
+	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "a" })
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Delete("m-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatalf("deleting the last project is legitimate: %v", err)
+	}
+	if d, ok := f.docs["m-1"]; !ok || !d.Deleted {
+		t.Error("the tombstone for a real delete must reach the server")
+	}
+}
+
+// A record deleted by a remote tombstone is destroyed as thoroughly as one
+// clobbered by a remote update - store.Delete is a hard delete with no trash -
+// so it must be backed up the same way, and reported as a delete rather than as
+// a benign "updated elsewhere".
+func TestPulledTombstoneBacksUpTheLocalRecord(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	eA, stA, _ := newEngine(t, ts.URL)
+	_ = stA.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "shared" })
+	if err := eA.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+
+	eB, stB, statePathB := newEngine(t, ts.URL)
+	if err := eB.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	// B writes notes locally that were never synced anywhere.
+	_ = stB.Update("m-1", func(r *store.Record) { r.Notes = "B private notes" })
+
+	// A deletes the project; B pulls the tombstone.
+	_ = stA.Delete("m-1")
+	time.Sleep(2 * time.Millisecond) // tombstone must be strictly newer
+	if err := eA.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eB.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := stB.Get("m-1"); ok {
+		t.Error("B should have applied the tombstone")
+	}
+	if kind := eB.LostLocalEdit(); kind != "deleted" {
+		t.Errorf("expected LostLocalEdit %q, got %q", "deleted", kind)
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(statePathB), "sync-conflicts.jsonl"))
+	if err != nil {
+		t.Fatalf("conflicts backup not written: %v", err)
+	}
+	if !strings.Contains(string(data), "B private notes") {
+		t.Errorf("the deleted record must be recoverable, got %q", data)
 	}
 }

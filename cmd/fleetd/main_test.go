@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -35,4 +36,25 @@ func TestEnvBool(t *testing.T) {
 		}
 	}
 	os.Unsetenv("FLEETD_TEST_BOOL")
+}
+
+func TestValidateSigningKey(t *testing.T) {
+	cases := []struct {
+		name    string
+		key     string
+		wantErr bool
+	}{
+		{"empty", "", true},
+		{"short but random", "k9#Lq2vXz7!Pw4Rt6Ym1Bn8Cd3Fg5Hj", true}, // 31 bytes
+		{"long but one repeated byte", strings.Repeat("a", 64), true},
+		{"long but too few distinct bytes", strings.Repeat("abcdefg", 10), true}, // 70 bytes, 7 distinct
+		{"exactly 32 bytes, enough variety", "k9#Lq2vXz7!Pw4Rt6Ym1Bn8Cd3Fg5HjK", false},
+		{"long random", "8f3c1e9a7b2d4f60c5a8e13b7d92f4a6c0b3e857d192f4a6", false},
+	}
+	for _, tc := range cases {
+		err := validateSigningKey([]byte(tc.key))
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("%s: err = %v, wantErr %v", tc.name, err, tc.wantErr)
+		}
+	}
 }

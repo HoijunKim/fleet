@@ -98,6 +98,10 @@ export function CommitStaged(arg1, arg2) {
   return window['go']['main']['App']['CommitStaged'](arg1, arg2);
 }
 
+export function ConflictBackups() {
+  return window['go']['main']['App']['ConflictBackups']();
+}
+
 export function CreateBranch(arg1, arg2) {
   return window['go']['main']['App']['CreateBranch'](arg1, arg2);
 }
@@ -134,6 +138,10 @@ export function DirExists(arg1) {
   return window['go']['main']['App']['DirExists'](arg1);
 }
 
+export function DiscardCorruptStore() {
+  return window['go']['main']['App']['DiscardCorruptStore']();
+}
+
 export function EditTask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['EditTask'](arg1, arg2, arg3, arg4);
 }
@@ -164,6 +172,10 @@ export function GitHubSignals() {
 
 export function GitHubURL(arg1) {
   return window['go']['main']['App']['GitHubURL'](arg1);
+}
+
+export function GitOperation(arg1) {
+  return window['go']['main']['App']['GitOperation'](arg1);
 }
 
 export function GiveAgentConsent() {
@@ -278,6 +290,10 @@ export function RepoSymbols(arg1) {
   return window['go']['main']['App']['RepoSymbols'](arg1);
 }
 
+export function RevealDataDir() {
+  return window['go']['main']['App']['RevealDataDir']();
+}
+
 export function RevealInExplorer(arg1) {
   return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
@@ -320,6 +336,10 @@ export function StageFile(arg1, arg2) {
 
 export function StagedDiff(arg1) {
   return window['go']['main']['App']['StagedDiff'](arg1);
+}
+
+export function StartupHealth() {
+  return window['go']['main']['App']['StartupHealth']();
 }
 
 export function Stash(arg1) {

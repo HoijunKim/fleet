@@ -4,22 +4,33 @@ A desktop dashboard for every git repo under your project roots. See at a glance
 which are dirty, behind, or stale, then fetch, pull, open an editor/terminal, or run
 a command - from a single window.
 
-## Run (Windows)
+## Run
 
-Download `fleet.exe` from Releases and run it, or build from source:
+Download the binary for your platform from Releases - `fleet.exe` (Windows),
+`fleet-macos.zip` (macOS), `fleet` (Linux) - or build from source:
 
     wails build
     ./build/bin/fleet.exe
 
-First run writes a config at `%APPDATA%\fleet\config.toml` (roots default to
-`~/Projects`). Edit `roots` and restart.
+First run writes a config and creates the data directory next to it:
+
+| OS | Path |
+| --- | --- |
+| Windows | `%APPDATA%\fleet\config.toml` |
+| macOS / Linux | `$XDG_CONFIG_HOME/fleet/config.toml`, else `~/.config/fleet/config.toml` |
+
+`roots` defaults to `~/Projects`. Edit it and restart.
 
 ## Build from source
 
 Requires Go 1.22+, Node 18+, and Wails v2 (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`).
+On Linux also install `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`.
 
     wails build            # desktop app -> build/bin/fleet.exe
-    go build ./cmd/fleet   # optional terminal UI (TUI) bonus binary
+
+The AI brief, repo chat and agent features shell out to the `claude` CLI, which
+must be on `PATH` (it is the default AI provider). The OpenAI and Gemini
+providers are configured in Settings instead and need no CLI.
 
 ## Config
 
@@ -41,7 +52,7 @@ versioned document store with Last-Write-Wins sync. It is deployed to Fly.io
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | Neon Postgres connection string (`postgres://...?sslmode=require`) |
-| `JWT_SIGNING_KEY` | HS256 secret for access tokens |
+| `JWT_SIGNING_KEY` | HS256 secret for access tokens. At least 32 bytes with real entropy - the server refuses to boot otherwise. Generate with `openssl rand -base64 48` |
 | `GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth app client id |
 | `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth app client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | This server's public callback, e.g. `https://fleet-api.fly.dev/auth/github/callback` |

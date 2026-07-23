@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, CancelAuth, SignOut, SyncNow, SyncState, DeleteAccount } from "../wailsjs/go/main/App";
+  import { ListProjects, LoadRepo, Fetch, Pull, Push, DeleteProject, GetConfig, GetProject, AuthStart, AuthStatus, CancelAuth, SignOut, SyncNow, SyncState, DeleteAccount, StartupHealth, DiscardCorruptStore, RevealDataDir } from "../wailsjs/go/main/App";
   import { EventsOn } from "../wailsjs/runtime/runtime";
   import Toolbar from "./lib/Toolbar.svelte";
   import ProjectTable from "./lib/ProjectTable.svelte";
@@ -19,7 +19,9 @@
   import Toasts from "./lib/Toasts.svelte";
   import AgentOverlay from "./lib/AgentOverlay.svelte";
   import { setProject as agentSetProject, isFleet } from "./lib/agentSession";
-  import { toastSuccess, toastError, toastInfo } from "./lib/toasts";
+  import { toastSuccess, toastError, toastInfo, toastAction } from "./lib/toasts";
+  import StartupBanner from "./lib/StartupBanner.svelte";
+  import type { main } from "../wailsjs/go/models";
   import { STATUS_ORDER, deadlineSort, daysUntil, allTags } from "./lib/pm";
   import { toggleTheme } from "./lib/theme";
 
@@ -612,6 +614,29 @@
     await refreshAutoFetch();
   }
 
+  // Files fleet could not read at startup. Normally empty; when it is not, the
+  // banner is the only thing standing between the user and an app that looks
+  // like it forgot everything.
+  let health: main.HealthIssue[] = [];
+
+  async function refreshHealth() {
+    try {
+      health = await StartupHealth();
+    } catch {
+      health = []; // the health check itself must never break startup
+    }
+  }
+
+  async function discardCorruptStore() {
+    const err = await DiscardCorruptStore();
+    if (err) {
+      toastError("Start fresh: " + err);
+      return;
+    }
+    await refreshHealth();
+    await loadAll();
+  }
+
   // ---- keyboard shortcuts -------------------------------------------------
   function onKey(e: KeyboardEvent) {
     const el = e.target as HTMLElement | null;
@@ -681,6 +706,7 @@
 
   onMount(async () => {
     window.addEventListener("keydown", onKey);
+    await refreshHealth();
     await loadAll();
     await refreshAutoFetch();
 
@@ -698,8 +724,15 @@
       if (v) sync = v;
     }));
     unsubs.push(EventsOn("sync:remoteEdit", () => toastInfo("Updated on another device")));
-    unsubs.push(EventsOn("sync:conflict", () =>
-      toastError("A local edit was overwritten by a newer version from another device. The overwritten copy was saved to sync-conflicts.jsonl for recovery.")));
+    unsubs.push(EventsOn("sync:conflict", (kind: any) => {
+      // A deleted project is gone from the UI entirely, so it must not be
+      // reported in the same words as an edit that was merely overwritten.
+      // Neither expires on its own: the backup is the only copy left.
+      const msg = kind === "deleted"
+        ? "A project deleted on another device was removed here. Its local copy - including notes and tasks - was saved for recovery."
+        : "A local edit was overwritten by a newer version from another device. The overwritten copy was saved for recovery.";
+      toastAction(msg, "error", { label: "Show backup", run: () => RevealDataDir() });
+    }));
   });
 
   onDestroy(() => {
@@ -708,6 +741,8 @@
     for (const off of unsubs) off();
   });
 </script>
+
+<StartupBanner issues={health} onReveal={() => RevealDataDir()} onDiscard={discardCorruptStore} />
 
 <Toolbar
   {loadingCount}

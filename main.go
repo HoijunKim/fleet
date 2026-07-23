@@ -33,6 +33,10 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "fleet-desktop",
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) { app.focus() },
+		},
 		OnStartup: app.startup,
 		Bind:      []interface{}{app},
 	})

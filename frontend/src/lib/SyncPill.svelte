@@ -3,7 +3,7 @@
   import { fade } from "svelte/transition";
   import { reducedMotion } from "./motion";
 
-  // State: offline | syncing | synced | error | signedout
+  // State: offline | syncing | synced | error | paused | signedout
   export let state: string = "signedout";
   export let lastSyncedUnix: number = 0;
   export let error: string = "";
@@ -42,6 +42,11 @@
       {:else if state === "error"}
         <span class="dot dot-err"></span><span class="pill-text">Sync error</span>
         <button class="pill-action" on:click={onRetry}>Retry</button>
+      {:else if state === "paused"}
+        <!-- Before the {:else}: that fallback says "Sign in to sync", which is
+             actively wrong here (the user IS signed in), and no Retry button,
+             because retrying cannot help until they resolve the local data. -->
+        <span class="dot dot-warn"></span><span class="pill-text">Sync paused</span>
       {:else}
         <span class="dot dot-idle"></span>
         <button class="pill-action" on:click={onSignIn}>Sign in to sync</button>

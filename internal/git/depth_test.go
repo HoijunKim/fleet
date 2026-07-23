@@ -35,10 +35,10 @@ func statusByPath(fs []FileStatus) map[string]FileStatus {
 func TestParseStatusFiles(t *testing.T) {
 	// Hand-built porcelain v2 lines covering the XY decodings.
 	out := strings.Join([]string{
-		"1 M. N... 100644 100644 100644 aaa bbb staged.txt",     // index-only -> staged
-		"1 .M N... 100644 100644 100644 aaa bbb worktree.txt",   // worktree-only -> unstaged
-		"1 MM N... 100644 100644 100644 aaa bbb both.txt",       // both
-		"2 R. N... 100644 100644 100644 aaa bbb R100 new.txt\told.txt", // rename, keeps new path
+		"1 M. N... 100644 100644 100644 aaa bbb staged.txt",              // index-only -> staged
+		"1 .M N... 100644 100644 100644 aaa bbb worktree.txt",            // worktree-only -> unstaged
+		"1 MM N... 100644 100644 100644 aaa bbb both.txt",                // both
+		"2 R. N... 100644 100644 100644 aaa bbb R100 new.txt\told.txt",   // rename, keeps new path
 		"u UU N... 100644 100644 100644 100644 aaa bbb ccc conflict.txt", // unmerged
 		"? untracked.txt",
 	}, "\n")

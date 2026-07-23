@@ -133,7 +133,7 @@ func testApp(t *testing.T, backendURL string, signedIn bool) (*App, *cloud.MemCr
 		t.Fatal(err)
 	}
 	cl := cloud.New(backendURL)
-	eng := syncengine.New(st, cl, filepath.Join(dir, "sync.json"), func(string) string { return "" })
+	eng := syncengine.New(st, cl, filepath.Join(dir, "sync.json"), func(string) string { return "" }, nil)
 	creds := &cloud.MemCredStore{}
 	a := &App{
 		store: st, cloudClient: cl, creds: creds, engine: eng,
