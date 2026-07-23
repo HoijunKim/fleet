@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hoijun/fleet/internal/buildinfo"
 	"github.com/hoijun/fleet/internal/server/auth"
 	httpapi "github.com/hoijun/fleet/internal/server/http"
 	"github.com/hoijun/fleet/internal/server/metrics"
@@ -68,7 +69,10 @@ func run(ctx context.Context) error {
 	}
 	defer store.Close()
 
-	m := metrics.New(envOr("FLEET_VERSION", "dev"), runtime.Version())
+	// FLEET_VERSION still wins: the Docker image builds without a .git dir and
+	// without ldflags, so the deploy is the only place that knows the version
+	// there. A binary built by release.yml carries its own and needs no env.
+	m := metrics.New(envOr("FLEET_VERSION", buildinfo.Version()), runtime.Version())
 	m.SetPoolSource(func() metrics.PoolStats {
 		s := store.Stat()
 		return metrics.PoolStats{Total: int(s.TotalConns()), Idle: int(s.IdleConns()), Acquired: int(s.AcquiredConns())}
@@ -113,7 +117,7 @@ func run(ctx context.Context) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	slog.Info("listening", "addr", addr, "trust_proxy", trustProxy, "metrics", metricsToken != "")
+	slog.Info("listening", "addr", addr, "version", buildinfo.String(), "trust_proxy", trustProxy, "metrics", metricsToken != "")
 	return serve(ctx, srv, ln)
 }
 

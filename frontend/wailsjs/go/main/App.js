@@ -62,6 +62,10 @@ export function Branches(arg1) {
   return window['go']['main']['App']['Branches'](arg1);
 }
 
+export function BuildVersion() {
+  return window['go']['main']['App']['BuildVersion']();
+}
+
 export function CancelAI() {
   return window['go']['main']['App']['CancelAI']();
 }

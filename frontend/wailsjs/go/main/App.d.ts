@@ -33,6 +33,8 @@ export function AuthStatus():Promise<main.AuthStatusView>;
 
 export function Branches(arg1:string):Promise<main.BranchInfo>;
 
+export function BuildVersion():Promise<string>;
+
 export function CancelAI():Promise<void>;
 
 export function CancelAgent():Promise<void>;

@@ -17,6 +17,7 @@ import (
 	"github.com/hoijun/fleet/internal/action"
 	"github.com/hoijun/fleet/internal/agent"
 	"github.com/hoijun/fleet/internal/ai"
+	"github.com/hoijun/fleet/internal/buildinfo"
 	"github.com/hoijun/fleet/internal/cloud"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/deps"
@@ -256,6 +257,10 @@ func (a *App) RunCommand(path, line string) string {
 }
 
 func (a *App) GetConfig() config.Config { return a.cfgSnapshot() }
+
+// BuildVersion is the build this binary was cut from, for the Settings footer.
+// It reads package state only, so it answers before anything has loaded.
+func (a *App) BuildVersion() string { return buildinfo.String() }
 
 // HealthIssue is one on-disk file fleet could not load at startup.
 type HealthIssue struct {
