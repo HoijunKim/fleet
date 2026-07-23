@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir, BuildVersion } from "../../wailsjs/go/main/App";
   import type { config, main } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { editorSelection } from "./editorSelection";
@@ -47,6 +47,12 @@
   }
 
   // Load the real Config object so we bind to whatever field names it declares.
+  // The build this binary was cut from. Fetched outside load()'s try so a
+  // failing config load - the case where someone most wants to name their
+  // build - still leaves the version on screen.
+  let version = "";
+  BuildVersion().then((v) => (version = v)).catch(() => (version = ""));
+
   async function load() {
     loading = true;
     saveErr = "";
@@ -441,6 +447,7 @@
     </div>
 
     <div class="modal-foot">
+      {#if version}<span class="set-version mono" title="Build version">{version}</span>{/if}
       <button class="btn btn-secondary" on:click={onClose}>Cancel</button>
       <button class="btn btn-primary" on:click={save} disabled={saving || loading || !cfg}>
         {#if saving}<span class="spinner"></span> saving{:else}Save{/if}
@@ -451,6 +458,9 @@
 
 <style>
   .set-modal { max-width: 540px; }
+  /* margin-right: auto keeps Cancel/Save right-aligned in the flex footer. */
+  /* align-self because .modal-foot is a stretch-aligned flex row of buttons. */
+  .set-version { margin-right: auto; align-self: center; font-size: 11.5px; color: var(--muted); }
   .set-tabs { padding: 0 20px; margin-top: -4px; }
   .ai-providers { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
   .ai-radio {

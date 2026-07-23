@@ -1306,3 +1306,11 @@ func TestFocusNilContextIsNoop(t *testing.T) {
 	a := &App{}
 	a.focus()
 }
+
+func TestBuildVersionOnZeroApp(t *testing.T) {
+	// The Settings modal asks for this before anything else is loaded, so it
+	// must answer from package state alone - no config, no store, no ctx.
+	if got := (&App{}).BuildVersion(); got == "" {
+		t.Error("BuildVersion() = \"\", want a printable build string")
+	}
+}
