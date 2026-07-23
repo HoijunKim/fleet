@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -205,28 +206,62 @@ func TestRebaseUpstreamCleanDiverge(t *testing.T) {
 	assertClean(t, wB)
 }
 
-func TestMergeUpstreamConflictAborts(t *testing.T) {
+// A real content conflict is now KEPT, not rolled back: fleet can resolve it
+// (Conflicts/ResolveConflict/ContinueOperation), so throwing the merge away
+// would discard work the user can finish. Before this tier the only unwind was
+// `--abort`, which is why these two tests used to assert the opposite.
+func TestMergeUpstreamConflictLeavesTheMergeInProgress(t *testing.T) {
 	wB := setupDiverged(t, true)
 	err := MergeUpstream(ExecRunner{}, wB)
-	if err == nil || !strings.Contains(err.Error(), "conflict") {
-		t.Fatalf("expected a conflict error, got: %v", err)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got: %v", err)
 	}
-	// The abort must have restored a clean tree still pointing at B2.
-	assertClean(t, wB)
-	if got := headSubject(t, wB); got != "B2" {
-		t.Errorf("after aborted merge HEAD subject = %q, want B2", got)
+	if op := OperationInProgress(wB); op != "merge" {
+		t.Errorf("OperationInProgress = %q, want merge (the conflict must be kept)", op)
+	}
+	if left, _ := Conflicts(ExecRunner{}, wB); len(left) == 0 {
+		t.Error("expected unmerged paths to resolve")
 	}
 }
 
-func TestRebaseUpstreamConflictAborts(t *testing.T) {
+func TestRebaseUpstreamConflictLeavesTheRebaseInProgress(t *testing.T) {
 	wB := setupDiverged(t, true)
 	err := RebaseUpstream(ExecRunner{}, wB)
-	if err == nil || !strings.Contains(err.Error(), "conflict") {
-		t.Fatalf("expected a conflict error, got: %v", err)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got: %v", err)
+	}
+	if op := OperationInProgress(wB); op != "rebase" {
+		t.Errorf("OperationInProgress = %q, want rebase (the conflict must be kept)", op)
+	}
+	if left, _ := Conflicts(ExecRunner{}, wB); len(left) == 0 {
+		t.Error("expected unmerged paths to resolve")
+	}
+}
+
+// The kept conflict is not a dead end: the user can walk out of it either way.
+func TestConflictedIntegrationCanBeFinishedOrAbandoned(t *testing.T) {
+	wB := setupDiverged(t, true)
+	if err := MergeUpstream(ExecRunner{}, wB); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got: %v", err)
+	}
+	if err := ResolveConflict(ExecRunner{}, wB, "merge", "shared.txt", SideMine); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if err := ContinueOperation(ExecRunner{}, wB); err != nil {
+		t.Fatalf("ContinueOperation: %v", err)
 	}
 	assertClean(t, wB)
-	if got := headSubject(t, wB); got != "B2" {
-		t.Errorf("after aborted rebase HEAD subject = %q, want B2", got)
+
+	other := setupDiverged(t, true)
+	if err := MergeUpstream(ExecRunner{}, other); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got: %v", err)
+	}
+	if err := AbortOperation(ExecRunner{}, other); err != nil {
+		t.Fatalf("AbortOperation: %v", err)
+	}
+	assertClean(t, other)
+	if got := headSubject(t, other); got != "B2" {
+		t.Errorf("after abort HEAD subject = %q, want B2", got)
 	}
 }
 
