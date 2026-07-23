@@ -21,6 +21,9 @@ contain - the whole app as it stands on `master`.
 - **Git depth** - staging per file, commit, amend, push, pull, merge and rebase
   against a diverged upstream, combined diff view, stash apply/drop, branch
   create/delete, history and blame-adjacent detail panes.
+- **Conflict recovery** - a conflicted merge or rebase is kept, not thrown away:
+  resolve each file to either side (rebase-aware) or by hand, then continue or
+  abort - all from the commit panel, without leaving for a terminal.
 - **Project management** - manual projects, tasks with status/progress/order,
   deadlines, tags, a cross-project Agenda, and a Today view.
 - **Project intelligence** - an AI brief per project weighing GitHub CI/PR/issue
