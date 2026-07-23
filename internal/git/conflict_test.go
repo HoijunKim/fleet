@@ -288,3 +288,102 @@ func TestResolveConflictRejectsAnUnknownSide(t *testing.T) {
 		t.Error("an unknown side must error rather than silently staging something")
 	}
 }
+
+func TestContinueOperationRefusesWhileAConflictRemains(t *testing.T) {
+	dir := setupMergeConflicts(t)
+
+	err := ContinueOperation(ExecRunner{}, dir)
+	if err == nil {
+		t.Fatal("ContinueOperation must refuse while paths are unmerged")
+	}
+	// Naming the file is the point: git's own message says "you must edit all
+	// merge conflicts" without saying which.
+	if !strings.Contains(err.Error(), "both.txt") {
+		t.Errorf("error %q should name a conflicted file", err)
+	}
+	if op := OperationInProgress(dir); op != "merge" {
+		t.Errorf("a refused continue must leave the merge in progress, got %q", op)
+	}
+}
+
+func TestContinueOperationFinishesAResolvedMerge(t *testing.T) {
+	dir := setupMergeConflicts(t)
+	for _, f := range []string{"both.txt", "new.txt", "theirs.txt", "ours.txt"} {
+		if err := ResolveConflict(ExecRunner{}, dir, "merge", f, "mine"); err != nil {
+			t.Fatalf("resolve %s: %v", f, err)
+		}
+	}
+
+	if err := ContinueOperation(ExecRunner{}, dir); err != nil {
+		t.Fatalf("ContinueOperation: %v", err)
+	}
+	assertClean(t, dir)
+	// A merge commit has two parents; anything else means the merge did not
+	// actually conclude.
+	parents := strings.Fields(strings.TrimSpace(gitOK(t, dir, "log", "-1", "--pretty=%P")))
+	if len(parents) != 2 {
+		t.Errorf("HEAD has %d parents, want 2 (a merge commit): %v", len(parents), parents)
+	}
+}
+
+func TestContinueOperationFinishesAResolvedRebase(t *testing.T) {
+	dir := setupRebaseConflict(t)
+	if err := ResolveConflict(ExecRunner{}, dir, "rebase", "shared.txt", "mine"); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	if err := ContinueOperation(ExecRunner{}, dir); err != nil {
+		t.Fatalf("ContinueOperation: %v", err)
+	}
+	assertClean(t, dir)
+	if got := headSubject(t, dir); got != "B2" {
+		t.Errorf("HEAD subject = %q, want the replayed local commit B2", got)
+	}
+}
+
+func TestAbortOperationRestoresThePreMergeHead(t *testing.T) {
+	dir := setupMergeConflicts(t)
+	before := strings.TrimSpace(gitOK(t, dir, "rev-parse", "HEAD"))
+
+	if err := AbortOperation(ExecRunner{}, dir); err != nil {
+		t.Fatalf("AbortOperation: %v", err)
+	}
+	assertClean(t, dir)
+	if after := strings.TrimSpace(gitOK(t, dir, "rev-parse", "HEAD")); after != before {
+		t.Errorf("HEAD = %s, want the pre-merge %s", after, before)
+	}
+}
+
+func TestAbortOperationUnwindsARebase(t *testing.T) {
+	dir := setupRebaseConflict(t)
+
+	if err := AbortOperation(ExecRunner{}, dir); err != nil {
+		t.Fatalf("AbortOperation: %v", err)
+	}
+	assertClean(t, dir)
+	if got := headSubject(t, dir); got != "B2" {
+		t.Errorf("HEAD subject = %q, want the pre-rebase local commit B2", got)
+	}
+}
+
+func TestContinueAndAbortErrorWithNothingInProgress(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "user.email", "t@t")
+	gitOK(t, dir, "config", "user.name", "T")
+	writeFile(t, dir, "a.txt", "a\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "init")
+
+	// A no-op would leave a UI showing buttons for an operation that is not
+	// there; erroring surfaces the bug instead of hiding it.
+	if err := ContinueOperation(ExecRunner{}, dir); err == nil {
+		t.Error("ContinueOperation on a clean repo must error")
+	}
+	if err := AbortOperation(ExecRunner{}, dir); err == nil {
+		t.Error("AbortOperation on a clean repo must error")
+	}
+}

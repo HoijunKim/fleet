@@ -175,6 +175,48 @@ func ResolveConflict(r Runner, dir, mode, file, side string) error {
 	return err
 }
 
+// ContinueOperation finishes the merge or rebase currently in progress.
+//
+// The mode is read from the on-disk markers rather than taken as an argument:
+// the markers are the truth, and a stale mode from the UI is how `rebase
+// --abort` gets run against a merge.
+//
+// Runner has no environment hook, so the editor git would open for the commit
+// message is suppressed with `-c core.editor=true` - a no-op "editor" that exits
+// 0, leaving git's default merge/rebase message.
+func ContinueOperation(r Runner, dir string) error {
+	mode := OperationInProgress(dir)
+	if mode == "" {
+		return errors.New("no merge or rebase in progress")
+	}
+	left, err := Conflicts(r, dir)
+	if err != nil {
+		return err
+	}
+	if len(left) > 0 {
+		// git's own message ("you must edit all merge conflicts") does not say
+		// which files; fleet knows, so it says.
+		paths := make([]string, len(left))
+		for i, c := range left {
+			paths[i] = c.Path
+		}
+		return fmt.Errorf("%w: resolve %s first", ErrConflict, strings.Join(paths, ", "))
+	}
+	_, err = r.Run(dir, "-c", "core.editor=true", mode, "--continue")
+	return err
+}
+
+// AbortOperation unwinds the merge or rebase currently in progress, restoring
+// the state from before it started.
+func AbortOperation(r Runner, dir string) error {
+	mode := OperationInProgress(dir)
+	if mode == "" {
+		return errors.New("no merge or rebase in progress")
+	}
+	_, err := r.Run(dir, mode, "--abort")
+	return err
+}
+
 // conflictKind returns the kind recorded for one path, or "" when the path is
 // not conflicted.
 func conflictKind(r Runner, dir, file string) (string, error) {
