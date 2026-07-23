@@ -2,6 +2,7 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -77,6 +78,101 @@ func kindFromStages(s map[string]bool) string {
 	default:
 		return ConflictUnknown
 	}
+}
+
+// Sides a user can choose, in the user's words rather than git's.
+const (
+	SideMine     = "mine"     // what this branch had
+	SideIncoming = "incoming" // what is being merged in / rebased onto
+	SideWorktree = "worktree" // whatever is on disk: the user edited it by hand
+)
+
+// checkoutFlag maps a user-facing side to git's --ours/--theirs for the given
+// operation.
+//
+// During a REBASE the two are swapped relative to a merge: a rebase checks out
+// the upstream and replays your commits onto it, so HEAD - git's "ours" - is the
+// upstream, and the commit being applied - "theirs" - is yours. Mapping "mine"
+// to --ours is right for a merge and silently discards the user's work in a
+// rebase, which is why this lives in one tested function and the UI never
+// derives it.
+func checkoutFlag(mode, side string) (string, error) {
+	rebase := mode == "rebase"
+	switch side {
+	case SideMine:
+		if rebase {
+			return "--theirs", nil
+		}
+		return "--ours", nil
+	case SideIncoming:
+		if rebase {
+			return "--ours", nil
+		}
+		return "--theirs", nil
+	default:
+		return "", fmt.Errorf("unknown side %q", side)
+	}
+}
+
+// sideIsDeletion reports whether the chosen side is the one that deleted the
+// path, in which case there is no stage to check out and the resolution is a
+// staged removal instead. The kinds are named from the merge point of view
+// ("us" is HEAD), so under a rebase they refer to the opposite user-facing side.
+func sideIsDeletion(kind, mode, side string) bool {
+	rebase := mode == "rebase"
+	switch kind {
+	case ConflictDeletedByUs: // HEAD deleted it
+		if rebase {
+			return side == SideIncoming
+		}
+		return side == SideMine
+	case ConflictDeletedByThem: // the other side deleted it
+		if rebase {
+			return side == SideMine
+		}
+		return side == SideIncoming
+	default:
+		return false
+	}
+}
+
+// ResolveConflict resolves one unmerged path to the side the user picked and
+// stages the result, so the file leaves the conflict list immediately.
+//
+// side is "mine", "incoming", or "worktree" for a file the user merged by hand
+// in their editor. mode comes from OperationInProgress and decides the
+// ours/theirs mapping.
+func ResolveConflict(r Runner, dir, mode, file, side string) error {
+	if side == SideWorktree {
+		if _, err := r.Run(dir, "add", "--", file); err != nil {
+			return err
+		}
+		return nil
+	}
+	flag, err := checkoutFlag(mode, side)
+	if err != nil {
+		return err
+	}
+	kind, err := conflictKind(r, dir, file)
+	if err != nil {
+		return err
+	}
+	if kind == "" {
+		return fmt.Errorf("%s is not conflicted", file)
+	}
+	if sideIsDeletion(kind, mode, side) {
+		// `checkout --ours` on a path with no such stage fails with a bare
+		// error; keeping a deletion is a removal, not a checkout.
+		if _, err := r.Run(dir, "rm", "-q", "--", file); err != nil {
+			return err
+		}
+		return nil
+	}
+	if _, err := r.Run(dir, "checkout", flag, "--", file); err != nil {
+		return err
+	}
+	_, err = r.Run(dir, "add", "--", file)
+	return err
 }
 
 // conflictKind returns the kind recorded for one path, or "" when the path is

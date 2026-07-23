@@ -158,3 +158,133 @@ func TestConflictsHandlesPathsWithSpaces(t *testing.T) {
 		t.Errorf("kind = %q, want both-modified", got[0].Kind)
 	}
 }
+
+// setupRebaseConflict leaves the repo mid-rebase of a local commit onto an
+// upstream that touched the same line. During a rebase HEAD is the UPSTREAM and
+// the commit being replayed is "theirs", which is the trap this fixture exists
+// to catch: local content is reachable as --theirs, not --ours.
+func setupRebaseConflict(t *testing.T) string {
+	t.Helper()
+	dir := setupDiverged(t, true)
+	if _, err := (ExecRunner{}).Run(dir, "rebase", "@{u}"); err == nil {
+		t.Fatal("rebase was expected to conflict")
+	}
+	if op := OperationInProgress(dir); op != "rebase" {
+		t.Fatalf("OperationInProgress = %q, want rebase", op)
+	}
+	return dir
+}
+
+// fileContent reads a working-tree file with line endings normalized: a checkout
+// on a machine with core.autocrlf=true writes CRLF, and these tests assert which
+// SIDE won, not how the platform spells a newline.
+func fileContent(t *testing.T, dir, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
+}
+
+func TestResolveConflictMineInRebaseKeepsLocalWork(t *testing.T) {
+	dir := setupRebaseConflict(t)
+
+	if err := ResolveConflict(ExecRunner{}, dir, "rebase", "shared.txt", "mine"); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	// "B change" is the local commit being replayed. Mapping "mine" to --ours
+	// here would leave "A change" - the upstream - and silently drop the user's
+	// work, which is the whole reason the mapping is mode-aware.
+	if got := fileContent(t, dir, "shared.txt"); got != "B change\n" {
+		t.Errorf("shared.txt = %q, want the local %q", got, "B change\n")
+	}
+	if left, _ := Conflicts(ExecRunner{}, dir); len(left) != 0 {
+		t.Errorf("resolving must stage the file, still unmerged: %+v", left)
+	}
+}
+
+func TestResolveConflictIncomingInRebaseTakesUpstream(t *testing.T) {
+	dir := setupRebaseConflict(t)
+
+	if err := ResolveConflict(ExecRunner{}, dir, "rebase", "shared.txt", "incoming"); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if got := fileContent(t, dir, "shared.txt"); got != "A change\n" {
+		t.Errorf("shared.txt = %q, want the upstream %q", got, "A change\n")
+	}
+}
+
+func TestResolveConflictInMergeUsesOursForMine(t *testing.T) {
+	dir := setupMergeConflicts(t)
+
+	if err := ResolveConflict(ExecRunner{}, dir, "merge", "both.txt", "mine"); err != nil {
+		t.Fatalf("ResolveConflict mine: %v", err)
+	}
+	if got := fileContent(t, dir, "both.txt"); got != "mine\n" {
+		t.Errorf("both.txt = %q, want %q", got, "mine\n")
+	}
+
+	if err := ResolveConflict(ExecRunner{}, dir, "merge", "new.txt", "incoming"); err != nil {
+		t.Fatalf("ResolveConflict incoming: %v", err)
+	}
+	if got := fileContent(t, dir, "new.txt"); got != "other new\n" {
+		t.Errorf("new.txt = %q, want %q", got, "other new\n")
+	}
+}
+
+func TestResolveConflictDeletedByUsKeepingMineStagesTheDeletion(t *testing.T) {
+	dir := setupMergeConflicts(t)
+
+	// ours.txt: this side deleted it, the other side edited it. Keeping "mine"
+	// means keeping the deletion - there is no stage to check out, and a naive
+	// `checkout --ours` fails here.
+	if err := ResolveConflict(ExecRunner{}, dir, "merge", "ours.txt", "mine"); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ours.txt")); !os.IsNotExist(err) {
+		t.Errorf("ours.txt should stay deleted, stat err = %v", err)
+	}
+	if left, _ := conflictKind(ExecRunner{}, dir, "ours.txt"); left != "" {
+		t.Errorf("ours.txt still unmerged as %q", left)
+	}
+}
+
+func TestResolveConflictDeletedByThemKeepingIncomingStagesTheDeletion(t *testing.T) {
+	dir := setupMergeConflicts(t)
+
+	// theirs.txt: edited here, deleted by them. Taking "incoming" is a deletion.
+	if err := ResolveConflict(ExecRunner{}, dir, "merge", "theirs.txt", "incoming"); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "theirs.txt")); !os.IsNotExist(err) {
+		t.Errorf("theirs.txt should be deleted, stat err = %v", err)
+	}
+	if left, _ := conflictKind(ExecRunner{}, dir, "theirs.txt"); left != "" {
+		t.Errorf("theirs.txt still unmerged as %q", left)
+	}
+}
+
+func TestResolveConflictWorktreeStagesWhatIsOnDisk(t *testing.T) {
+	dir := setupMergeConflicts(t)
+
+	// The user resolved it in their editor: fleet stages the file as-is.
+	writeFile(t, dir, "both.txt", "hand merged\n")
+	if err := ResolveConflict(ExecRunner{}, dir, "merge", "both.txt", "worktree"); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if left, _ := conflictKind(ExecRunner{}, dir, "both.txt"); left != "" {
+		t.Errorf("both.txt still unmerged as %q", left)
+	}
+	staged := gitOK(t, dir, "show", ":both.txt")
+	if staged != "hand merged\n" {
+		t.Errorf("staged content = %q, want %q", staged, "hand merged\n")
+	}
+}
+
+func TestResolveConflictRejectsAnUnknownSide(t *testing.T) {
+	dir := setupMergeConflicts(t)
+	if err := ResolveConflict(ExecRunner{}, dir, "merge", "both.txt", "yours"); err == nil {
+		t.Error("an unknown side must error rather than silently staging something")
+	}
+}
