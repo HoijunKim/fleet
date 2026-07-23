@@ -10,6 +10,10 @@ export function AICheck(arg1, arg2, arg3) {
   return window['go']['main']['App']['AICheck'](arg1, arg2, arg3);
 }
 
+export function AbortOperation(arg1) {
+  return window['go']['main']['App']['AbortOperation'](arg1);
+}
+
 export function AddEdge(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddEdge'](arg1, arg2, arg3, arg4);
 }
@@ -104,6 +108,14 @@ export function CommitStaged(arg1, arg2) {
 
 export function ConflictBackups() {
   return window['go']['main']['App']['ConflictBackups']();
+}
+
+export function Conflicts(arg1) {
+  return window['go']['main']['App']['Conflicts'](arg1);
+}
+
+export function ContinueOperation(arg1) {
+  return window['go']['main']['App']['ContinueOperation'](arg1);
 }
 
 export function CreateBranch(arg1, arg2) {
@@ -292,6 +304,10 @@ export function RepoGrep(arg1, arg2) {
 
 export function RepoSymbols(arg1) {
   return window['go']['main']['App']['RepoSymbols'](arg1);
+}
+
+export function ResolveConflict(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResolveConflict'](arg1, arg2, arg3);
 }
 
 export function RevealDataDir() {

@@ -146,16 +146,17 @@ func OperationInProgress(dir string) string {
 
 // integrateUpstream runs `git <mode> @{u}` (mode is "merge" or "rebase").
 //
-// It refuses to start when the repo is ALREADY mid-merge or mid-rebase, because
-// the only safe unwind fleet has is `<mode> --abort`, and that would throw away
-// an operation fleet did not start - including conflicts the user has already
-// resolved but not yet committed, which fleet cannot distinguish from its own
-// mess. The diverged banner that leads here stays lit mid-merge (ahead/behind
-// come from `# branch.ab`, which the in-progress merge does not change), so this
-// is reachable in one click, not a corner case.
+// It refuses to start when the repo is ALREADY mid-merge or mid-rebase: starting
+// a second operation on top of one in progress is wrong regardless of who
+// started the first. The diverged banner that leads here stays lit mid-merge
+// (ahead/behind come from `# branch.ab`, which the in-progress merge does not
+// change), so this is reachable in one click, not a corner case. The user
+// finishes the first operation through ContinueOperation/AbortOperation.
 //
-// When fleet's OWN invocation fails it never strands the working tree: it rolls
-// back with `<mode> --abort` and reports what happened.
+// When fleet's OWN invocation fails, the outcome depends on the failure: a real
+// content conflict is left in place and reported as ErrConflict, because the
+// conflict panel can now resolve it; anything else is rolled back with
+// `<mode> --abort` so the tree is never stranded with nothing to act on.
 func integrateUpstream(r Runner, dir, mode string) error {
 	if op := OperationInProgress(dir); op != "" {
 		return fmt.Errorf("a %s is already in progress here; finish or abort it in a terminal first", op)
@@ -164,23 +165,27 @@ func integrateUpstream(r Runner, dir, mode string) error {
 	if err == nil {
 		return nil
 	}
-	// Whether to unwind is decided by what is left in progress, NOT by whether
-	// the index has unmerged entries. Plenty of failures leave a fully merged
-	// index and still strand the repo: a rejecting commit-msg/pre-merge-commit
-	// hook, commit.gpgsign with a broken signer, an unset user identity - git
-	// has applied the content and only failed to write the commit. Keying off
-	// `ls-files -u` would miss every one of those and leave the user mid-merge
-	// (mid-rebase: on a detached HEAD), with the guard above then refusing every
-	// later attempt because it sees an operation it thinks someone else started.
+	// What to do with a failure depends on whether a human can act on it, and
+	// `ls-files -u` is what separates the two cases.
+	unmerged, _ := r.Run(dir, "ls-files", "-u")
+	if strings.TrimSpace(unmerged) != "" {
+		// A real content conflict is KEPT. fleet can list it, resolve each path
+		// to either side, and continue or abort (conflict.go), so unwinding here
+		// would throw away work the user is able to finish. The sentinel lets
+		// the caller open the conflict panel instead of reporting a dead end.
+		return fmt.Errorf("%s stopped on a conflict: %w", mode, ErrConflict)
+	}
+	// No unmerged paths and yet git failed: it applied the content and only
+	// failed to write the commit - a rejecting commit-msg/pre-merge-commit hook,
+	// commit.gpgsign with a broken signer, an unset user identity. There is
+	// nothing for a human to resolve, and leaving the repo mid-merge (mid-rebase:
+	// on a detached HEAD) would poison every later attempt, because the guard
+	// above would then refuse a mess fleet itself made.
 	//
 	// The guard proved nothing was in progress before this call, so whatever is
 	// in progress now is fleet's own and is safe to roll back.
-	unmerged, _ := r.Run(dir, "ls-files", "-u")
 	if OperationInProgress(dir) != "" {
 		_, _ = r.Run(dir, mode, "--abort")
-	}
-	if strings.TrimSpace(unmerged) != "" {
-		return fmt.Errorf("%s conflict: local and remote changes overlap; resolve in a terminal", mode)
 	}
 	// Not a conflict (dirty tree, no upstream, a hook, a signing failure, ...).
 	// Surface git's own diagnostic, which the runner already wrapped into err.

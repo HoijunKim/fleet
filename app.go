@@ -366,6 +366,80 @@ func (a *App) ConflictBackups() []ConflictView {
 // the UI can offer to finish it instead of an action that would destroy it.
 func (a *App) GitOperation(path string) string { return git.OperationInProgress(path) }
 
+// GitConflictView is one unmerged path plus the two side labels the UI shows.
+// The labels are computed here, not in the frontend, because "keep mine" maps to
+// a different git side under a rebase than under a merge (see git.ResolveConflict)
+// and that swap must live in exactly one place.
+type GitConflictView struct {
+	Path          string `json:"path"`
+	Kind          string `json:"kind"` // both-modified | both-added | deleted-by-them | deleted-by-us
+	Mode          string `json:"mode"` // merge | rebase
+	MineLabel     string `json:"mineLabel"`
+	IncomingLabel string `json:"incomingLabel"`
+}
+
+// Conflicts lists the repo's unmerged paths for the conflict panel. Empty when
+// nothing is conflicted or the repo cannot be read.
+func (a *App) Conflicts(path string) []GitConflictView {
+	mode := git.OperationInProgress(path)
+	cs, err := git.Conflicts(a.runner, path)
+	if err != nil {
+		return []GitConflictView{}
+	}
+	out := make([]GitConflictView, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, GitConflictView{
+			Path:          c.Path,
+			Kind:          c.Kind,
+			Mode:          mode,
+			MineLabel:     conflictSideLabel(c.Kind, "mine"),
+			IncomingLabel: conflictSideLabel(c.Kind, "incoming"),
+		})
+	}
+	return out
+}
+
+// conflictSideLabel names what choosing a side does, so a delete/modify conflict
+// reads "Keep deleted"/"Keep file" rather than a git stage the user must decode.
+// The kinds are named from the merge point of view; the mode-aware swap is
+// handled in git.ResolveConflict, so this only needs the kind.
+func conflictSideLabel(kind, side string) string {
+	switch kind {
+	case git.ConflictDeletedByUs:
+		if side == "mine" {
+			return "Keep deleted"
+		}
+		return "Keep file"
+	case git.ConflictDeletedByThem:
+		if side == "mine" {
+			return "Keep file"
+		}
+		return "Keep deleted"
+	default:
+		if side == "mine" {
+			return "Keep mine"
+		}
+		return "Keep incoming"
+	}
+}
+
+// ResolveConflict resolves one file to "mine", "incoming", or "worktree" (the
+// hand-edited working copy) and stages it. The mode comes from the on-disk
+// markers, so the ours/theirs swap is never the frontend's to get wrong.
+func (a *App) ResolveConflict(path, file, side string) string {
+	return errMsg(git.ResolveConflict(a.runner, path, git.OperationInProgress(path), file, side))
+}
+
+// ContinueOperation finishes the in-progress merge/rebase; it refuses while any
+// path is still unmerged. AbortOperation unwinds it.
+func (a *App) ContinueOperation(path string) string {
+	return errMsg(git.ContinueOperation(a.runner, path))
+}
+
+func (a *App) AbortOperation(path string) string {
+	return errMsg(git.AbortOperation(a.runner, path))
+}
+
 // DirExists reports whether path is an existing directory. Settings uses it to
 // flag a configured Root that is missing (e.g. an unmounted drive). A hint, not
 // a gate: any stat error (missing, permission) returns false.

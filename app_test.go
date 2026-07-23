@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/hoijun/fleet/internal/cloud"
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/edges"
+	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/store"
 	"github.com/hoijun/fleet/internal/syncengine"
@@ -1312,5 +1314,59 @@ func TestBuildVersionOnZeroApp(t *testing.T) {
 	// must answer from package state alone - no config, no store, no ctx.
 	if got := (&App{}).BuildVersion(); got == "" {
 		t.Error("BuildVersion() = \"\", want a printable build string")
+	}
+}
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if _, err := (git.ExecRunner{}).Run(dir, args...); err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+}
+
+// A conflicted merge round-trips through the bindings exactly as the UI drives
+// it: list the conflict, resolve it, finish. This is the integration seam the
+// per-function git tests do not cover.
+func TestConflictBindingsRoundTrip(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitRun(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitRun(t, dir, "config", "user.email", "t@t")
+	gitRun(t, dir, "config", "user.name", "T")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+	gitRun(t, dir, "checkout", "-b", "other")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("other\n"), 0o644)
+	gitRun(t, dir, "commit", "-am", "other")
+	gitRun(t, dir, "checkout", "master")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("mine\n"), 0o644)
+	gitRun(t, dir, "commit", "-am", "mine")
+	if _, err := (git.ExecRunner{}).Run(dir, "merge", "other"); err == nil {
+		t.Fatal("the merge should have conflicted")
+	}
+
+	a := &App{runner: git.ExecRunner{}}
+
+	cs := a.Conflicts(dir)
+	if len(cs) != 1 || cs[0].Path != "f.txt" {
+		t.Fatalf("Conflicts = %+v, want one entry for f.txt", cs)
+	}
+	if cs[0].Mode != "merge" || cs[0].MineLabel != "Keep mine" {
+		t.Errorf("view carries the wrong mode/labels: %+v", cs[0])
+	}
+
+	if msg := a.ResolveConflict(dir, "f.txt", "mine"); msg != "" {
+		t.Fatalf("ResolveConflict: %s", msg)
+	}
+	if msg := a.ContinueOperation(dir); msg != "" {
+		t.Fatalf("ContinueOperation: %s", msg)
+	}
+	if op := git.OperationInProgress(dir); op != "" {
+		t.Errorf("merge not finished, still %q", op)
 	}
 }

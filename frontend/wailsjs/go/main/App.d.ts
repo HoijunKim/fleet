@@ -7,6 +7,8 @@ export function AIAvailable():Promise<boolean>;
 
 export function AICheck(arg1:string,arg2:string,arg3:string):Promise<boolean>;
 
+export function AbortOperation(arg1:string):Promise<string>;
+
 export function AddEdge(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function AddProject(arg1:string):Promise<string>;
@@ -54,6 +56,10 @@ export function CommitAmend(arg1:string,arg2:string):Promise<string>;
 export function CommitStaged(arg1:string,arg2:string):Promise<string>;
 
 export function ConflictBackups():Promise<Array<main.ConflictView>>;
+
+export function Conflicts(arg1:string):Promise<Array<main.GitConflictView>>;
+
+export function ContinueOperation(arg1:string):Promise<string>;
 
 export function CreateBranch(arg1:string,arg2:string):Promise<string>;
 
@@ -148,6 +154,8 @@ export function RepoGraph():Promise<main.GraphView>;
 export function RepoGrep(arg1:string,arg2:string):Promise<string>;
 
 export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
+
+export function ResolveConflict(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function RevealDataDir():Promise<string>;
 
