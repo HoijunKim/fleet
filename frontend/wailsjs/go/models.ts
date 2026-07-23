@@ -193,6 +193,26 @@ export namespace main {
 	        this.file = source["file"];
 	    }
 	}
+	export class GitConflictView {
+	    path: string;
+	    kind: string;
+	    mode: string;
+	    mineLabel: string;
+	    incomingLabel: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GitConflictView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.kind = source["kind"];
+	        this.mode = source["mode"];
+	        this.mineLabel = source["mineLabel"];
+	        this.incomingLabel = source["incomingLabel"];
+	    }
+	}
 	export class GitHubView {
 	    ci: string;
 	    prs: number;
