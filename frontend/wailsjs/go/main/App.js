@@ -86,6 +86,10 @@ export function Checkout(arg1, arg2) {
   return window['go']['main']['App']['Checkout'](arg1, arg2);
 }
 
+export function ClearChat(arg1) {
+  return window['go']['main']['App']['ClearChat'](arg1);
+}
+
 export function CloneUncloned(arg1, arg2) {
   return window['go']['main']['App']['CloneUncloned'](arg1, arg2);
 }
@@ -168,6 +172,14 @@ export function ExportData() {
 
 export function Fetch(arg1) {
   return window['go']['main']['App']['Fetch'](arg1);
+}
+
+export function GetBrief() {
+  return window['go']['main']['App']['GetBrief']();
+}
+
+export function GetChat(arg1) {
+  return window['go']['main']['App']['GetChat'](arg1);
 }
 
 export function GetConfig() {
@@ -320,6 +332,14 @@ export function RevealInExplorer(arg1) {
 
 export function RunCommand(arg1, arg2) {
   return window['go']['main']['App']['RunCommand'](arg1, arg2);
+}
+
+export function SaveBrief(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveBrief'](arg1, arg2, arg3);
+}
+
+export function SaveChat(arg1, arg2) {
+  return window['go']['main']['App']['SaveChat'](arg1, arg2);
 }
 
 export function SaveConfig(arg1) {

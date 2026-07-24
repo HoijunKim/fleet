@@ -37,6 +37,41 @@ export namespace config {
 
 }
 
+export namespace intel {
+	
+	export class Brief {
+	    text: string;
+	    at: string;
+	    lang: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Brief(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.at = source["at"];
+	        this.lang = source["lang"];
+	    }
+	}
+	export class Turn {
+	    role: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Turn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.role = source["role"];
+	        this.text = source["text"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class AgendaItem {

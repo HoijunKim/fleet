@@ -24,6 +24,7 @@ import (
 	"github.com/hoijun/fleet/internal/edges"
 	"github.com/hoijun/fleet/internal/gh"
 	"github.com/hoijun/fleet/internal/git"
+	"github.com/hoijun/fleet/internal/intel"
 	"github.com/hoijun/fleet/internal/meta"
 	"github.com/hoijun/fleet/internal/notion"
 	"github.com/hoijun/fleet/internal/repo"
@@ -42,6 +43,7 @@ type App struct {
 	cfg      config.Config
 	runner   git.Runner
 	store    *store.Store
+	intel    *intel.Store
 	ghRunner gh.Runner
 	ghCache  map[string]ghEntry
 	ghMu     sync.RWMutex
@@ -120,6 +122,11 @@ func NewApp() *App {
 	dir := filepath.Dir(cfgPath)
 	storePath := filepath.Join(dir, "projects.json")
 	st, storeErr := store.Open(storePath)
+	// The intel load error is intentionally dropped here for now: intel is not
+	// yet in StartupHealth, and a degraded store already refuses writes on its
+	// own so it cannot overwrite the user's real data. Surfacing it is a later
+	// follow-up.
+	intelStore, _ := intel.Open(filepath.Join(dir, "intel.json"))
 	edgesPath := filepath.Join(dir, "edges.json")
 	ed, edgesErr := edges.Open(edgesPath)
 
@@ -132,7 +139,7 @@ func NewApp() *App {
 	}, st.Degraded)
 
 	return &App{
-		cfg: cfg, runner: git.ExecRunner{}, store: st,
+		cfg: cfg, runner: git.ExecRunner{}, store: st, intel: intelStore,
 		cfgLoadErr: cfgErr, storeLoadErr: storeErr, edgesLoadErr: edgesErr,
 		cfgPath:  cfgPath,
 		ghRunner: gh.ExecRunner{}, ghCache: map[string]ghEntry{}, edges: ed,
@@ -257,6 +264,30 @@ func (a *App) RunCommand(path, line string) string {
 }
 
 func (a *App) GetConfig() config.Config { return a.cfgSnapshot() }
+
+// GetBrief returns the stored fleet-wide brief.
+func (a *App) GetBrief() intel.Brief { return a.intel.Brief() }
+
+// SaveBrief stores the fleet-wide brief.
+func (a *App) SaveBrief(text, at, lang string) string {
+	return errMsg(a.intel.SetBrief(intel.Brief{Text: text, At: at, Lang: lang}))
+}
+
+// GetChat returns the transcript for a repo path (or intel.FleetID). The path is
+// mapped to a stable identity here so the frontend never derives one.
+func (a *App) GetChat(path string) []intel.Turn {
+	return a.intel.Chat(intel.ChatID(a.runner, path))
+}
+
+// SaveChat replaces the transcript for a repo path (or intel.FleetID).
+func (a *App) SaveChat(path string, turns []intel.Turn) string {
+	return errMsg(a.intel.SetChat(intel.ChatID(a.runner, path), turns))
+}
+
+// ClearChat removes the transcript for a repo path (or intel.FleetID).
+func (a *App) ClearChat(path string) string {
+	return errMsg(a.intel.ClearChat(intel.ChatID(a.runner, path)))
+}
 
 // BuildVersion is the build this binary was cut from, for the Settings footer.
 // It reads package state only, so it answers before anything has loaded.
