@@ -133,10 +133,14 @@ func NewApp() *App {
 	cl := cloud.New(apiURL())
 	creds := cloud.KeyringStore{Service: "fleet", User: "refresh"}
 	syncPath := filepath.Join(dir, "sync.json")
-	eng := syncengine.New(st, cl, syncPath, func(path string) string {
-		u, _ := git.RemoteURL(git.ExecRunner{}, path)
-		return u
-	}, st.Degraded)
+	eng := syncengine.New(cl, syncPath,
+		syncengine.NewProject(st, func(path string) string {
+			u, _ := git.RemoteURL(git.ExecRunner{}, path)
+			return u
+		}, st.Degraded),
+		syncengine.NewBrief(intelStore),
+		syncengine.NewChat(intelStore),
+	)
 
 	return &App{
 		cfg: cfg, runner: git.ExecRunner{}, store: st, intel: intelStore,
