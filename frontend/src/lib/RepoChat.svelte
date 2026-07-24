@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     AskAI, AIAvailable, RepoDiff, Log, RepoSymbols, CancelAI, ReadRepoFile, RepoGrep, RepoFiles,
+    GetChat, SaveChat, ClearChat, GetBrief,
   } from "../../wailsjs/go/main/App";
   import { onMount } from "svelte";
   import { renderBrief } from "./markdown";
@@ -22,6 +23,8 @@
   let loadedPath = "";
   let genId = 0;
   let aiAvailable = false; // single-shot AskAI provider ready
+  // The AI output language, read from the stored brief (was localStorage).
+  let briefLang = "ko";
 
   // Can we run ANY AI here - agentic (claude CLI) or single-shot (any provider)?
   $: canAsk = $available || aiAvailable;
@@ -35,6 +38,12 @@
       aiAvailable = await AIAvailable();
     } catch {
       aiAvailable = false;
+    }
+    try {
+      const b = await GetBrief();
+      if (b && b.lang) briefLang = b.lang;
+    } catch {
+      /* keep the default */
     }
   });
 
@@ -51,9 +60,7 @@
   ];
 
   function langName(): string {
-    const code =
-      (typeof localStorage !== "undefined" && localStorage.getItem("fleet.briefLang")) || "ko";
-    return { ko: "Korean", en: "English", ja: "Japanese", zh: "Chinese" }[code] || "Korean";
+    return { ko: "Korean", en: "English", ja: "Japanese", zh: "Chinese" }[briefLang] || "Korean";
   }
 
   // Load this repo's saved conversation when the selection changes (per-repo
@@ -66,33 +73,18 @@
     // still going for the OLD repo, setProject cancels the real process (not
     // just the UI) so it can't leak into the newly-selected repo.
     agentSetProject(project);
-    turns = loadChat(project.path);
+    // Load from the store; drop a late result if the repo changed meanwhile.
+    const p = project.path;
+    GetChat(p).then((t) => { if (loadedPath === p) turns = (t as Turn[]) || []; }).catch(() => { if (loadedPath === p) turns = []; });
   }
 
-  function chatKey(p: string): string {
-    return "fleet.chat:" + p;
-  }
-  function loadChat(p: string): Turn[] {
-    if (typeof localStorage === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(chatKey(p));
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
   function saveChat() {
-    if (typeof localStorage === "undefined" || !loadedPath) return;
-    try {
-      localStorage.setItem(chatKey(loadedPath), JSON.stringify(turns.slice(-20)));
-    } catch {
-      /* quota or serialization - non-fatal */
-    }
+    if (!loadedPath) return;
+    void SaveChat(loadedPath, turns.slice(-20));
   }
   function clearChat() {
     turns = [];
-    if (typeof localStorage !== "undefined" && loadedPath) localStorage.removeItem(chatKey(loadedPath));
+    if (loadedPath) void ClearChat(loadedPath);
   }
 
   // Gather real code context for THIS repo. Rebuilt on every question so a

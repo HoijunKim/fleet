@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI, GitHubSignals, OpenEditor, Push, GitHubURL } from "../../wailsjs/go/main/App";
+  import { AskAI, AIAvailable, NotionTasks, NotionAvailable, OpenURL, Log, NotionComplete, CancelAI, GitHubSignals, OpenEditor, Push, GitHubURL, GetBrief, SaveBrief } from "../../wailsjs/go/main/App";
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { flyUp } from "./motion";
@@ -110,10 +110,11 @@
     { code: "ja", name: "Japanese" },
     { code: "zh", name: "Chinese" },
   ];
-  let briefLang =
-    (typeof localStorage !== "undefined" && localStorage.getItem("fleet.briefLang")) || "ko";
+  // Seeded from the stored brief on mount (loadBrief); persisted via SaveBrief.
+  let briefLang = "ko";
   function onLangChange() {
-    if (typeof localStorage !== "undefined") localStorage.setItem("fleet.briefLang", briefLang);
+    // Persist the language choice alongside the brief so it survives a restart.
+    void SaveBrief(brief, briefAt, briefLang);
   }
   function langName(code: string): string {
     return (LANGS.find((l) => l.code === code) || LANGS[0]).name;
@@ -123,31 +124,28 @@
 
   // Persist the last briefing so reopening Today shows it, not a blank card.
   let briefAt = "";
-  function loadBrief() {
-    if (typeof localStorage === "undefined") return;
+  async function loadBrief() {
     try {
-      const raw = localStorage.getItem("fleet.brief");
-      if (raw) {
-        const o = JSON.parse(raw);
-        brief = o.text || "";
-        briefAt = o.at || "";
+      const b = await GetBrief();
+      if (b) {
+        brief = b.text || "";
+        briefAt = b.at || "";
+        if (b.lang) briefLang = b.lang;
       }
     } catch {
       /* ignore */
     }
   }
   function saveBrief() {
-    if (typeof localStorage === "undefined") return;
     briefAt = new Date().toLocaleString();
-    try {
-      localStorage.setItem("fleet.brief", JSON.stringify({ text: brief, at: briefAt }));
-      // record that today's brief exists so the auto-brief doesn't re-run
+    void SaveBrief(brief, briefAt, briefLang);
+    // record that today's brief exists so the auto-brief doesn't re-run. This is
+    // a per-day, per-device guard, not user data, so it stays in localStorage.
+    if (typeof localStorage !== "undefined") {
       localStorage.setItem("fleet.briefAutoDate", new Date().toDateString());
-    } catch {
-      /* ignore */
     }
   }
-  loadBrief();
+  void loadBrief();
 
   // PUSH: on the first open of the day, generate the briefing automatically so
   // fleet surfaces what you forgot before you ask. Fires once per day, once

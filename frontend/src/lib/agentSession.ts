@@ -1,6 +1,7 @@
 import { writable, get } from "svelte/store";
 import {
   AgentAvailable, AgentConsent, GiveAgentConsent, AgentAsk, AgentAskFleet, ApproveAction, CancelAgent,
+  GetChat, SaveChat,
 } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 
@@ -40,18 +41,23 @@ function fmtInput(v: any): string {
   if (typeof v === "string") return v;
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
 }
-function chatKey(p: string) { return "fleet.chat:" + p; }
-function loadChat(p: string): Turn[] {
-  if (typeof localStorage === "undefined") return [];
-  try {
-    const r = localStorage.getItem(chatKey(p)); const a = r ? JSON.parse(r) : [];
-    return Array.isArray(a) ? a.filter((t) => t && (t.role === "user" || t.role === "assistant")) : [];
-  }
-  catch { return []; }
+// loadChatInto fetches a path's transcript from the Go store and applies it,
+// but only if the scope has not changed during the async round-trip - a late
+// result for a repo the user already switched away from must not land.
+function loadChatInto(p: string) {
+  GetChat(p)
+    .then((t) => {
+      if (loadedPath !== p) return;
+      // The store's Turn types role as a plain string; keep only the two roles
+      // this session renders, which also narrows the type to Turn[].
+      const kept = (t || []).filter((x): x is Turn => x.role === "user" || x.role === "assistant");
+      turns.set(kept);
+    })
+    .catch(() => { if (loadedPath === p) turns.set([]); });
 }
 function saveChat() {
-  if (typeof localStorage === "undefined" || !loadedPath) return;
-  try { localStorage.setItem(chatKey(loadedPath), JSON.stringify(get(turns).slice(-20))); } catch { /* non-fatal */ }
+  if (!loadedPath) return;
+  void SaveChat(loadedPath, get(turns).slice(-20));
 }
 
 export async function initAgentSession(): Promise<void> {
@@ -94,7 +100,7 @@ export function setProject(p: Proj): void {
   overlayOpen.set(false);
   project = p;
   loadedPath = p ? p.path : "";
-  turns.set(p ? loadChat(p.path) : []);
+  if (p) loadChatInto(p.path); else turns.set([]);
   isFleet.set(!!(p && p.isFleet));
 }
 
@@ -133,10 +139,10 @@ export function cancel(): void {
 
 export function openOverlay(p: Proj): void {
   setProject(p);
-  // A single-shot session may have written fleet.chat:<path> since this repo
-  // was first scoped; reload so an agentic saveChat() can't clobber it. Skip
-  // while a run is live (its in-memory turns aren't on disk yet).
-  if (p && !get(running)) { loadedPath = p.path; turns.set(loadChat(p.path)); }
+  // A single-shot session may have saved this repo's chat since it was first
+  // scoped; reload so an agentic saveChat() can't clobber it. Skip while a run
+  // is live (its in-memory turns aren't in the store yet).
+  if (p && !get(running)) { loadedPath = p.path; loadChatInto(p.path); }
   overlayOpen.set(true);
 }
 export function closeOverlay(): void { overlayOpen.set(false); } // does NOT cancel the run
