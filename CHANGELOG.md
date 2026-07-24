@@ -43,6 +43,13 @@ contain - the whole app as it stands on `master`.
   runtime metrics, `/healthz` and a rate-limited `/readyz` wired as the Fly
   readiness check, graceful shutdown, request ids and panic recovery.
 
+### Changed
+
+- The AI brief and chat transcripts are stored in the local data directory (and
+  included in the export), keyed by a stable repo identity, instead of the
+  browser's localStorage - so they survive a cleared browser store and are ready
+  to sync across devices.
+
 ### Security
 
 - The agent's `Grep`/`Glob` run through the approval hook, with secret-path denial

@@ -223,13 +223,16 @@ func TestWriteExportProducesValidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export: %v", err)
 	}
-	var m map[string]store.Record
-	if err := json.Unmarshal(raw, &m); err != nil {
+	var body struct {
+		Projects map[string]store.Record `json:"projects"`
+		Intel    intel.Data              `json:"intel"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("export is not valid JSON: %v", err)
 	}
-	rec, ok := m[id]
+	rec, ok := body.Projects[id]
 	if !ok || rec.Name != "exported" || len(rec.Tasks) != 1 {
-		t.Errorf("export missing the project/task: %+v", m)
+		t.Errorf("export missing the project/task: %+v", body.Projects)
 	}
 }
 
@@ -331,9 +334,13 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
+	is, err := intel.Open(filepath.Join(t.TempDir(), "intel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
 	cfg.Roots = []string{t.TempDir()} // hermetic: scan an empty temp dir, not the real ~/Projects
-	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, edges: ed}
+	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, intel: is, edges: ed}
 }
 
 func TestAddAndListManualProject(t *testing.T) {
