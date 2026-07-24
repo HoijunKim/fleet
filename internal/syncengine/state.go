@@ -16,10 +16,13 @@ import (
 	"github.com/hoijun/fleet/internal/store"
 )
 
-// State is the persisted sync bookkeeping (sync.json), keyed by doc_id.
+// State is the persisted sync bookkeeping (sync.json). Docs is keyed by kind,
+// then doc_id, because a project and a chat can share a doc_id (both
+// "git:<remote>") and must not collide in the bookkeeping the way they cannot on
+// the server, which keys by (user, kind, doc_id).
 type State struct {
-	Cursor int64               `json:"cursor"`
-	Docs   map[string]DocState `json:"docs"`
+	Cursor int64                          `json:"cursor"`
+	Docs   map[string]map[string]DocState `json:"docs"`
 }
 
 // DocState records what the engine last synced for one doc_id.
@@ -30,23 +33,41 @@ type DocState struct {
 	Deleted   bool   `json:"deleted"`
 }
 
-// loadState reads sync.json; a missing file yields an empty (usable) State.
+// loadState reads sync.json; a missing file yields an empty (usable) State. A
+// pre-4e flat file (Docs keyed by doc_id alone) is migrated into the "project"
+// kind, since projects were the only synced kind before intel sync.
 func loadState(path string) (State, error) {
-	s := State{Docs: map[string]DocState{}}
+	empty := State{Docs: map[string]map[string]DocState{}}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return s, nil
+			return empty, nil
 		}
-		return s, err
+		return empty, err
 	}
-	if err := json.Unmarshal(data, &s); err != nil {
-		return State{Docs: map[string]DocState{}}, err
+	// Try the current nested shape. A flat file fails here because a DocState
+	// object cannot decode into a map[string]DocState, so err routes to the
+	// migration below.
+	var s State
+	if err := json.Unmarshal(data, &s); err == nil {
+		if s.Docs == nil {
+			s.Docs = map[string]map[string]DocState{}
+		}
+		return s, nil
 	}
-	if s.Docs == nil {
-		s.Docs = map[string]DocState{}
+	// Fall back to the pre-4e flat shape.
+	var flat struct {
+		Cursor int64               `json:"cursor"`
+		Docs   map[string]DocState `json:"docs"`
 	}
-	return s, nil
+	if err := json.Unmarshal(data, &flat); err != nil {
+		return empty, err
+	}
+	out := State{Cursor: flat.Cursor, Docs: map[string]map[string]DocState{}}
+	if len(flat.Docs) > 0 {
+		out.Docs["project"] = flat.Docs
+	}
+	return out, nil
 }
 
 // saveState writes sync.json atomically (temp file + rename).
