@@ -984,7 +984,10 @@ func (a *App) ExportData() string {
 // writeExport serializes the whole store to dest as pretty JSON. Split from the
 // dialog so the export payload is testable without a native file picker.
 func (a *App) writeExport(dest string) error {
-	data, err := json.MarshalIndent(a.store.Snapshot(), "", "  ")
+	data, err := json.MarshalIndent(struct {
+		Projects map[string]store.Record `json:"projects"`
+		Intel    intel.Data              `json:"intel"`
+	}{a.store.Snapshot(), a.intel.Snapshot()}, "", "  ")
 	if err != nil {
 		return err
 	}

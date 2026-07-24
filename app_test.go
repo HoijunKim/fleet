@@ -1325,6 +1325,38 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	}
 }
 
+func TestExportIncludesIntel(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "projects.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	is, err := intel.Open(filepath.Join(t.TempDir(), "intel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	is.SetBrief(intel.Brief{Text: "exported brief"})
+	a := &App{store: st, intel: is}
+
+	dest := filepath.Join(t.TempDir(), "out.json")
+	if err := a.writeExport(dest); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Projects map[string]json.RawMessage `json:"projects"`
+		Intel    intel.Data                 `json:"intel"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("export is not the {projects, intel} shape: %v", err)
+	}
+	if body.Intel.Brief.Text != "exported brief" {
+		t.Errorf("intel brief missing from export: %+v", body.Intel)
+	}
+}
+
 func TestIntelBindingsRoundTrip(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
