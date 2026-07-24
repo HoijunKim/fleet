@@ -10,6 +10,7 @@ vi.mock("../../wailsjs/go/main/App", () => ({
   GiveAgentConsent: async () => "", AgentAsk: async () => "",
   ApproveAction: async (id: string, ok: boolean) => { calls.push([id, ok]); },
   CancelAgent: () => calls.push(["cancel"]),
+  GetChat: async () => [], SaveChat: async () => "",
 }));
 
 import { get } from "svelte/store";

@@ -18,6 +18,7 @@ vi.mock("../../wailsjs/go/main/App", () => ({
   AgentAskFleet: async (q: string) => { calls.push(["askFleet", q]); return ""; },
   ApproveAction: async (id: string, ok: boolean) => { calls.push(["approve", id, ok]); },
   CancelAgent: () => { calls.push(["cancel"]); },
+  GetChat: async () => [], SaveChat: async () => "",
 }));
 
 import * as S from "./agentSession";

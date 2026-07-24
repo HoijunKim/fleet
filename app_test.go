@@ -17,6 +17,7 @@ import (
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/edges"
 	"github.com/hoijun/fleet/internal/git"
+	"github.com/hoijun/fleet/internal/intel"
 	"github.com/hoijun/fleet/internal/repo"
 	"github.com/hoijun/fleet/internal/store"
 	"github.com/hoijun/fleet/internal/syncengine"
@@ -222,13 +223,16 @@ func TestWriteExportProducesValidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export: %v", err)
 	}
-	var m map[string]store.Record
-	if err := json.Unmarshal(raw, &m); err != nil {
+	var body struct {
+		Projects map[string]store.Record `json:"projects"`
+		Intel    intel.Data              `json:"intel"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("export is not valid JSON: %v", err)
 	}
-	rec, ok := m[id]
+	rec, ok := body.Projects[id]
 	if !ok || rec.Name != "exported" || len(rec.Tasks) != 1 {
-		t.Errorf("export missing the project/task: %+v", m)
+		t.Errorf("export missing the project/task: %+v", body.Projects)
 	}
 }
 
@@ -330,9 +334,13 @@ func newTestApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
+	is, err := intel.Open(filepath.Join(t.TempDir(), "intel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
 	cfg.Roots = []string{t.TempDir()} // hermetic: scan an empty temp dir, not the real ~/Projects
-	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, edges: ed}
+	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, intel: is, edges: ed}
 }
 
 func TestAddAndListManualProject(t *testing.T) {
@@ -1321,6 +1329,71 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	if _, err := (git.ExecRunner{}).Run(dir, args...); err != nil {
 		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+}
+
+func TestExportIncludesIntel(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "projects.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	is, err := intel.Open(filepath.Join(t.TempDir(), "intel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	is.SetBrief(intel.Brief{Text: "exported brief"})
+	a := &App{store: st, intel: is}
+
+	dest := filepath.Join(t.TempDir(), "out.json")
+	if err := a.writeExport(dest); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Projects map[string]json.RawMessage `json:"projects"`
+		Intel    intel.Data                 `json:"intel"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("export is not the {projects, intel} shape: %v", err)
+	}
+	if body.Intel.Brief.Text != "exported brief" {
+		t.Errorf("intel brief missing from export: %+v", body.Intel)
+	}
+}
+
+func TestIntelBindingsRoundTrip(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitRun(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitRun(t, dir, "remote", "add", "origin", "git@github.com:Owner/Repo.git")
+
+	is, err := intel.Open(filepath.Join(t.TempDir(), "intel.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &App{runner: git.ExecRunner{}, intel: is}
+
+	if msg := a.SaveChat(dir, []intel.Turn{{Role: "user", Text: "hi"}}); msg != "" {
+		t.Fatalf("SaveChat: %s", msg)
+	}
+	// Stored under the git: identity, reachable by the same path.
+	if got := a.GetChat(dir); len(got) != 1 || got[0].Text != "hi" {
+		t.Errorf("GetChat = %+v, want one 'hi' turn", got)
+	}
+	if _, ok := is.Snapshot().Chats["git:github.com/owner/repo"]; !ok {
+		t.Error("chat was not stored under the normalized git identity")
+	}
+
+	if msg := a.SaveBrief("today", "2026-07-24T00:00:00Z", "ko"); msg != "" {
+		t.Fatalf("SaveBrief: %s", msg)
+	}
+	if b := a.GetBrief(); b.Text != "today" || b.Lang != "ko" {
+		t.Errorf("GetBrief = %+v", b)
 	}
 }
 

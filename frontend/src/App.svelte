@@ -12,6 +12,7 @@
   import AddProjectModal from "./lib/AddProjectModal.svelte";
   import Overview from "./lib/Overview.svelte";
   import Today from "./lib/Today.svelte";
+  import { migrateIntel } from "./lib/intelMigrate";
   import Graph from "./lib/Graph.svelte";
   import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
   import UnclonedProjects from "./lib/UnclonedProjects.svelte";
@@ -706,6 +707,7 @@
 
   onMount(async () => {
     window.addEventListener("keydown", onKey);
+    await migrateIntel();
     await refreshHealth();
     await loadAll();
     await refreshAutoFetch();
