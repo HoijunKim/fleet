@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hoijun/fleet/internal/cloud"
@@ -380,13 +381,6 @@ func (a *App) runSync() error {
 			a.signOutLocally()
 			return err
 		}
-		// Checked before offline/error: this is not a transport problem and it
-		// cannot clear on its own, so the pill must say so rather than imply a
-		// retry will help.
-		if errors.Is(err, syncengine.ErrLocalDataUnsafe) {
-			a.setSyncState("paused", err.Error())
-			return err
-		}
 		if isOffline(err) {
 			a.setSyncState("offline", err.Error())
 		} else {
@@ -395,6 +389,13 @@ func (a *App) runSync() error {
 		return err
 	}
 	a.setSyncState("synced", "")
+	// A source whose local data is unreadable was skipped, not aborted: the pill
+	// says so rather than implying a retry will help, but projects (or whichever
+	// sources were healthy) still synced this cycle.
+	if skipped := a.engine.SkippedDegraded(); len(skipped) > 0 {
+		a.setSyncState("paused", "some local data is unreadable; its sync is paused: "+strings.Join(skipped, ", "))
+		return nil
+	}
 	// Capture both flags (each clears itself), then surface the stronger one: a
 	// clobbered UNSYNCED local edit (recoverable) outranks a plain remote update.
 	lost := a.engine.LostLocalEdit()
@@ -467,11 +468,10 @@ func (a *App) syncLoop(ctx context.Context) {
 			continue
 		}
 		err := a.runSync()
-		// ErrLocalDataUnsafe joins the no-point-retrying set: it needs a user
-		// decision, and backing off exponentially against a condition that cannot
-		// resolve on its own just delays the recovery once they make it.
-		if err == nil || errors.Is(err, errNotSignedIn) || errors.Is(err, cloud.ErrRefreshFailed) ||
-			errors.Is(err, syncengine.ErrLocalDataUnsafe) {
+		// A degraded source no longer errors the cycle (it is skipped and
+		// reported), so runSync returns nil in that case and the next tick retries
+		// harmlessly. Only genuine transport errors back off.
+		if err == nil || errors.Is(err, errNotSignedIn) || errors.Is(err, cloud.ErrRefreshFailed) {
 			backoff = base
 			timer.Reset(interval)
 			continue

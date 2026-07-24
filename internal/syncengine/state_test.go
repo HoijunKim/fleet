@@ -1,12 +1,48 @@
 package syncengine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/hoijun/fleet/internal/store"
 )
+
+func TestLoadStateMigratesFlatToNested(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "sync.json")
+	// A pre-4e sync.json: Docs is a flat doc_id -> DocState map.
+	flat := `{"cursor":5,"docs":{"m-1":{"localId":"m-1","hash":"h","updatedAt":"t","deleted":false}}}`
+	if err := os.WriteFile(p, []byte(flat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := loadState(p)
+	if err != nil {
+		t.Fatalf("loadState should migrate, not error: %v", err)
+	}
+	if s.Cursor != 5 {
+		t.Errorf("cursor lost in migration: %d", s.Cursor)
+	}
+	ds, ok := s.Docs["project"]["m-1"]
+	if !ok || ds.Hash != "h" {
+		t.Errorf("flat doc not migrated into the project kind: %+v", s.Docs)
+	}
+}
+
+func TestLoadStateReadsNested(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "sync.json")
+	nested := `{"cursor":2,"docs":{"chat":{"git:x":{"localId":"git:x","hash":"h","updatedAt":"t"}}}}`
+	if err := os.WriteFile(p, []byte(nested), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := loadState(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Docs["chat"]["git:x"]; !ok {
+		t.Errorf("nested state not read: %+v", s.Docs)
+	}
+}
 
 func TestDocID(t *testing.T) {
 	if got := DocID("m-9", store.Record{Manual: true}, ""); got != "m-9" {
@@ -46,12 +82,12 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("missing load: %+v %v", got, err)
 	}
 	got.Cursor = 7
-	got.Docs["m-1"] = DocState{LocalID: "m-1", Hash: "h", UpdatedAt: "u", Deleted: false}
+	got.Docs["project"] = map[string]DocState{"m-1": {LocalID: "m-1", Hash: "h", UpdatedAt: "u", Deleted: false}}
 	if err := saveState(p, got); err != nil {
 		t.Fatal(err)
 	}
 	back, err := loadState(p)
-	if err != nil || back.Cursor != 7 || back.Docs["m-1"].Hash != "h" {
+	if err != nil || back.Cursor != 7 || back.Docs["project"]["m-1"].Hash != "h" {
 		t.Fatalf("round trip: %+v %v", back, err)
 	}
 }

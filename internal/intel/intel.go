@@ -6,11 +6,13 @@
 package intel
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/hoijun/fleet/internal/fileguard"
 )
@@ -28,14 +30,41 @@ type Turn struct {
 // Brief is the fleet-wide "today" briefing: one per user.
 type Brief struct {
 	Text string `json:"text"`
-	At   string `json:"at"`
+	At   string `json:"at"` // the display string the UI shows
 	Lang string `json:"lang"`
+	// UpdatedAt is an RFC3339Nano stamp for last-write-wins sync, distinct from
+	// At (which is a human display string and not comparable).
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// Chat is one identity's transcript with the time it last changed locally, for
+// last-write-wins sync.
+type Chat struct {
+	Turns     []Turn `json:"turns"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// UnmarshalJSON accepts either the current object shape or the tier-4d shape,
+// where a chat was a bare array of turns. An old chat loads with an empty
+// UpdatedAt, which sync treats as older than anything.
+func (c *Chat) UnmarshalJSON(b []byte) error {
+	trimmed := bytes.TrimSpace(b)
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		return json.Unmarshal(b, &c.Turns)
+	}
+	type raw Chat
+	var r raw
+	if err := json.Unmarshal(b, &r); err != nil {
+		return err
+	}
+	*c = Chat(r)
+	return nil
 }
 
 // Data is the whole intel document.
 type Data struct {
-	Brief Brief             `json:"brief"`
-	Chats map[string][]Turn `json:"chats"`
+	Brief Brief           `json:"brief"`
+	Chats map[string]Chat `json:"chats"`
 }
 
 // Store is a concurrency-safe, file-backed intel document.
@@ -43,15 +72,16 @@ type Store struct {
 	path        string
 	mu          sync.RWMutex
 	data        Data
-	loadErr     error  // set when the file existed but could not be read/parsed
-	quarantined string // where unparseable bytes were moved, if they were
+	now         func() time.Time // timestamp source; overridable in tests
+	loadErr     error            // set when the file existed but could not be read/parsed
+	quarantined string           // where unparseable bytes were moved, if they were
 }
 
 // Open loads the store. A missing file yields an empty store with no error. A
 // present-but-unparseable file yields a read-only store: the bytes are
 // quarantined, Degraded reports the failure, and writes are refused.
 func Open(path string) (*Store, error) {
-	s := &Store{path: path, data: Data{Chats: map[string][]Turn{}}}
+	s := &Store{path: path, now: time.Now, data: Data{Chats: map[string]Chat{}}}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -72,11 +102,20 @@ func Open(path string) (*Store, error) {
 		return s, s.loadErr
 	}
 	if d.Chats == nil {
-		d.Chats = map[string][]Turn{}
+		d.Chats = map[string]Chat{}
 	}
 	s.data = d
 	return s, nil
 }
+
+// SetClock overrides the timestamp source (tests inject a fixed clock).
+func (s *Store) SetClock(now func() time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.now = now
+}
+
+func (s *Store) stamp() string { return s.now().UTC().Format(time.RFC3339Nano) }
 
 // Brief returns the current brief (zero value when unset).
 func (s *Store) Brief() Brief {
@@ -85,8 +124,25 @@ func (s *Store) Brief() Brief {
 	return s.data.Brief
 }
 
-// SetBrief replaces the brief.
+// BriefUpdatedAt returns the brief's last-change timestamp, for sync LWW.
+func (s *Store) BriefUpdatedAt() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.data.Brief.UpdatedAt
+}
+
+// SetBrief replaces the brief, stamping a fresh updatedAt for a local edit.
 func (s *Store) SetBrief(b Brief) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b.UpdatedAt = s.stamp()
+	s.data.Brief = b
+	return s.saveLocked()
+}
+
+// SetBriefSynced writes a brief verbatim (updatedAt from the source), used when
+// applying a pulled doc so the remote's timestamp is preserved for LWW.
+func (s *Store) SetBriefSynced(b Brief) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data.Brief = b
@@ -97,12 +153,19 @@ func (s *Store) SetBrief(b Brief) error {
 func (s *Store) Chat(id string) []Turn {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	t := s.data.Chats[id]
-	return append([]Turn(nil), t...)
+	return append([]Turn(nil), s.data.Chats[id].Turns...)
 }
 
-// SetChat replaces an identity's transcript, capped to the last chatCap turns.
-// An empty transcript deletes the key so it does not linger as [].
+// ChatUpdatedAt returns the chat's last-change timestamp, for sync LWW.
+func (s *Store) ChatUpdatedAt(id string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.data.Chats[id].UpdatedAt
+}
+
+// SetChat replaces an identity's transcript, capped to the last chatCap turns,
+// stamping a fresh updatedAt for a local edit. An empty transcript deletes the
+// key so it does not linger as [].
 func (s *Store) SetChat(id string, turns []Turn) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -113,7 +176,20 @@ func (s *Store) SetChat(id string, turns []Turn) error {
 	if len(turns) > chatCap {
 		turns = turns[len(turns)-chatCap:]
 	}
-	s.data.Chats[id] = append([]Turn(nil), turns...)
+	s.data.Chats[id] = Chat{Turns: append([]Turn(nil), turns...), UpdatedAt: s.stamp()}
+	return s.saveLocked()
+}
+
+// SetChatSynced writes a chat verbatim (updatedAt from the source), used when
+// applying a pulled doc so the remote's timestamp is preserved for LWW.
+func (s *Store) SetChatSynced(id string, ch Chat) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(ch.Turns) == 0 {
+		delete(s.data.Chats, id)
+		return s.saveLocked()
+	}
+	s.data.Chats[id] = ch
 	return s.saveLocked()
 }
 
@@ -125,13 +201,25 @@ func (s *Store) ClearChat(id string) error {
 	return s.saveLocked()
 }
 
+// SnapshotChats returns a shallow copy of the chats map (values are immutable
+// Chat structs), for the sync engine to enumerate.
+func (s *Store) SnapshotChats() map[string]Chat {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]Chat, len(s.data.Chats))
+	for k, v := range s.data.Chats {
+		out[k] = v
+	}
+	return out
+}
+
 // Snapshot returns a deep copy of the whole document (for export).
 func (s *Store) Snapshot() Data {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	chats := make(map[string][]Turn, len(s.data.Chats))
+	chats := make(map[string]Chat, len(s.data.Chats))
 	for k, v := range s.data.Chats {
-		chats[k] = append([]Turn(nil), v...)
+		chats[k] = v
 	}
 	return Data{Brief: s.data.Brief, Chats: chats}
 }

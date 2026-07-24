@@ -1134,8 +1134,8 @@ func TestStartupHealthReportsFailedLoads(t *testing.T) {
 	}
 	// A real engine: DiscardCorruptStore resets it, and the App is never built
 	// without one.
-	eng := syncengine.New(st, cloud.New("http://127.0.0.1:0"), filepath.Join(dir, "sync.json"),
-		func(string) string { return "" }, st.Degraded)
+	eng := syncengine.New(cloud.New("http://127.0.0.1:0"), filepath.Join(dir, "sync.json"),
+		syncengine.NewProject(st, func(string) string { return "" }, st.Degraded))
 	a := &App{cfg: config.Default(), store: st, dataDir: dir, storeLoadErr: storeErr, engine: eng,
 		syncTrigger: make(chan struct{}, 1)}
 
@@ -1207,6 +1207,14 @@ func TestNewAppSurfacesACorruptStoreEndToEnd(t *testing.T) {
 	}
 	dir := t.TempDir()
 	t.Setenv("APPDATA", dir)
+	// Point sync at a local no-op server: the degraded source is now skipped
+	// (not aborted early), so SyncOnce proceeds to a harmless pull instead of
+	// failing on a DNS lookup for the real backend.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"docs": []any{}, "cursor": 0})
+	}))
+	defer srv.Close()
+	t.Setenv("FLEET_API_URL", srv.URL)
 	fleetDir := filepath.Join(dir, "fleet")
 	if err := os.MkdirAll(fleetDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -1228,8 +1236,11 @@ func TestNewAppSurfacesACorruptStoreEndToEnd(t *testing.T) {
 	if err := a.store.Put("x", store.Record{Manual: true, Name: "x"}); err == nil {
 		t.Error("writes must be refused while degraded")
 	}
-	if err := a.engine.SyncOnce("tok"); !errors.Is(err, syncengine.ErrLocalDataUnsafe) {
-		t.Errorf("the engine must refuse to sync from a degraded store, got %v", err)
+	if err := a.engine.SyncOnce("tok"); err != nil {
+		t.Errorf("a degraded store must skip, not error, got %v", err)
+	}
+	if skipped := a.engine.SkippedDegraded(); len(skipped) != 1 || skipped[0] != "project" {
+		t.Errorf("the engine must report the skipped degraded project, got %v", skipped)
 	}
 
 	// The bytes survived, under a name the banner can point the user at.
@@ -1287,7 +1298,8 @@ func TestDiscardCorruptStoreDoesNotTombstoneTheCloud(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte(state), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	eng := syncengine.New(st, cloud.New(srv.URL), statePath, func(string) string { return "" }, st.Degraded)
+	eng := syncengine.New(cloud.New(srv.URL), statePath,
+		syncengine.NewProject(st, func(string) string { return "" }, st.Degraded))
 	a := &App{cfg: config.Default(), store: st, dataDir: dir, storeLoadErr: storeErr, engine: eng,
 		syncTrigger: make(chan struct{}, 1)}
 

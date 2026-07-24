@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestBriefRoundTrip(t *testing.T) {
@@ -97,5 +98,47 @@ func TestMissingFileIsEmptyNoError(t *testing.T) {
 	}
 	if s.Brief().Text != "" || len(s.Snapshot().Chats) != 0 {
 		t.Error("a missing file should yield an empty store")
+	}
+}
+
+func TestSetChatStampsUpdatedAt(t *testing.T) {
+	s, _ := Open(filepath.Join(t.TempDir(), "intel.json"))
+	s.SetClock(func() time.Time { return time.Date(2026, 7, 24, 1, 2, 3, 0, time.UTC) })
+	if err := s.SetChat("git:x", []Turn{{Role: "user", Text: "hi"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.ChatUpdatedAt("git:x"); got != "2026-07-24T01:02:03Z" {
+		t.Errorf("ChatUpdatedAt = %q, want the stamped time", got)
+	}
+}
+
+func TestSetBriefStampsUpdatedAt(t *testing.T) {
+	s, _ := Open(filepath.Join(t.TempDir(), "intel.json"))
+	s.SetClock(func() time.Time { return time.Date(2026, 7, 24, 1, 2, 3, 0, time.UTC) })
+	if err := s.SetBrief(Brief{Text: "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.BriefUpdatedAt(); got != "2026-07-24T01:02:03Z" {
+		t.Errorf("BriefUpdatedAt = %q, want the stamped time", got)
+	}
+}
+
+func TestOpenAcceptsOldBareArrayChatShape(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "intel.json")
+	// The tier-4d on-disk shape: chats are bare [Turn] arrays.
+	old := `{"brief":{"text":"b"},"chats":{"git:x":[{"role":"user","text":"q"}]}}`
+	if err := os.WriteFile(p, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(p)
+	if err != nil {
+		t.Fatalf("Open must accept the old shape: %v", err)
+	}
+	got := s.Chat("git:x")
+	if len(got) != 1 || got[0].Text != "q" {
+		t.Errorf("old-shape chat not loaded: %+v", got)
+	}
+	if s.ChatUpdatedAt("git:x") != "" {
+		t.Error("an old chat should load with an empty updatedAt (older-than-anything)")
 	}
 }

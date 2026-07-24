@@ -2,52 +2,69 @@ package syncengine
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/hoijun/fleet/internal/cloud"
-	"github.com/hoijun/fleet/internal/store"
 )
 
-// Engine syncs the local PM store against the backend. All local domain logic
-// stays here; the server is a dumb versioned document store.
+// Engine syncs one or more local document sources against the backend. All local
+// domain logic stays in the sources; the server is a dumb versioned document
+// store keyed by (user, kind, doc_id).
 type Engine struct {
-	store     *store.Store
 	client    *cloud.Client
 	statePath string
-	remoteOf  func(path string) string
-	degraded  func() error
+	sources   []Source
 
-	mu            sync.Mutex
-	state         State
-	loaded        bool
-	lastConflict  bool
-	lostLocalEdit string // "", "overwritten", or "deleted"
+	mu              sync.Mutex
+	state           State
+	loaded          bool
+	lastConflict    bool
+	lostLocalEdit   string   // "", "overwritten", or "deleted"
+	skippedDegraded []string // kinds skipped last cycle because their source was unreadable
 }
 
-// ErrLocalDataUnsafe aborts a sync cycle because the local store cannot be
-// trusted as the source of truth. Pushing from it would tombstone the user's
-// documents on the server - and, on the next pull, on every other device.
-var ErrLocalDataUnsafe = errors.New("local data is unreadable; sync paused so it cannot be propagated")
-
-// New builds an Engine. remoteOf resolves a code project's git remote URL from
-// its local id (repo path); return "" when there is no remote. degraded reports
-// whether the local store failed to load (nil error means healthy); a nil
-// degraded is treated as always-healthy, which suits tests with a store built
-// in memory.
-func New(st *store.Store, client *cloud.Client, statePath string, remoteOf func(string) string, degraded func() error) *Engine {
+// New builds an Engine over the given sources (project, brief, chat, ...). Each
+// source owns its own snapshot, live-set and degraded policy; the engine drives
+// push/tombstone/pull across all of them against one shared cursor.
+func New(client *cloud.Client, statePath string, sources ...Source) *Engine {
 	return &Engine{
-		store:     st,
 		client:    client,
 		statePath: statePath,
-		remoteOf:  remoteOf,
-		degraded:  degraded,
-		state:     State{Docs: map[string]DocState{}},
+		sources:   sources,
+		state:     State{Docs: map[string]map[string]DocState{}},
 	}
+}
+
+// sourceFor returns the source serving a kind, or nil.
+func (e *Engine) sourceFor(kind string) Source {
+	for _, s := range e.sources {
+		if s.Kind() == kind {
+			return s
+		}
+	}
+	return nil
+}
+
+// kindDocs returns (creating if needed) the state slice for a kind.
+func (e *Engine) kindDocs(kind string) map[string]DocState {
+	if e.state.Docs[kind] == nil {
+		e.state.Docs[kind] = map[string]DocState{}
+	}
+	return e.state.Docs[kind]
+}
+
+// SkippedDegraded returns and clears the kinds skipped last cycle because their
+// source was unreadable, so the UI can show a paused pill without the whole sync
+// aborting.
+func (e *Engine) SkippedDegraded() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	v := e.skippedDegraded
+	e.skippedDegraded = nil
+	return v
 }
 
 // TookRemoteEdit returns (and clears) whether the last sync applied a remote
@@ -83,23 +100,11 @@ func (e *Engine) LostLocalEdit() string {
 func (e *Engine) Reset() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.state = State{Docs: map[string]DocState{}}
+	e.state = State{Docs: map[string]map[string]DocState{}}
 	e.loaded = false
 	e.lastConflict = false
 	e.lostLocalEdit = ""
 	_ = os.Remove(e.statePath)
-}
-
-// storeFileMissing reports whether the store's backing file is absent. Any stat
-// error other than not-exist counts as present: this only ever adds a refusal,
-// so it must not fire on a transient I/O hiccup.
-func (e *Engine) storeFileMissing() bool {
-	p := e.store.Path()
-	if p == "" {
-		return false // an in-memory store has no file to lose
-	}
-	_, err := os.Stat(p)
-	return os.IsNotExist(err)
 }
 
 // conflictsMaxBytes is the size past which the conflicts file is rotated to
@@ -115,13 +120,13 @@ func (e *Engine) conflictsPath() string {
 // backupConflict appends the about-to-be-overwritten local record to the
 // conflicts file so a clobbered unsynced edit is recoverable, never silently
 // lost. Best-effort: a write failure does not abort the sync.
-func (e *Engine) backupConflict(localID string, rec store.Record, payload []byte) {
+func (e *Engine) backupConflict(localID, name string, payload []byte) {
 	line, err := json.Marshal(struct {
 		At      string          `json:"at"`
 		LocalID string          `json:"localId"`
 		Name    string          `json:"name"`
 		Payload json.RawMessage `json:"payload"`
-	}{At: time.Now().UTC().Format(time.RFC3339), LocalID: localID, Name: rec.Name, Payload: payload})
+	}{At: time.Now().UTC().Format(time.RFC3339), LocalID: localID, Name: name, Payload: payload})
 	if err != nil {
 		return
 	}
@@ -157,83 +162,60 @@ func (e *Engine) SyncOnce(access string) error {
 		e.loaded = true
 	}
 
-	snap := e.store.Snapshot()
+	e.skippedDegraded = nil
 
-	// Refuse to sync from a store that is not the user's real data. The
-	// tombstone loop below deletes, on the server and on every other device,
-	// every tracked doc missing from this snapshot - so an empty snapshot from a
-	// store that merely failed to PARSE is a total, silent, multi-device wipe.
-	// Both conditions abort the whole cycle before any push: the pull half is
-	// no safer, since it would apply remote records into a store whose writes
-	// are refused anyway.
-	if e.degraded != nil {
-		if err := e.degraded(); err != nil {
-			return fmt.Errorf("%w: %v", ErrLocalDataUnsafe, err)
+	// snaps holds each healthy source's current docs, keyed by kind then doc_id,
+	// so the pull phase can find the local item a pulled doc would overwrite.
+	snaps := map[string]map[string]Item{}
+
+	// --- push + tombstone, per source -----------------------------------------
+	var dirty []cloud.Doc
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, src := range e.sources {
+		kind := src.Kind()
+		// A degraded source is skipped entirely - no push, no tombstone - so it
+		// can propagate no emptiness. Its kind is reported so the UI can warn.
+		if err := src.Degraded(); err != nil {
+			e.skippedDegraded = append(e.skippedDegraded, kind)
+			continue
 		}
-	}
-	// An empty snapshot while we still track live documents is ambiguous on its
-	// own: deleting your last project produces exactly that, and pausing sync
-	// for it would be wrong. What is NOT ambiguous is the same emptiness with no
-	// projects.json behind it - a real delete leaves the file there holding an
-	// empty map, so a missing file means the data went somewhere fleet did not
-	// send it (a half-restored machine, a cleaned APPDATA, a synced folder that
-	// lost a race). Tombstoning from that would push the loss to every device.
-	//
-	// Docs already tombstoned do not count: once the user really has deleted
-	// everything, their tombstones live in the state file forever, and counting
-	// those would pause sync permanently for a legitimately empty store.
-	if len(snap) == 0 && e.storeFileMissing() {
+		kd := e.kindDocs(kind)
+		snap := src.Snapshot(kd)
+		snaps[kind] = snap
+
+		live := map[string]bool{}
+		for id, it := range snap {
+			live[id] = true
+			h := payloadHash(it.Payload)
+			prev, ok := kd[id]
+			if ok && prev.Hash == h && !prev.Deleted {
+				continue
+			}
+			dirty = append(dirty, cloud.Doc{Kind: kind, DocID: id, Payload: it.Payload, UpdatedAt: it.UpdatedAt, Deleted: false})
+			prev.LocalID = it.LocalID // remember mapping for accepted pushes
+			kd[id] = prev
+		}
+
+		// Tombstones: docs tracked for this kind that vanished from the snapshot.
+		// Only when the source can trust its snapshot to derive a live-set: a
+		// half-restored project store must not tombstone from an empty snapshot.
 		tracked := 0
-		for _, ds := range e.state.Docs {
+		for _, ds := range kd {
 			if !ds.Deleted {
 				tracked++
 			}
 		}
-		if tracked > 0 {
-			return fmt.Errorf("%w: %d synced projects are tracked, but projects.json is gone", ErrLocalDataUnsafe, tracked)
-		}
-	}
-
-	// Build local docs; a doc is dirty when its payload hash changed.
-	var dirty []cloud.Doc
-	live := map[string]bool{}
-	for localID, rec := range snap {
-		remote := ""
-		if !rec.Manual && e.remoteOf != nil {
-			remote = e.remoteOf(localID)
-		}
-		id := DocID(localID, rec, remote)
-		// A detached record (a pulled code-project doc with no local repo on
-		// this machine) is stored under its own doc_id as the local key. Keep
-		// that identity instead of re-deriving one, so it is neither re-pushed
-		// under a fresh "local:" id nor wrongly tombstoned under its original
-		// id - the spec requires detached records be retained, never dropped
-		// or duplicated.
-		if ds, ok := e.state.Docs[localID]; ok && ds.LocalID == localID {
-			id = localID
-		}
-		live[id] = true
-		payload, err := json.Marshal(rec)
-		if err != nil {
-			return err
-		}
-		h := payloadHash(payload)
-		prev, ok := e.state.Docs[id]
-		if ok && prev.Hash == h && !prev.Deleted {
+		if err := src.Reconcilable(tracked); err != nil {
+			e.skippedDegraded = append(e.skippedDegraded, kind)
+			delete(snaps, kind)
 			continue
 		}
-		dirty = append(dirty, cloud.Doc{Kind: "project", DocID: id, Payload: payload, UpdatedAt: rec.UpdatedAt, Deleted: false})
-		prev.LocalID = localID // remember mapping for accepted pushes
-		e.state.Docs[id] = prev
-	}
-
-	// Tombstones: docs we tracked that have vanished from the store.
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for id, ds := range e.state.Docs {
-		if live[id] || ds.Deleted {
-			continue
+		for id, ds := range kd {
+			if live[id] || ds.Deleted {
+				continue
+			}
+			dirty = append(dirty, cloud.Doc{Kind: kind, DocID: id, Payload: json.RawMessage("{}"), UpdatedAt: now, Deleted: true})
 		}
-		dirty = append(dirty, cloud.Doc{Kind: "project", DocID: id, Payload: json.RawMessage("{}"), UpdatedAt: now, Deleted: true})
 	}
 
 	if len(dirty) > 0 {
@@ -241,20 +223,21 @@ func (e *Engine) SyncOnce(access string) error {
 		if err != nil {
 			return err
 		}
-		byID := make(map[string]cloud.Doc, len(dirty))
+		byKey := make(map[string]cloud.Doc, len(dirty))
 		for _, d := range dirty {
-			byID[d.DocID] = d
+			byKey[d.Kind+"\x00"+d.DocID] = d
 		}
 		for _, r := range results {
-			if !r.Accepted {
+			d, ok := byKey[r.Kind+"\x00"+r.DocID]
+			if !ok || !r.Accepted {
 				continue // stale push; the pull below reconciles it
 			}
-			d := byID[r.DocID]
-			ds := e.state.Docs[r.DocID]
+			kd := e.kindDocs(d.Kind)
+			ds := kd[d.DocID]
 			ds.Hash = payloadHash(d.Payload)
 			ds.UpdatedAt = d.UpdatedAt
 			ds.Deleted = d.Deleted
-			e.state.Docs[r.DocID] = ds
+			kd[d.DocID] = ds
 		}
 		// Do NOT advance the cursor from the push response: it is the server's
 		// GLOBAL max version, and adopting it when this device is behind on
@@ -263,75 +246,68 @@ func (e *Engine) SyncOnce(access string) error {
 		// reconciling. Only the pull below advances e.state.Cursor.
 	}
 
+	// --- pull, routed to each source by kind ----------------------------------
 	docs, cursor, err := e.client.Pull(e.state.Cursor, access)
 	if err != nil {
 		return err
 	}
 	for _, d := range docs {
-		localID := e.localIDForDoc(d)
+		src := e.sourceFor(d.Kind)
+		// An unknown kind (a newer client's data) or a degraded/skipped source
+		// is passed over: applying it would fail or is unwanted, and the cursor
+		// still advances so it is not re-fetched forever.
+		if src == nil || src.Degraded() != nil {
+			continue
+		}
+		kd := e.kindDocs(d.Kind)
+		snap := snaps[d.Kind]
+
+		localID := d.DocID
+		if ds, ok := kd[d.DocID]; ok && ds.LocalID != "" {
+			localID = ds.LocalID
+		}
+		local, hasLocal := snap[d.DocID]
 		localUpdated := ""
-		if rec, ok := snap[localID]; ok {
-			localUpdated = rec.UpdatedAt
-		} else if ds, ok := e.state.Docs[d.DocID]; ok {
+		if hasLocal {
+			localUpdated = local.UpdatedAt
+		} else if ds, ok := kd[d.DocID]; ok {
 			localUpdated = ds.UpdatedAt
 		}
 		if !newer(d.UpdatedAt, localUpdated) {
 			continue // local is newer or equal: LWW keeps local
 		}
 		if d.Deleted {
-			// A delete pulled from another device destroys the local record just
-			// as thoroughly as a clobbering update does - store.Delete is a hard
-			// delete with no trash - so back it up the same way. Unlike the
-			// update branch there is no hash check: a tombstone carries no
-			// payload to compare against, and every deleted record is worth
-			// keeping, synced or not.
-			if local, ok := snap[localID]; ok {
-				if lp, err := json.Marshal(local); err == nil {
-					e.backupConflict(localID, local, lp)
-					e.lostLocalEdit = "deleted"
-				}
+			// A pulled delete destroys the local record as thoroughly as a
+			// clobbering update; back it up the same way (project only). No hash
+			// check: a tombstone carries no payload to compare against.
+			if hasLocal && src.BacksUpClobbered() {
+				e.backupConflict(localID, src.DisplayName(local.Payload), local.Payload)
+				e.lostLocalEdit = "deleted"
 			}
-			if err := e.store.Delete(localID); err != nil {
+			if err := src.Remove(localID); err != nil {
 				return err
 			}
 		} else {
-			var rec store.Record
-			if err := json.Unmarshal(d.Payload, &rec); err != nil {
-				return err
-			}
 			// If the local record has UNSYNCED changes (its current hash differs
 			// from the last-synced hash), this newer remote would clobber them.
-			// Back up the local version so the loss is recoverable, not silent.
-			if local, ok := snap[localID]; ok {
-				if lp, err := json.Marshal(local); err == nil && payloadHash(lp) != e.state.Docs[d.DocID].Hash {
-					e.backupConflict(localID, local, lp)
-					if e.lostLocalEdit == "" {
-						e.lostLocalEdit = "overwritten" // "deleted" outranks it
-					}
+			if hasLocal && src.BacksUpClobbered() && payloadHash(local.Payload) != kd[d.DocID].Hash {
+				e.backupConflict(localID, src.DisplayName(local.Payload), local.Payload)
+				if e.lostLocalEdit == "" {
+					e.lostLocalEdit = "overwritten" // "deleted" outranks it
 				}
 			}
-			if err := e.store.Put(localID, rec); err != nil {
+			if err := src.Apply(localID, d.Payload); err != nil {
 				return err
 			}
 		}
 		if localUpdated != "" {
 			e.lastConflict = true // overwrote an existing local edit
 		}
-		e.state.Docs[d.DocID] = DocState{LocalID: localID, Hash: payloadHash(d.Payload), UpdatedAt: d.UpdatedAt, Deleted: d.Deleted}
+		kd[d.DocID] = DocState{LocalID: localID, Hash: payloadHash(d.Payload), UpdatedAt: d.UpdatedAt, Deleted: d.Deleted}
 	}
 	if cursor > e.state.Cursor {
 		e.state.Cursor = cursor
 	}
 
 	return saveState(e.statePath, e.state)
-}
-
-// localIDForDoc maps a doc_id back to a local store key. A known mapping wins;
-// a manual doc_id is itself the local id; an unmatched code doc is retained
-// (detached) under its doc_id until a scan reconciles it.
-func (e *Engine) localIDForDoc(d cloud.Doc) string {
-	if ds, ok := e.state.Docs[d.DocID]; ok && ds.LocalID != "" {
-		return ds.LocalID
-	}
-	return d.DocID
 }

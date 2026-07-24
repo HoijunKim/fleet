@@ -2,7 +2,6 @@ package syncengine
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hoijun/fleet/internal/cloud"
+	"github.com/hoijun/fleet/internal/intel"
 	"github.com/hoijun/fleet/internal/store"
 )
 
@@ -68,12 +68,13 @@ func (f *fakeSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		var results []cloud.PushResult
 		for _, d := range body.Docs {
-			stored, ok := f.docs[d.DocID]
+			key := d.Kind + "\x00" + d.DocID
+			stored, ok := f.docs[key]
 			accept := !ok || newer(d.UpdatedAt, stored.UpdatedAt)
 			if accept {
 				f.cur++
 				d.Version = f.cur
-				f.docs[d.DocID] = d
+				f.docs[key] = d
 				results = append(results, cloud.PushResult{DocID: d.DocID, Kind: d.Kind, Accepted: true, Version: d.Version})
 			} else {
 				results = append(results, cloud.PushResult{DocID: d.DocID, Kind: d.Kind, Accepted: false, Version: stored.Version})
@@ -83,12 +84,18 @@ func (f *fakeSrv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// get looks up a stored doc by (kind, doc_id), matching the real server's key.
+func (f *fakeSrv) get(kind, id string) (cloud.Doc, bool) {
+	d, ok := f.docs[kind+"\x00"+id]
+	return d, ok
+}
+
 func newEngine(t *testing.T, url string) (*Engine, *store.Store, string) {
 	t.Helper()
 	dir := t.TempDir()
 	st, _ := store.Open(filepath.Join(dir, "projects.json"))
 	statePath := filepath.Join(dir, "sync.json")
-	e := New(st, cloud.New(url), statePath, func(string) string { return "" }, nil)
+	e := New(cloud.New(url), statePath, NewProject(st, func(string) string { return "" }, nil))
 	return e, st, statePath
 }
 
@@ -205,7 +212,7 @@ func TestResetClearsStateAndRepushes(t *testing.T) {
 	dir := t.TempDir()
 	st, _ := store.Open(filepath.Join(dir, "projects.json"))
 	statePath := filepath.Join(dir, "sync.json")
-	e := New(st, cloud.New(ts.URL), statePath, func(string) string { return "" }, nil)
+	e := New(cloud.New(ts.URL), statePath, NewProject(st, func(string) string { return "" }, nil))
 	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "p" })
 	if err := e.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
@@ -242,21 +249,21 @@ func TestSyncDetachedCodeDocNotRepushed(t *testing.T) {
 	// device A has a code project WITH a git remote and syncs it.
 	dirA := t.TempDir()
 	stA, _ := store.Open(filepath.Join(dirA, "projects.json"))
-	eA := New(stA, cloud.New(ts.URL), filepath.Join(dirA, "sync.json"),
-		func(string) string { return "git@github.com:o/app.git" }, nil)
+	eA := New(cloud.New(ts.URL), filepath.Join(dirA, "sync.json"),
+		NewProject(stA, func(string) string { return "git@github.com:o/app.git" }, nil))
 	_ = stA.Update("C:/repos/app", func(r *store.Record) { r.Manual = false; r.Name = "app" })
 	if err := eA.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := f.docs["git:github.com/o/app"]; !ok {
+	if _, ok := f.get("project", "git:github.com/o/app"); !ok {
 		t.Fatalf("server missing the git doc: %v", keys(f.docs))
 	}
 
 	// device B has NO such repo (remoteOf returns "") and pulls a detached doc.
 	dirB := t.TempDir()
 	stB, _ := store.Open(filepath.Join(dirB, "projects.json"))
-	eB := New(stB, cloud.New(ts.URL), filepath.Join(dirB, "sync.json"),
-		func(string) string { return "" }, nil)
+	eB := New(cloud.New(ts.URL), filepath.Join(dirB, "sync.json"),
+		NewProject(stB, func(string) string { return "" }, nil))
 	if err := eB.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +384,7 @@ func TestSyncCursorAdvancesOnlyFromPull(t *testing.T) {
 			t.Error("expected remote-edit flag after the server version overwrote a local edit")
 		}
 		// DocState.Hash now matches the applied server content, so B is clean.
-		if ds := eB.state.Docs["m-1"]; ds.Hash != payloadHash(mustMarshal(t, rec)) {
+		if ds := eB.state.Docs["project"]["m-1"]; ds.Hash != payloadHash(mustMarshal(t, rec)) {
 			t.Errorf("DocState.Hash does not match applied server content: %+v", ds)
 		}
 
@@ -446,8 +453,9 @@ func TestSyncBacksUpClobberedLocalEdit(t *testing.T) {
 // A store that failed to load reads as empty, and an empty snapshot means the
 // tombstone loop would delete every tracked doc on the server - and, on their
 // next pull, on every other device. One unreadable local file must not become
-// permanent multi-device loss, so the whole cycle aborts before any push.
-func TestSyncRefusesWhenStoreDegraded(t *testing.T) {
+// permanent multi-device loss, so the source is SKIPPED (never tombstones) and
+// its kind is reported for the paused pill, while other sources sync on.
+func TestSyncSkipsDegradedSource(t *testing.T) {
 	f := newFake()
 	ts := httptest.NewServer(f)
 	defer ts.Close()
@@ -457,9 +465,10 @@ func TestSyncRefusesWhenStoreDegraded(t *testing.T) {
 	if err := e.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := f.docs["m-1"]; !ok {
+	if _, ok := f.get("project", "m-1"); !ok {
 		t.Fatal("precondition: the server should hold m-1")
 	}
+	pushesBefore := f.pushes
 
 	// Reopen against a corrupt file: same state, degraded store.
 	if err := os.WriteFile(st.Path(), []byte("{not json"), 0o644); err != nil {
@@ -469,32 +478,43 @@ func TestSyncRefusesWhenStoreDegraded(t *testing.T) {
 	if err == nil {
 		t.Fatal("precondition: the store should have failed to load")
 	}
-	e2 := New(broken, cloud.New(ts.URL), statePath, func(string) string { return "" }, broken.Degraded)
+	e2 := New(cloud.New(ts.URL), statePath, NewProject(broken, func(string) string { return "" }, broken.Degraded))
 
-	if err := e2.SyncOnce("tok"); !errors.Is(err, ErrLocalDataUnsafe) {
-		t.Fatalf("expected ErrLocalDataUnsafe, got %v", err)
+	if err := e2.SyncOnce("tok"); err != nil {
+		t.Fatalf("a degraded source must skip, not error: %v", err)
 	}
-	if d, ok := f.docs["m-1"]; !ok || d.Deleted {
+	if f.pushes != pushesBefore {
+		t.Errorf("a degraded source must push nothing (pushes %d -> %d)", pushesBefore, f.pushes)
+	}
+	if d, ok := f.get("project", "m-1"); !ok || d.Deleted {
 		t.Error("a degraded store must never tombstone the server copy")
+	}
+	if skipped := e2.SkippedDegraded(); len(skipped) != 1 || skipped[0] != "project" {
+		t.Errorf("SkippedDegraded = %v, want [project]", skipped)
 	}
 }
 
 // The store loaded cleanly but is empty AND its file is gone: the data went
-// somewhere fleet did not send it. Deleting your last project, by contrast,
-// leaves projects.json holding an empty map - that case must still sync.
-func TestSyncRefusesWhenStoreFileVanished(t *testing.T) {
+// somewhere fleet did not send it. Reconcilable refuses to derive a live-set, so
+// the source is skipped (no tombstones) and reported. Deleting your last
+// project, by contrast, leaves projects.json in place and still syncs (below).
+func TestSyncSkipsWhenStoreFileVanished(t *testing.T) {
 	f := newFake()
 	ts := httptest.NewServer(f)
 	defer ts.Close()
 
-	e, st, _ := newEngine(t, ts.URL)
+	dir := t.TempDir()
+	st, _ := store.Open(filepath.Join(dir, "projects.json"))
+	statePath := filepath.Join(dir, "sync.json")
+	e := New(cloud.New(ts.URL), statePath, NewProject(st, func(string) string { return "" }, nil))
 	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "a" })
 	if err := e.SyncOnce("tok"); err != nil {
 		t.Fatal(err)
 	}
+	pushesBefore := f.pushes
 
 	// The file disappears under a live engine (a cleaned APPDATA, a half
-	// restore); the in-memory store is reopened empty from nothing.
+	// restore); a fresh engine reopens the store empty from nothing.
 	if err := os.Remove(st.Path()); err != nil {
 		t.Fatal(err)
 	}
@@ -502,13 +522,19 @@ func TestSyncRefusesWhenStoreFileVanished(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a missing file must open cleanly: %v", err)
 	}
-	e.store = empty
+	e2 := New(cloud.New(ts.URL), statePath, NewProject(empty, func(string) string { return "" }, empty.Degraded))
 
-	if err := e.SyncOnce("tok"); !errors.Is(err, ErrLocalDataUnsafe) {
-		t.Fatalf("expected ErrLocalDataUnsafe, got %v", err)
+	if err := e2.SyncOnce("tok"); err != nil {
+		t.Fatalf("a vanished store file must skip, not error: %v", err)
 	}
-	if d := f.docs["m-1"]; d.Deleted {
+	if f.pushes != pushesBefore {
+		t.Errorf("a vanished store must push nothing (pushes %d -> %d)", pushesBefore, f.pushes)
+	}
+	if d, ok := f.get("project", "m-1"); !ok || d.Deleted {
 		t.Error("a vanished store file must never tombstone the server copy")
+	}
+	if skipped := e2.SkippedDegraded(); len(skipped) != 1 || skipped[0] != "project" {
+		t.Errorf("SkippedDegraded = %v, want [project]", skipped)
 	}
 }
 
@@ -530,7 +556,7 @@ func TestSyncStillTombstonesAfterDeletingLastProject(t *testing.T) {
 	if err := e.SyncOnce("tok"); err != nil {
 		t.Fatalf("deleting the last project is legitimate: %v", err)
 	}
-	if d, ok := f.docs["m-1"]; !ok || !d.Deleted {
+	if d, ok := f.get("project", "m-1"); !ok || !d.Deleted {
 		t.Error("the tombstone for a real delete must reach the server")
 	}
 }
@@ -579,5 +605,104 @@ func TestPulledTombstoneBacksUpTheLocalRecord(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "B private notes") {
 		t.Errorf("the deleted record must be recoverable, got %q", data)
+	}
+}
+
+// TestProjectAndChatShareGitIdSafely is the collision guard: a project and a
+// chat for the same repo have the SAME doc_id ("git:<remote>"). They must sync
+// independently under their own kind, neither tombstoning the other.
+func TestProjectAndChatShareGitIdSafely(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	dir := t.TempDir()
+	st, _ := store.Open(filepath.Join(dir, "projects.json"))
+	is, _ := intel.Open(filepath.Join(dir, "intel.json"))
+	is.SetClock(func() time.Time { return time.Date(2026, 7, 24, 0, 0, 0, 0, time.UTC) })
+	e := New(cloud.New(ts.URL), filepath.Join(dir, "sync.json"),
+		NewProject(st, func(string) string { return "git@github.com:o/app.git" }, nil),
+		NewChat(is))
+
+	_ = st.Update("C:/repos/app", func(r *store.Record) { r.Name = "app" })
+	_ = is.SetChat("git:github.com/o/app", []intel.Turn{{Role: "user", Text: "hi"}})
+
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if d, ok := f.get("project", "git:github.com/o/app"); !ok || d.Deleted {
+		t.Errorf("project doc missing or tombstoned: %+v ok=%v", d, ok)
+	}
+	if d, ok := f.get("chat", "git:github.com/o/app"); !ok || d.Deleted {
+		t.Errorf("chat doc missing or tombstoned: %+v ok=%v", d, ok)
+	}
+
+	// A second sync with no local change must push neither again.
+	pushes := f.pushes
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if f.pushes != pushes {
+		t.Errorf("clean re-sync pushed again: %d -> %d", pushes, f.pushes)
+	}
+}
+
+// TestChatSyncsAcrossDevicesLWW: a chat created on A appears on B, newest wins.
+func TestChatSyncsAcrossDevicesLWW(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	mk := func(dir string, at time.Time) (*Engine, *intel.Store) {
+		is, _ := intel.Open(filepath.Join(dir, "intel.json"))
+		is.SetClock(func() time.Time { return at })
+		e := New(cloud.New(ts.URL), filepath.Join(dir, "sync.json"), NewChat(is))
+		return e, is
+	}
+	eA, isA := mk(t.TempDir(), time.Date(2026, 7, 24, 1, 0, 0, 0, time.UTC))
+	_ = isA.SetChat("git:x", []intel.Turn{{Role: "user", Text: "fromA"}})
+	if err := eA.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	eB, isB := mk(t.TempDir(), time.Date(2026, 7, 24, 2, 0, 0, 0, time.UTC))
+	if err := eB.SyncOnce("tok"); err != nil {
+		t.Fatal(err)
+	}
+	if got := isB.Chat("git:x"); len(got) != 1 || got[0].Text != "fromA" {
+		t.Errorf("device B did not receive the chat: %+v", got)
+	}
+}
+
+// TestDegradedIntelDoesNotBlockProjects: a corrupt intel store skips intel but
+// projects still push and pull in the same cycle (the availability guarantee).
+func TestDegradedIntelDoesNotBlockProjects(t *testing.T) {
+	f := newFake()
+	ts := httptest.NewServer(f)
+	defer ts.Close()
+
+	dir := t.TempDir()
+	st, _ := store.Open(filepath.Join(dir, "projects.json"))
+	// A corrupt intel.json: the chat source is degraded.
+	intelPath := filepath.Join(dir, "intel.json")
+	if err := os.WriteFile(intelPath, []byte("{bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	is, err := intel.Open(intelPath)
+	if err == nil {
+		t.Fatal("precondition: intel store should be degraded")
+	}
+	e := New(cloud.New(ts.URL), filepath.Join(dir, "sync.json"),
+		NewProject(st, func(string) string { return "" }, nil),
+		NewChat(is))
+
+	_ = st.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "p" })
+	if err := e.SyncOnce("tok"); err != nil {
+		t.Fatalf("a degraded intel source must not block the project sync: %v", err)
+	}
+	if _, ok := f.get("project", "m-1"); !ok {
+		t.Error("the project must still push while intel is degraded")
+	}
+	if skipped := e.SkippedDegraded(); len(skipped) != 1 || skipped[0] != "chat" {
+		t.Errorf("SkippedDegraded = %v, want [chat]", skipped)
 	}
 }
