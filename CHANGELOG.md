@@ -47,8 +47,10 @@ contain - the whole app as it stands on `master`.
 
 - The AI brief and chat transcripts are stored in the local data directory (and
   included in the export), keyed by a stable repo identity, instead of the
-  browser's localStorage - so they survive a cleared browser store and are ready
-  to sync across devices.
+  browser's localStorage - so they survive a cleared browser store.
+- The AI brief and chat transcripts sync across your devices (last-write-wins),
+  alongside projects. A source whose local file is unreadable is skipped and its
+  sync paused, without stopping the others.
 
 ### Security
 
