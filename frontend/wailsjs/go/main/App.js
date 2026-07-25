@@ -322,6 +322,10 @@ export function ResolveConflict(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResolveConflict'](arg1, arg2, arg3);
 }
 
+export function RestoreBackup(arg1, arg2) {
+  return window['go']['main']['App']['RestoreBackup'](arg1, arg2);
+}
+
 export function RevealDataDir() {
   return window['go']['main']['App']['RevealDataDir']();
 }
