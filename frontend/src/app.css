@@ -793,13 +793,14 @@ select.input option { background: var(--surface); color: var(--text); }
 }
 .set-backups li {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   padding: 3px 0;
   border-bottom: 1px solid var(--border);
 }
-.set-backup-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-backup-name { color: var(--text); flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-backup-when { color: var(--faint); flex: none; font-variant-numeric: tabular-nums; }
+.set-backup-restore { flex: none; }
 
 /* Diverged banner: shown when local and upstream both have unshared commits. */
 .diverged-banner {

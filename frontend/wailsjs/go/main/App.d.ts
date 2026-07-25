@@ -164,6 +164,8 @@ export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
 
 export function ResolveConflict(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function RestoreBackup(arg1:string,arg2:string):Promise<string>;
+
 export function RevealDataDir():Promise<string>;
 
 export function RevealInExplorer(arg1:string):Promise<string>;

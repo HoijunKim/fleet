@@ -43,6 +43,7 @@ export namespace intel {
 	    text: string;
 	    at: string;
 	    lang: string;
+	    updatedAt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Brief(source);
@@ -53,6 +54,7 @@ export namespace intel {
 	        this.text = source["text"];
 	        this.at = source["at"];
 	        this.lang = source["lang"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	export class Turn {

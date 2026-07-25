@@ -340,7 +340,9 @@ func newTestApp(t *testing.T) *App {
 	}
 	cfg := config.Default()
 	cfg.Roots = []string{t.TempDir()} // hermetic: scan an empty temp dir, not the real ~/Projects
-	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, intel: is, edges: ed}
+	// A real data dir so tests that touch dataDir-relative files (e.g.
+	// sync-conflicts.jsonl) are isolated per test, not sharing the CWD.
+	return &App{cfg: cfg, runner: fakeRunner{out: map[string]string{}}, store: st, intel: is, edges: ed, dataDir: t.TempDir()}
 }
 
 func TestAddAndListManualProject(t *testing.T) {
@@ -1453,5 +1455,131 @@ func TestConflictBindingsRoundTrip(t *testing.T) {
 	}
 	if op := git.OperationInProgress(dir); op != "" {
 		t.Errorf("merge not finished, still %q", op)
+	}
+}
+
+func writeBackupLine(t *testing.T, dir, localID, when, name string, rec store.Record) {
+	t.Helper()
+	payload, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, err := json.Marshal(struct {
+		At      string          `json:"at"`
+		LocalID string          `json:"localId"`
+		Name    string          `json:"name"`
+		Payload json.RawMessage `json:"payload"`
+	}{At: when, LocalID: localID, Name: name, Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "sync-conflicts.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.Write(append(line, '\n')); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRestoreBackupReStampsSoItWinsLWW(t *testing.T) {
+	a := newTestApp(t)
+	when := "2026-07-01T00:00:00Z"
+	writeBackupLine(t, a.dataDir, "m-1", when, "my project",
+		store.Record{Manual: true, Name: "my project", Notes: "the lost note", UpdatedAt: "2026-07-01T00:00:00Z"})
+
+	if msg := a.RestoreBackup("m-1", when); msg != "" {
+		t.Fatalf("RestoreBackup: %s", msg)
+	}
+	rec, ok := a.store.Get("m-1")
+	if !ok || rec.Notes != "the lost note" {
+		t.Fatalf("restored record missing or wrong: %+v ok=%v", rec, ok)
+	}
+	if rec.UpdatedAt <= "2026-07-01T00:00:00Z" {
+		t.Errorf("UpdatedAt was not re-stamped to now: %q", rec.UpdatedAt)
+	}
+}
+
+func TestRestoreBackupRecreatesADeletedRecord(t *testing.T) {
+	a := newTestApp(t)
+	when := "2026-07-02T00:00:00Z"
+	writeBackupLine(t, a.dataDir, "m-gone", when, "deleted one",
+		store.Record{Manual: true, Name: "deleted one", UpdatedAt: when})
+	if _, ok := a.store.Get("m-gone"); ok {
+		t.Fatal("precondition: m-gone should not be in the store")
+	}
+	if msg := a.RestoreBackup("m-gone", when); msg != "" {
+		t.Fatalf("RestoreBackup: %s", msg)
+	}
+	if rec, ok := a.store.Get("m-gone"); !ok || rec.Name != "deleted one" {
+		t.Errorf("a deleted record should be re-created by restore: %+v ok=%v", rec, ok)
+	}
+}
+
+func TestRestoreBackupNoMatchErrorsAndWritesNothing(t *testing.T) {
+	a := newTestApp(t)
+	writeBackupLine(t, a.dataDir, "m-1", "2026-07-01T00:00:00Z", "x", store.Record{Manual: true, Name: "x"})
+	if msg := a.RestoreBackup("m-1", "1999-01-01T00:00:00Z"); msg == "" {
+		t.Error("a when that matches no line must return an error")
+	}
+	if _, ok := a.store.Get("m-1"); ok {
+		t.Error("a non-matching restore must not write anything")
+	}
+}
+
+func TestRestoreBackupPicksTheRightLineAmongMany(t *testing.T) {
+	a := newTestApp(t)
+	writeBackupLine(t, a.dataDir, "m-1", "2026-07-01T00:00:00Z", "v1",
+		store.Record{Manual: true, Name: "m-1", Notes: "first", UpdatedAt: "2026-07-01T00:00:00Z"})
+	writeBackupLine(t, a.dataDir, "m-1", "2026-07-03T00:00:00Z", "v2",
+		store.Record{Manual: true, Name: "m-1", Notes: "second", UpdatedAt: "2026-07-03T00:00:00Z"})
+	if msg := a.RestoreBackup("m-1", "2026-07-01T00:00:00Z"); msg != "" {
+		t.Fatalf("RestoreBackup: %s", msg)
+	}
+	if rec, _ := a.store.Get("m-1"); rec.Notes != "first" {
+		t.Errorf("restored the wrong line: got Notes=%q, want first", rec.Notes)
+	}
+}
+
+func TestRestoredRecordIsRePushed(t *testing.T) {
+	var pushed []cloud.Doc
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var body struct {
+				Docs []cloud.Doc `json:"docs"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			pushed = append(pushed, body.Docs...)
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{}, "cursor": 0})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"docs": []any{}, "cursor": 0})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	st, _ := store.Open(filepath.Join(dir, "projects.json"))
+	eng := syncengine.New(cloud.New(srv.URL), filepath.Join(dir, "sync.json"),
+		syncengine.NewProject(st, func(string) string { return "" }, nil))
+	a := &App{store: st, dataDir: dir, engine: eng, syncTrigger: make(chan struct{}, 1)}
+
+	when := "2026-07-01T00:00:00Z"
+	writeBackupLine(t, dir, "m-1", when, "p",
+		store.Record{Manual: true, Name: "p", Notes: "recovered", UpdatedAt: when})
+	if msg := a.RestoreBackup("m-1", when); msg != "" {
+		t.Fatalf("RestoreBackup: %s", msg)
+	}
+	if err := a.engine.SyncOnce("tok"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	found := false
+	for _, d := range pushed {
+		if d.DocID == "m-1" && !d.Deleted {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("a restored record must be re-pushed on the next sync")
 	}
 }

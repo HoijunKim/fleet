@@ -42,6 +42,8 @@ contain - the whole app as it stands on `master`.
 - **Server operability** - Prometheus metrics on a token-gated `/metrics`, Go
   runtime metrics, `/healthz` and a rate-limited `/readyz` wired as the Fly
   readiness check, graceful shutdown, request ids and panic recovery.
+- **Backup restore** - a record sync overwrote or deleted can be restored from
+  its backup in Settings; the restore re-pushes and wins on every device.
 
 ### Changed
 

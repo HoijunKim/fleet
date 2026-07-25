@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir, BuildVersion } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir, BuildVersion, RestoreBackup } from "../../wailsjs/go/main/App";
   import type { config, main } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { editorSelection } from "./editorSelection";
@@ -20,6 +20,23 @@
   // Local records sync destroyed, newest first. The backup file is otherwise
   // reachable only through a toast that has long since disappeared.
   let backups: main.ConflictView[] = [];
+
+  // Restore a backed-up record. Re-stamped server-side so it re-pushes and wins
+  // LWW on every device - hence the confirm.
+  let restoring = "";
+  async function restore(b: main.ConflictView) {
+    if (restoring) return;
+    if (!confirm(`Restore "${b.name}"? This replaces the current version on all your devices with this saved copy.`)) return;
+    restoring = b.localId + b.when;
+    try {
+      const err = await RestoreBackup(b.localId, b.when);
+      if (err) { toastError("Restore: " + err); return; }
+      toastSuccess(`Restored ${b.name}`);
+      onSaved(); // parent rescans so the restored record reappears
+    } finally {
+      restoring = "";
+    }
+  }
 
   // Export the local store to a JSON file the user picks (native save dialog).
   async function doExport() {
@@ -318,6 +335,10 @@
                 <li>
                   <span class="set-backup-name">{b.name}</span>
                   <span class="set-backup-when">{b.when}</span>
+                  <button class="btn btn-secondary btn-sm set-backup-restore"
+                    on:click={() => restore(b)} disabled={restoring === b.localId + b.when}>
+                    {restoring === b.localId + b.when ? "Restoring..." : "Restore"}
+                  </button>
                 </li>
               {/each}
             </ul>

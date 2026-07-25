@@ -397,6 +397,45 @@ func (a *App) ConflictBackups() []ConflictView {
 	return out
 }
 
+// RestoreBackup writes a backed-up record (identified by its localId + backup
+// timestamp) back into the store, re-stamping UpdatedAt so it is newer than the
+// copy that clobbered it: the next sync then re-pushes it and last-write-wins
+// makes it authoritative on every device. Restoring a deleted record re-creates
+// it. The append-only backup log is left unchanged.
+func (a *App) RestoreBackup(localID, when string) string {
+	data, err := os.ReadFile(filepath.Join(a.dataDir, "sync-conflicts.jsonl"))
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var e struct {
+			At      string          `json:"at"`
+			LocalID string          `json:"localId"`
+			Payload json.RawMessage `json:"payload"`
+		}
+		if json.Unmarshal([]byte(line), &e) != nil {
+			continue // a truncated last line is expected after a crash
+		}
+		if e.LocalID != localID || e.At != when {
+			continue
+		}
+		var rec store.Record
+		if err := json.Unmarshal(e.Payload, &rec); err != nil {
+			return "error: backup is unreadable: " + err.Error()
+		}
+		// Update (not Put) re-stamps UpdatedAt to now, which is the whole point.
+		if err := a.store.Update(localID, func(r *store.Record) { *r = rec }); err != nil {
+			return errMsg(err)
+		}
+		a.triggerSync()
+		return ""
+	}
+	return "error: no backup found for that record"
+}
+
 // GitOperation reports an in-progress merge or rebase ("merge"/"rebase"/""), so
 // the UI can offer to finish it instead of an action that would destroy it.
 func (a *App) GitOperation(path string) string { return git.OperationInProgress(path) }
