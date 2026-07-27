@@ -89,7 +89,7 @@ func (a *App) RepoGrep(path, query string) string {
 	if strings.TrimSpace(query) == "" {
 		return "(empty query)"
 	}
-	hits, err := git.Grep(a.runner, path, query)
+	hits, err := git.Grep(a.runner, path, query, false)
 	if err != nil {
 		return "error: " + err.Error()
 	}

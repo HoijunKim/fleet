@@ -20,6 +20,9 @@
   let hits: Hit[] = [];
   // "content" -> SearchAll (grep), "files" -> SearchFiles (file-name search).
   let mode: "content" | "files" = "content";
+  // Content search ignores case by default (editor convention); the "Aa" toggle
+  // makes it case-sensitive.
+  let matchCase = false;
   // Repos the user has toggled OFF via the chip row. Reassigned (never mutated
   // in place) so Svelte reactivity picks up membership changes.
   let hidden = new Set<string>();
@@ -96,7 +99,7 @@
     const searching = mode;
     loading = true;
     try {
-      const res = searching === "files" ? await SearchFiles(term) : await SearchAll(term);
+      const res = searching === "files" ? await SearchFiles(term) : await SearchAll(term, !matchCase);
       if (gen !== reqGen) return;
       hits = res || [];
       // New result set -> chips default all-on (nothing hidden) for this query.
@@ -118,6 +121,15 @@
     if (m === mode) return;
     mode = m;
     if (query.trim()) {
+      if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
+      runSearch(query);
+    }
+  }
+
+  // Toggle case sensitivity (content mode only) and re-run a live query now.
+  function toggleCase() {
+    matchCase = !matchCase;
+    if (mode === "content" && query.trim()) {
       if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
       runSearch(query);
     }
@@ -236,6 +248,17 @@
           on:click={() => setMode("files")}
         >Files</button>
       </div>
+      {#if mode === "content"}
+        <button
+          type="button"
+          class="search-mode-btn search-case-btn"
+          class:active={matchCase}
+          title="Match case"
+          aria-label="Match case"
+          aria-pressed={matchCase}
+          on:click={toggleCase}
+        >Aa</button>
+      {/if}
       <span class="cmd-kbd">Esc</span>
     </div>
 
