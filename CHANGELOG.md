@@ -61,6 +61,9 @@ contain - the whole app as it stands on `master`.
   uncommitted work is never discarded.
 - **In-app help** - a "?" button in the toolbar opens an overlay explaining what
   each part of the app does, for new users.
+- **Fuzzy file search** - file-name search now matches like an editor's
+  quick-open (type "cbsv" for "CommitBox.svelte") and ranks the best matches
+  first across all repos.
 
 ### Changed
 

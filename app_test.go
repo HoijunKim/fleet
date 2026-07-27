@@ -642,6 +642,34 @@ func TestSearchFilesAssembles(t *testing.T) {
 	}
 }
 
+func TestSearchFilesFuzzyRanksAndFilters(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "r")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	// "cbsv" is a subsequence of CommitBox.svelte (tight, boundary-rich) and a
+	// looser subsequence of a helper; it is NOT a subsequence of notes.md.
+	a := &App{cfg: cfg, runner: fakeRunner{out: map[string]string{
+		"ls-files": "internal/cabinets_view.go\nfrontend/src/lib/CommitBox.svelte\ndocs/notes.md\n",
+	}}, store: newTestStore(t)}
+
+	hits := a.SearchFiles("cbsv")
+	if len(hits) == 0 {
+		t.Fatal("expected fuzzy matches")
+	}
+	if hits[0].File != "frontend/src/lib/CommitBox.svelte" {
+		t.Errorf("best match should rank first, got %q (all: %+v)", hits[0].File, hits)
+	}
+	for _, h := range hits {
+		if h.File == "docs/notes.md" {
+			t.Error("notes.md is not a subsequence of cbsv and must be excluded")
+		}
+	}
+}
+
 type ghFakeApp struct{}
 
 func (ghFakeApp) Run(args ...string) (string, error) {
