@@ -1835,3 +1835,61 @@ func TestCherryPickBindingCleanAndBadHash(t *testing.T) {
 		t.Error("a bad hash must return an error string")
 	}
 }
+
+func TestRestoreReflogRefusesDirtyAndSucceedsClean(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitRun(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitRun(t, dir, "config", "gc.auto", "0")
+	gitRun(t, dir, "config", "user.email", "t@t")
+	gitRun(t, dir, "config", "user.name", "T")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "one")
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "two")
+	gitRun(t, dir, "reset", "--hard", "HEAD~1") // drop "two"
+
+	a := &App{runner: git.ExecRunner{}}
+
+	// Dirty tree: restore is refused and the uncommitted file survives.
+	os.WriteFile(filepath.Join(dir, "wip.txt"), []byte("wip\n"), 0o644)
+	if msg := a.RestoreReflog(dir, "HEAD@{1}"); msg == "" {
+		t.Error("RestoreReflog must refuse on a dirty tree")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "wip.txt")); err != nil {
+		t.Error("a refused restore must not touch the working tree")
+	}
+
+	// Clean tree: restore succeeds and brings back the dropped commit's file.
+	os.Remove(filepath.Join(dir, "wip.txt"))
+	if msg := a.RestoreReflog(dir, "HEAD@{1}"); msg != "" {
+		t.Fatalf("clean RestoreReflog: %s", msg)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); err != nil {
+		t.Errorf("restore should bring back the dropped commit's file: %v", err)
+	}
+}
+
+func TestReflogBindingLists(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitRun(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitRun(t, dir, "config", "gc.auto", "0")
+	gitRun(t, dir, "config", "user.email", "t@t")
+	gitRun(t, dir, "config", "user.name", "T")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "one")
+
+	a := &App{runner: git.ExecRunner{}}
+	entries := a.Reflog(dir, 10)
+	if len(entries) == 0 || entries[0].Ref != "HEAD@{0}" {
+		t.Errorf("Reflog binding = %+v, want a HEAD@{0} entry", entries)
+	}
+}

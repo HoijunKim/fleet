@@ -56,6 +56,9 @@ contain - the whole app as it stands on `master`.
 - **Cherry-pick** - apply a commit from another branch onto the current one, from
   the detail panel; a conflict is handled by the same resolve/continue/abort
   panel as merge and rebase.
+- **Reflog recovery** - a "History" picker moves the current branch back to a
+  previous HEAD (after a bad reset/rebase); it refuses on a dirty tree so
+  uncommitted work is never discarded.
 
 ### Changed
 

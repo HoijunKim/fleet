@@ -287,6 +287,42 @@ func CherryPick(r Runner, dir, hash string) error {
 	return err
 }
 
+// ReflogEntry is one HEAD movement: the commit it pointed at, the HEAD@{k}
+// selector to restore it by, git's action subject, and when it happened.
+type ReflogEntry struct {
+	Hash    string `json:"hash"`
+	Ref     string `json:"ref"` // "HEAD@{k}"
+	Subject string `json:"subject"`
+	When    string `json:"when"`
+}
+
+// Reflog lists the most recent n HEAD movements, newest first.
+func Reflog(r Runner, dir string, n int) ([]ReflogEntry, error) {
+	out, err := r.Run(dir, "reflog", "-n", strconv.Itoa(n), "--format=%H%x1f%gd%x1f%gs%x1f%cI")
+	if err != nil {
+		return nil, err
+	}
+	var entries []ReflogEntry
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		f := strings.Split(line, "\x1f")
+		if len(f) < 4 {
+			continue
+		}
+		entries = append(entries, ReflogEntry{Hash: f[0], Ref: f[1], Subject: f[2], When: f[3]})
+	}
+	return entries, nil
+}
+
+// ResetHard moves the current branch to ref with `reset --hard`, discarding the
+// working tree. The caller guards against a dirty tree; this is the raw move.
+func ResetHard(r Runner, dir, ref string) error {
+	_, err := r.Run(dir, "reset", "--hard", ref)
+	return err
+}
+
 // StashList returns the stash entries.
 func StashList(r Runner, dir string) ([]string, error) {
 	out, err := r.Run(dir, "stash", "list")

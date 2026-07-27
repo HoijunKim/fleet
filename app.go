@@ -634,6 +634,47 @@ func (a *App) CherryPick(path, hash string) string {
 	return errMsg(git.CherryPick(a.runner, path, strings.TrimSpace(hash)))
 }
 
+// ReflogView is one HEAD movement for the recovery picker.
+type ReflogView struct {
+	Hash    string `json:"hash"`
+	Ref     string `json:"ref"`
+	Subject string `json:"subject"`
+	When    string `json:"when"`
+}
+
+// Reflog lists the recent HEAD movements, so a user can jump the current branch
+// back to a previous position after a bad reset/rebase.
+func (a *App) Reflog(path string, n int) []ReflogView {
+	entries, err := git.Reflog(a.runner, path, n)
+	if err != nil {
+		return []ReflogView{}
+	}
+	out := make([]ReflogView, 0, len(entries))
+	for _, e := range entries {
+		w := e.When
+		if t, perr := time.Parse(time.RFC3339, e.When); perr == nil {
+			w = t.Format("2006-01-02 15:04")
+		}
+		out = append(out, ReflogView{Hash: e.Hash, Ref: e.Ref, Subject: e.Subject, When: w})
+	}
+	return out
+}
+
+// RestoreReflog moves the current branch to a reflog entry with `reset --hard`.
+// It REFUSES when the working tree is dirty, so uncommitted changes are never
+// discarded; the commits left behind stay reachable via the reflog, so a clean
+// restore is reversible.
+func (a *App) RestoreReflog(path, ref string) string {
+	files, err := git.StatusFiles(a.runner, path)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	if len(files) > 0 {
+		return "error: you have uncommitted changes - commit or stash them before restoring"
+	}
+	return errMsg(git.ResetHard(a.runner, path, strings.TrimSpace(ref)))
+}
+
 // RepoDiff returns the repo's uncommitted working changes (capped), for the
 // AI deep-dive prompt.
 func (a *App) RepoDiff(path string) string { return git.Diff(a.runner, path) }

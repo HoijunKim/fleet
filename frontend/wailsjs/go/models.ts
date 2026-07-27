@@ -554,6 +554,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ReflogView {
+	    hash: string;
+	    ref: string;
+	    subject: string;
+	    when: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReflogView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hash = source["hash"];
+	        this.ref = source["ref"];
+	        this.subject = source["subject"];
+	        this.when = source["when"];
+	    }
+	}
 	export class RepoGHSignal {
 	    repoPath: string;
 	    name: string;

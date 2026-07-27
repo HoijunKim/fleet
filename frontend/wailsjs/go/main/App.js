@@ -306,6 +306,10 @@ export function RebaseUpstream(arg1) {
   return window['go']['main']['App']['RebaseUpstream'](arg1);
 }
 
+export function Reflog(arg1, arg2) {
+  return window['go']['main']['App']['Reflog'](arg1, arg2);
+}
+
 export function RemoveEdge(arg1) {
   return window['go']['main']['App']['RemoveEdge'](arg1);
 }
@@ -344,6 +348,10 @@ export function ResolveConflict(arg1, arg2, arg3) {
 
 export function RestoreBackup(arg1, arg2) {
   return window['go']['main']['App']['RestoreBackup'](arg1, arg2);
+}
+
+export function RestoreReflog(arg1, arg2) {
+  return window['go']['main']['App']['RestoreReflog'](arg1, arg2);
 }
 
 export function RevealDataDir() {
