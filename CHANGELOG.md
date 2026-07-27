@@ -51,6 +51,8 @@ contain - the whole app as it stands on `master`.
   branch menu offers a force delete behind a confirm.
 - **Case-insensitive search** - content search now ignores case by default, with
   an "Aa" toggle to match case.
+- **Sort persistence** - the project-table sort you pick is remembered across
+  restarts.
 
 ### Changed
 
