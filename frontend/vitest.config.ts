@@ -8,7 +8,12 @@ export default defineConfig({
   // compile without vite 6's preprocessCSS environment).
   plugins: [svelte()],
   test: {
+    name: 'ssr',
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
+    // DOM interaction tests run under vitest.dom.config.ts (happy-dom + the
+    // browser build); they must not also be picked up here, where the SSR build
+    // has no mount().
+    exclude: ['**/node_modules/**', '**/*.conflict.test.ts', '**/*.dom.test.ts'],
   }
 })
