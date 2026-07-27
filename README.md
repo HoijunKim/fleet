@@ -1,8 +1,37 @@
 # fleet
 
-A desktop dashboard for every git repo under your project roots. See at a glance
-which are dirty, behind, or stale, then fetch, pull, open an editor/terminal, or run
-a command - from a single window.
+**Every git repo you own, at a glance.**
+
+fleet is a desktop dashboard for every git repository under your project roots.
+See which are dirty, behind, or stale - then fetch, commit, resolve conflicts,
+cherry-pick, search across all of them, and track tasks and deadlines, from one
+window. No terminal required.
+
+[![release](https://img.shields.io/github/v/release/hoijun-kim/fleet?color=5b8cff)](https://github.com/hoijun-kim/fleet/releases/latest)
+[![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-8b97a7)](https://github.com/hoijun-kim/fleet/releases/latest)
+[![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial-3fb950)](LICENSE)
+
+**[Download](https://github.com/hoijun-kim/fleet/releases/latest)** &nbsp;·&nbsp;
+**[Landing page](https://hoijun-kim.github.io/fleet/)** &nbsp;·&nbsp;
+**[Changelog](CHANGELOG.md)**
+
+<!-- Add a 10-30s demo GIF here - it is the single highest-leverage asset for
+     promotion. Record the real app (ScreenToGif / Kap), save as docs/demo.gif,
+     then uncomment: -->
+<!-- ![fleet in action](docs/demo.gif) -->
+
+## Why fleet
+
+Most git GUIs open one repository at a time. fleet is built for the whole
+**fleet** of them: dozens of repos across your project roots, monitored like a
+status board.
+
+- **Live status** - dirty / behind / ahead / stale / CI-failing across every repo; fetch, pull or push in bulk.
+- **Git without a terminal** - per-file staging, commit, amend, merge/rebase a diverged upstream, cherry-pick, reflog recovery, conflicts resolved inline.
+- **Project management** - tasks, deadlines, tags, a cross-project Agenda and a Today view.
+- **AI brief & agent** - a brief that weighs GitHub CI/PR/issue signals, per-repo chat, and an agent that runs under per-action approval (defaults to the `claude` CLI; OpenAI/Gemini optional).
+- **Search** - fuzzy file quick-open and case-insensitive content search across every repo, plus a command palette.
+- **Optional sync** - sign in with GitHub to sync projects and intel across devices; export/import everything as JSON.
 
 ## Run
 
