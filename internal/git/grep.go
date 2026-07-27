@@ -13,11 +13,16 @@ type GrepHit struct {
 	Text string `json:"text"`
 }
 
-// Grep runs `git grep -n -I -e <query>` in dir over tracked files. git grep
-// exits non-zero (1) with empty output when nothing matches; that is treated as
-// no hits, not an error.
-func Grep(r Runner, dir, query string) ([]GrepHit, error) {
-	out, err := r.Run(dir, "grep", "-n", "-I", "-e", query)
+// Grep runs `git grep -n -I -e <query>` in dir over tracked files, adding -i
+// when ignoreCase is set. git grep exits non-zero (1) with empty output when
+// nothing matches; that is treated as no hits, not an error.
+func Grep(r Runner, dir, query string, ignoreCase bool) ([]GrepHit, error) {
+	args := []string{"grep", "-n", "-I"}
+	if ignoreCase {
+		args = append(args, "-i")
+	}
+	args = append(args, "-e", query)
+	out, err := r.Run(dir, args...)
 	if err != nil && strings.TrimSpace(out) == "" {
 		return nil, nil // no matches (or a benign non-zero exit)
 	}

@@ -15,6 +15,8 @@ func newRepo(t *testing.T) string {
 	}
 	dir := t.TempDir()
 	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
 	gitOK(t, dir, "config", "user.email", "t@t")
 	gitOK(t, dir, "config", "user.name", "T")
 	writeFile(t, dir, "base.txt", "base\n")

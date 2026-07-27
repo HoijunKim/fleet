@@ -582,7 +582,7 @@ func newTestStore(t *testing.T) *store.Store {
 
 func TestSearchAllEmptyQuery(t *testing.T) {
 	a := newTestApp(t)
-	if got := a.SearchAll("   "); got == nil || len(got) != 0 {
+	if got := a.SearchAll("   ", false); got == nil || len(got) != 0 {
 		t.Errorf("blank query must return empty non-nil, got %v", got)
 	}
 }
@@ -598,7 +598,7 @@ func TestSearchAllAssembles(t *testing.T) {
 	cfg := config.Default()
 	cfg.Roots = []string{root}
 	a := &App{cfg: cfg, runner: fakeRunner{out: map[string]string{"grep": "main.go:1:package main\n"}}, store: newTestStore(t)}
-	hits := a.SearchAll("package")
+	hits := a.SearchAll("package", false)
 	if len(hits) != 1 {
 		t.Fatalf("hits=%v", hits)
 	}
@@ -1045,7 +1045,7 @@ func TestSearchAllRoundRobinFairness(t *testing.T) {
 		filepath.Join(root, "aaa"): "f1:1:x\nf2:2:x\n",
 		filepath.Join(root, "zzz"): "g1:1:x\n",
 	}}, store: newTestStore(t)}
-	hits := a.SearchAll("x")
+	hits := a.SearchAll("x", false)
 	repos := map[string]int{}
 	for _, h := range hits {
 		repos[h.Repo]++
@@ -1770,5 +1770,35 @@ func TestDeleteBranchForceGuardsEmptyName(t *testing.T) {
 	}
 	if msg := a.DeleteBranchForce("/repo", "-D"); msg == "" {
 		t.Error("a name starting with '-' must be refused")
+	}
+}
+
+func TestSearchAllIgnoreCaseThreadsThrough(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "r")
+	gitRun(t, root, "-c", "init.defaultBranch=master", "init", "r")
+	gitRun(t, repo, "config", "user.email", "t@t")
+	gitRun(t, repo, "config", "user.name", "T")
+	if err := os.WriteFile(filepath.Join(repo, "f.txt"), []byte("A line with TODO here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "-A")
+	gitRun(t, repo, "commit", "-m", "init")
+
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	cfg.ScanDepth = 2
+	a := &App{cfg: cfg, runner: git.ExecRunner{}}
+
+	// Case-insensitive finds the uppercase TODO from a lowercase query.
+	if hits := a.SearchAll("todo", true); len(hits) == 0 {
+		t.Error("ignoreCase search should match TODO from 'todo'")
+	}
+	// Case-sensitive does not.
+	if hits := a.SearchAll("todo", false); len(hits) != 0 {
+		t.Errorf("case-sensitive search should not match TODO from 'todo', got %+v", hits)
 	}
 }

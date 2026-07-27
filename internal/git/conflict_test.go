@@ -27,6 +27,8 @@ func setupMergeConflicts(t *testing.T) string {
 	}
 	dir := t.TempDir()
 	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
 	gitOK(t, dir, "config", "user.email", "t@t")
 	gitOK(t, dir, "config", "user.name", "T")
 
@@ -109,6 +111,8 @@ func TestConflictsEmptyOnACleanRepo(t *testing.T) {
 	}
 	dir := t.TempDir()
 	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
 	gitOK(t, dir, "config", "user.email", "t@t")
 	gitOK(t, dir, "config", "user.name", "T")
 	writeFile(t, dir, "a.txt", "a\n")
@@ -132,6 +136,8 @@ func TestConflictsHandlesPathsWithSpaces(t *testing.T) {
 	}
 	dir := t.TempDir()
 	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
 	gitOK(t, dir, "config", "user.email", "t@t")
 	gitOK(t, dir, "config", "user.name", "T")
 	writeFile(t, dir, "my file.txt", "base\n")
@@ -372,6 +378,8 @@ func TestContinueAndAbortErrorWithNothingInProgress(t *testing.T) {
 	}
 	dir := t.TempDir()
 	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
 	gitOK(t, dir, "config", "user.email", "t@t")
 	gitOK(t, dir, "config", "user.name", "T")
 	writeFile(t, dir, "a.txt", "a\n")
