@@ -21,7 +21,7 @@ func TestServeGracefulShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan error, 1)
-	go func() { done <- serve(ctx, srv, ln) }()
+	go func() { done <- serve(ctx, srv, ln, 10*time.Second) }()
 
 	url := "http://" + ln.Addr().String() + "/"
 	var resp *http.Response
@@ -64,7 +64,7 @@ func TestServeReturnsServeError(t *testing.T) {
 	}
 	ln.Close() // Serve on a closed listener fails immediately
 	srv := &http.Server{Handler: http.NewServeMux()}
-	if err := serve(context.Background(), srv, ln); err == nil {
+	if err := serve(context.Background(), srv, ln, 10*time.Second); err == nil {
 		t.Fatal("expected serve error on closed listener")
 	}
 }
