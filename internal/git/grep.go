@@ -13,13 +13,31 @@ type GrepHit struct {
 	Text string `json:"text"`
 }
 
-// Grep runs `git grep -n -I -e <query>` in dir over tracked files, adding -i
-// when ignoreCase is set. git grep exits non-zero (1) with empty output when
-// nothing matches; that is treated as no hits, not an error.
-func Grep(r Runner, dir, query string, ignoreCase bool) ([]GrepHit, error) {
+// GrepOpts selects how the query is interpreted. The default is a fixed-string
+// (literal) search - what an interactive search should do; Regex switches to an
+// extended regular expression, WholeWord matches only whole words, and
+// IgnoreCase folds case.
+type GrepOpts struct {
+	IgnoreCase bool
+	Regex      bool
+	WholeWord  bool
+}
+
+// Grep runs `git grep -n -I [flags] -e <query>` in dir over tracked files. git
+// grep exits non-zero (1) with empty output when nothing matches; that is treated
+// as no hits, not an error.
+func Grep(r Runner, dir, query string, opts GrepOpts) ([]GrepHit, error) {
 	args := []string{"grep", "-n", "-I"}
-	if ignoreCase {
+	if opts.IgnoreCase {
 		args = append(args, "-i")
+	}
+	if opts.WholeWord {
+		args = append(args, "-w")
+	}
+	if opts.Regex {
+		args = append(args, "-E") // extended regex
+	} else {
+		args = append(args, "-F") // fixed string: literal, the default
 	}
 	args = append(args, "-e", query)
 	out, err := r.Run(dir, args...)

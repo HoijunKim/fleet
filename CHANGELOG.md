@@ -66,6 +66,8 @@ and Linux.
 - **Fuzzy file search** - file-name search now matches like an editor's
   quick-open (type "cbsv" for "CommitBox.svelte") and ranks the best matches
   first across all repos.
+- **Search modes** - content search now treats the query as literal text by
+  default, with opt-in regex (.*) and whole-word (\b) toggles.
 
 ### Changed
 

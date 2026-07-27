@@ -1622,7 +1622,7 @@ type SearchHit struct {
 
 // SearchAll runs git grep across all discovered git repos and returns the hits
 // (capped to keep the UI responsive). A blank query returns no hits.
-func (a *App) SearchAll(query string, ignoreCase bool) []SearchHit {
+func (a *App) SearchAll(query string, ignoreCase, regex, wholeWord bool) []SearchHit {
 	out := []SearchHit{}
 	if strings.TrimSpace(query) == "" {
 		return out
@@ -1634,7 +1634,7 @@ func (a *App) SearchAll(query string, ignoreCase bool) []SearchHit {
 	// the result budget (every matching repo gets representation).
 	perRepo := make([][]SearchHit, len(repos))
 	for i, r := range repos {
-		hits, _ := git.Grep(a.runner, r.Path, query, ignoreCase)
+		hits, _ := git.Grep(a.runner, r.Path, query, git.GrepOpts{IgnoreCase: ignoreCase, Regex: regex, WholeWord: wholeWord})
 		for _, h := range hits {
 			perRepo[i] = append(perRepo[i], SearchHit{Repo: r.Name, RepoPath: r.Path, File: h.File, Line: h.Line, Text: h.Text})
 			if len(perRepo[i]) >= searchPerRepoCap {

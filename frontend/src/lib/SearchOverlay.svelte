@@ -23,6 +23,9 @@
   // Content search ignores case by default (editor convention); the "Aa" toggle
   // makes it case-sensitive.
   let matchCase = false;
+  // Content query interpretation: regex (extended) and whole-word, alongside case.
+  let useRegex = false;
+  let wholeWord = false;
   // Repos the user has toggled OFF via the chip row. Reassigned (never mutated
   // in place) so Svelte reactivity picks up membership changes.
   let hidden = new Set<string>();
@@ -99,7 +102,7 @@
     const searching = mode;
     loading = true;
     try {
-      const res = searching === "files" ? await SearchFiles(term) : await SearchAll(term, !matchCase);
+      const res = searching === "files" ? await SearchFiles(term) : await SearchAll(term, !matchCase, useRegex, wholeWord);
       if (gen !== reqGen) return;
       hits = res || [];
       // New result set -> chips default all-on (nothing hidden) for this query.
@@ -126,9 +129,11 @@
     }
   }
 
-  // Toggle case sensitivity (content mode only) and re-run a live query now.
-  function toggleCase() {
-    matchCase = !matchCase;
+  // Toggle a content-search mode and re-run the live query now.
+  function toggleCase() { matchCase = !matchCase; rerunContent(); }
+  function toggleRegex() { useRegex = !useRegex; rerunContent(); }
+  function toggleWord() { wholeWord = !wholeWord; rerunContent(); }
+  function rerunContent() {
     if (mode === "content" && query.trim()) {
       if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
       runSearch(query);
@@ -258,6 +263,24 @@
           aria-pressed={matchCase}
           on:click={toggleCase}
         >Aa</button>
+        <button
+          type="button"
+          class="search-mode-btn search-case-btn"
+          class:active={useRegex}
+          title="Regular expression"
+          aria-label="Regular expression"
+          aria-pressed={useRegex}
+          on:click={toggleRegex}
+        >.*</button>
+        <button
+          type="button"
+          class="search-mode-btn search-case-btn"
+          class:active={wholeWord}
+          title="Whole word"
+          aria-label="Whole word"
+          aria-pressed={wholeWord}
+          on:click={toggleWord}
+        >\b</button>
       {/if}
       <span class="cmd-kbd">Esc</span>
     </div>

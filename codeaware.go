@@ -89,7 +89,8 @@ func (a *App) RepoGrep(path, query string) string {
 	if strings.TrimSpace(query) == "" {
 		return "(empty query)"
 	}
-	hits, err := git.Grep(a.runner, path, query, false)
+	// The agent supplies regex patterns, so its grep stays regex-capable.
+	hits, err := git.Grep(a.runner, path, query, git.GrepOpts{Regex: true})
 	if err != nil {
 		return "error: " + err.Error()
 	}
