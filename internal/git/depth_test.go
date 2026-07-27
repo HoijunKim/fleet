@@ -210,12 +210,24 @@ func TestCreateAndDeleteBranch(t *testing.T) {
 		t.Errorf("DeleteBranch of a merged branch: %v", err)
 	}
 
-	// An unmerged branch is refused by safe-delete.
+	// An unmerged branch is refused by safe-delete, but force-delete removes it.
 	gitOK(t, dir, "checkout", "-b", "wip")
 	writeFile(t, dir, "base.txt", "unmerged work\n")
 	gitOK(t, dir, "commit", "-am", "wip commit")
 	gitOK(t, dir, "checkout", "master")
 	if err := DeleteBranch(ExecRunner{}, dir, "wip"); err == nil {
 		t.Error("DeleteBranch should refuse an unmerged branch")
+	}
+	if err := DeleteBranchForce(ExecRunner{}, dir, "wip"); err != nil {
+		t.Fatalf("DeleteBranchForce should remove an unmerged branch: %v", err)
+	}
+	_, all, err := Branches(ExecRunner{}, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range all {
+		if b == "wip" {
+			t.Error("DeleteBranchForce left the branch behind")
+		}
 	}
 }

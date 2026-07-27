@@ -70,6 +70,8 @@ export function DeleteAccount():Promise<string>;
 
 export function DeleteBranch(arg1:string,arg2:string):Promise<string>;
 
+export function DeleteBranchForce(arg1:string,arg2:string):Promise<string>;
+
 export function DeleteProject(arg1:string):Promise<string>;
 
 export function DeleteTask(arg1:string,arg2:string):Promise<string>;

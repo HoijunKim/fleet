@@ -134,6 +134,10 @@ export function DeleteBranch(arg1, arg2) {
   return window['go']['main']['App']['DeleteBranch'](arg1, arg2);
 }
 
+export function DeleteBranchForce(arg1, arg2) {
+  return window['go']['main']['App']['DeleteBranchForce'](arg1, arg2);
+}
+
 export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }

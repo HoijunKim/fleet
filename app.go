@@ -696,6 +696,15 @@ func (a *App) DeleteBranch(path, name string) string {
 	return errMsg(git.DeleteBranch(a.runner, path, strings.TrimSpace(name)))
 }
 
+// DeleteBranchForce force-deletes an unmerged branch (git branch -D), losing its
+// unmerged commits. The UI offers it only after DeleteBranch is refused.
+func (a *App) DeleteBranchForce(path, name string) string {
+	if e := validBranchName(name); e != "" {
+		return e
+	}
+	return errMsg(git.DeleteBranchForce(a.runner, path, strings.TrimSpace(name)))
+}
+
 // validBranchName rejects an empty name or one that git would parse as a flag
 // (a leading "-"), returning an error string or "" when the name is acceptable.
 func validBranchName(name string) string {

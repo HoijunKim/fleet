@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Branches, Checkout, CreateBranch, DeleteBranch } from "../../wailsjs/go/main/App";
+  import { Branches, Checkout, CreateBranch, DeleteBranch, DeleteBranchForce } from "../../wailsjs/go/main/App";
   import { toastSuccess, toastError } from "./toasts";
 
   export let path: string;
@@ -14,6 +14,7 @@
   let loadedPath = "";
   let newName = "";
   let confirmDel = ""; // branch name armed for delete confirm
+  let forceDel = ""; // branch name whose safe delete was refused as unmerged
 
   // Popover position (fixed, so the detail panel's overflow never clips it).
   let mx = 0;
@@ -107,7 +108,25 @@
     switching = true;
     try {
       const err = await DeleteBranch(path, b);
-      if (err) toastError("Delete " + b + ": " + err);
+      if (err) {
+        // git refuses an unmerged branch with "not fully merged"; offer a force
+        // delete instead of a dead-end toast.
+        if (/not fully merged/i.test(err)) { forceDel = b; }
+        else toastError("Delete " + b + ": " + err);
+      } else { toastSuccess("Deleted " + b); await load(); }
+    } finally {
+      switching = false;
+    }
+  }
+
+  async function forceDelete(b: string) {
+    forceDel = "";
+    if (switching) return;
+    if (!confirm(`Delete unmerged branch "${b}"? Its unmerged commits will be lost.`)) return;
+    switching = true;
+    try {
+      const err = await DeleteBranchForce(path, b);
+      if (err) toastError("Force delete " + b + ": " + err);
       else { toastSuccess("Deleted " + b); await load(); }
     } finally {
       switching = false;
@@ -163,7 +182,9 @@
           <span class="branch-opt-name">{b}</span>
         </button>
         {#if b !== current}
-          {#if confirmDel === b}
+          {#if forceDel === b}
+            <button class="branch-del branch-del-yes" title="Branch is unmerged - force delete, losing its commits" on:click|stopPropagation={() => forceDelete(b)}>force?</button>
+          {:else if confirmDel === b}
             <button class="branch-del branch-del-yes" title="Confirm delete" on:click|stopPropagation={() => deleteBranch(b)}>del?</button>
           {:else}
             <button class="branch-del" title="Delete branch" aria-label={"Delete " + b} on:click|stopPropagation={() => (confirmDel = b)}>x</button>
