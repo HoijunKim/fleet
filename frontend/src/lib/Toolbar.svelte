@@ -21,6 +21,7 @@
   export let onOpenSettings: () => void;
   export let onOpenPalette: () => void;
   export let onOpenSearch: () => void;
+  export let onOpenHelp: () => void = () => {};
   export let onAddProject: () => void;
 
   export let authSignedIn: boolean = false;
@@ -139,6 +140,9 @@
     </button>
     <button class="icon-btn" on:click={onOpenSearch} title="Search across repos (Ctrl Shift F)" aria-label="Search">
       <Icon name="search" />
+    </button>
+    <button class="icon-btn" on:click={onOpenHelp} title="Help - what does everything do?" aria-label="Help">
+      <span class="ic-help">?</span>
     </button>
     <button class="icon-btn" on:click={onOpenSettings} title="Settings" aria-label="Settings">
       <Icon name="settings" />

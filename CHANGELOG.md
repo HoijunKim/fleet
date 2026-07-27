@@ -59,6 +59,14 @@ contain - the whole app as it stands on `master`.
 - **Reflog recovery** - a "History" picker moves the current branch back to a
   previous HEAD (after a bad reset/rebase); it refuses on a dirty tree so
   uncommitted work is never discarded.
+- **In-app help** - a "?" button in the toolbar opens an overlay explaining what
+  each part of the app does, for new users.
+
+### Changed
+
+- fleet is now source-available under the PolyForm Noncommercial License 1.0.0
+  (previously unlicensed): free for noncommercial use, commercial use not
+  permitted. See `LICENSE`.
 
 ### Changed
 

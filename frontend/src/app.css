@@ -977,6 +977,13 @@ select.input option { background: var(--surface); color: var(--text); }
   line-height: 1.2;
 }
 .icon-btn:hover .ic-jump { border-color: var(--text); color: var(--text); }
+.ic-help {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  line-height: 1;
+}
+.icon-btn:hover .ic-help { color: var(--text); }
 
 /* =========================================================================
    Stats header - slim summary tiles (Projects view)

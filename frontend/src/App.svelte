@@ -7,6 +7,7 @@
   import DetailPanel from "./lib/DetailPanel.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
   import SearchOverlay from "./lib/SearchOverlay.svelte";
+  import HelpOverlay from "./lib/HelpOverlay.svelte";
   import SettingsModal from "./lib/SettingsModal.svelte";
   import ContextMenu from "./lib/ContextMenu.svelte";
   import AddProjectModal from "./lib/AddProjectModal.svelte";
@@ -89,6 +90,7 @@
   let paletteOpen = false;
   let searchOpen = false;
   let settingsOpen = false;
+  let helpOpen = false;
   let addOpen = false;
   let menu: { x: number; y: number; project: any } | null = null;
   let diffOpen = false;
@@ -764,6 +766,7 @@
   onOpenSettings={() => (settingsOpen = true)}
   onOpenPalette={() => (paletteOpen = true)}
   onOpenSearch={() => (searchOpen = true)}
+  onOpenHelp={() => (helpOpen = true)}
   authSignedIn={auth.signedIn}
   authLogin={auth.login}
   authAvatar={auth.avatarUrl}
@@ -866,6 +869,10 @@
 
 {#if searchOpen}
   <SearchOverlay onClose={() => (searchOpen = false)} />
+{/if}
+
+{#if helpOpen}
+  <HelpOverlay onClose={() => (helpOpen = false)} />
 {/if}
 
 {#if settingsOpen}
