@@ -15,7 +15,11 @@ jobs:
         include:
           - os: windows-latest
             platform: windows/amd64
-          - os: macos-latest
+          # macos-13 (Intel), not macos-latest: on macOS 14+ arm64 runners the
+          # go-installed wails CLI aborts with "missing LC_UUID" under the newer
+          # dyld. macos-13's dyld does not enforce it, and darwin/universal still
+          # builds (wails lipo-combines both arches).
+          - os: macos-13
             platform: darwin/universal
           - os: ubuntu-latest
             platform: linux/amd64
@@ -40,7 +44,7 @@ jobs:
           -X github.com/hoijun/fleet/internal/buildinfo.commit=${{ github.sha }}
           -X github.com/hoijun/fleet/internal/buildinfo.date=${{ github.event.head_commit.timestamp }}"
       - name: Package macOS app
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-13'
         run: |
           ditto -c -k --keepParent build/bin/fleet.app build/bin/fleet-macos.zip
           rm -rf build/bin/fleet.app
