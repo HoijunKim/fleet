@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hoijun/fleet/internal/agent"
+	"github.com/hoijun/fleet/internal/git"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -22,6 +23,17 @@ func main() {
 	if isAgentHook() {
 		client := &http.Client{Timeout: 15 * time.Minute}
 		agent.RunHook(os.Stdin, os.Stdout, os.Getenv("FLEET_HOOK_URL"), client)
+		return
+	}
+
+	// Interactive-rebase sequence editor: git runs this same executable as its
+	// GIT_SEQUENCE_EDITOR with the todo path it generated; overwrite that file
+	// with the todo fleet prepared (FLEET_REBASE_TODO) and exit before any GUI.
+	if len(os.Args) > 2 && os.Args[1] == "--rebase-seq" {
+		if err := git.ApplyRebaseSeq(os.Getenv("FLEET_REBASE_TODO"), os.Args[2]); err != nil {
+			println("rebase-seq error:", err.Error())
+			os.Exit(1)
+		}
 		return
 	}
 

@@ -3,6 +3,7 @@
 import {main} from '../models';
 import {intel} from '../models';
 import {config} from '../models';
+import {git} from '../models';
 
 export function AIAvailable():Promise<boolean>;
 
@@ -116,6 +117,8 @@ export function ImportCommit(arg1:string):Promise<string>;
 
 export function ImportPreview():Promise<main.ImportSummary>;
 
+export function InteractiveRebase(arg1:string,arg2:string,arg3:Array<git.RebaseAction>):Promise<string>;
+
 export function LastCommitMessage(arg1:string):Promise<string>;
 
 export function ListEdges():Promise<Array<main.EdgeView>>;
@@ -153,6 +156,8 @@ export function Pull(arg1:string):Promise<string>;
 export function Push(arg1:string):Promise<string>;
 
 export function ReadRepoFile(arg1:string,arg2:string):Promise<string>;
+
+export function RebaseCommits(arg1:string,arg2:number):Promise<main.RebaseView>;
 
 export function RebaseUpstream(arg1:string):Promise<string>;
 

@@ -1957,3 +1957,37 @@ func TestSearchAllFixedVsRegexAndWholeWord(t *testing.T) {
 		t.Errorf("whole-word 'cat' should match one line (not 'category'), got %d: %+v", len(ww), ww)
 	}
 }
+
+func TestRebaseCommitsAndInteractiveRebaseBinding(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitRun(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitRun(t, dir, "config", "gc.auto", "0")
+	gitRun(t, dir, "config", "user.email", "t@t")
+	gitRun(t, dir, "config", "user.name", "T")
+	for _, n := range []string{"a", "b", "c"} {
+		os.WriteFile(filepath.Join(dir, n+".txt"), []byte(n+"\n"), 0o644)
+		gitRun(t, dir, "add", "-A")
+		gitRun(t, dir, "commit", "-m", "add "+n)
+	}
+	a := &App{runner: git.ExecRunner{}}
+
+	rv := a.RebaseCommits(dir, 2)
+	if len(rv.Commits) != 2 || rv.Base == "" {
+		t.Fatalf("RebaseCommits = %+v, want 2 commits + a base", rv)
+	}
+	if rv.Commits[0].Message != "add c" {
+		t.Errorf("newest commit = %q, want 'add c'", rv.Commits[0].Message)
+	}
+
+	// Reorder the two top commits via the binding (uses the real fleet-less path,
+	// but the sentinel is exercised via os.Executable = test binary; instead we
+	// verify the binding wires base/actions - a clean reorder here has no conflict
+	// and the test binary as GIT_SEQUENCE_EDITOR would not apply the todo, so we
+	// only assert the base guard here and leave the real drive to the git tests).
+	if msg := a.InteractiveRebase(dir, "", nil); msg == "" {
+		t.Error("an empty base must be refused")
+	}
+}
