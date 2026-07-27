@@ -10,8 +10,10 @@ before its tag is pushed.
 
 ## [Unreleased]
 
-No release has been tagged yet. Everything below is what a first release would
-contain - the whole app as it stands on `master`.
+## [0.1.0] - 2026-07-27
+
+First tagged release: the whole app as it stands, published for Windows, macOS
+and Linux.
 
 ### Added
 
