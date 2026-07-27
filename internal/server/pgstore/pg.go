@@ -31,13 +31,50 @@ type Pg struct {
 	pool *pgxpool.Pool
 }
 
-// New opens a connection pool to databaseURL.
+// PoolConfig carries operator overrides for the Postgres pool. A zero field
+// leaves pgx's own default in place, so the zero PoolConfig is a no-op.
+type PoolConfig struct {
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
+}
+
+// New opens a connection pool to databaseURL with pgx's default sizing.
 func New(ctx context.Context, databaseURL string) (*Pg, error) {
-	pool, err := pgxpool.New(ctx, databaseURL)
+	return NewWithPool(ctx, databaseURL, PoolConfig{})
+}
+
+// NewWithPool opens a connection pool to databaseURL, applying any non-zero
+// PoolConfig field over pgx's defaults. A zero PoolConfig reproduces New.
+func NewWithPool(ctx context.Context, databaseURL string, pc PoolConfig) (*Pg, error) {
+	cfg, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	applyPoolConfig(cfg, pc)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &Pg{pool: pool}, nil
+}
+
+// applyPoolConfig sets exactly the non-zero PoolConfig fields on cfg, leaving
+// pgx's default for every zero field. Pure, so it is unit-testable without a DB.
+func applyPoolConfig(cfg *pgxpool.Config, pc PoolConfig) {
+	if pc.MaxConns > 0 {
+		cfg.MaxConns = pc.MaxConns
+	}
+	if pc.MinConns > 0 {
+		cfg.MinConns = pc.MinConns
+	}
+	if pc.MaxConnLifetime > 0 {
+		cfg.MaxConnLifetime = pc.MaxConnLifetime
+	}
+	if pc.MaxConnIdleTime > 0 {
+		cfg.MaxConnIdleTime = pc.MaxConnIdleTime
+	}
 }
 
 // Close releases the pool.

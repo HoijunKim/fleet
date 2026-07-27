@@ -22,14 +22,6 @@ import (
 	"github.com/hoijun/fleet/internal/server/pgstore"
 )
 
-// shutdownTimeout bounds the graceful drain after a stop signal. It is kept
-// under fly.toml's kill_timeout so the drain completes before Fly SIGKILLs the
-// process.
-const shutdownTimeout = 10 * time.Second
-
-// gcInterval is how often expired refresh tokens are pruned.
-const gcInterval = 1 * time.Hour
-
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	// Fly stops a machine with SIGINT (its default) then SIGKILL after
@@ -54,6 +46,7 @@ func run(ctx context.Context) error {
 	addr := ":" + envOr("PORT", "8080")
 	trustProxy := envBool("TRUST_PROXY")
 	metricsToken := envOr("METRICS_TOKEN", "")
+	cfg := loadServerConfig()
 
 	if err := validateSigningKey(signingKey); err != nil {
 		return err
@@ -63,7 +56,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
-	store, err := pgstore.New(context.Background(), databaseURL)
+	store, err := pgstore.NewWithPool(context.Background(), databaseURL, loadPoolConfig())
 	if err != nil {
 		return fmt.Errorf("db connect: %w", err)
 	}
@@ -80,7 +73,7 @@ func run(ctx context.Context) error {
 
 	// Prune expired refresh tokens periodically; the goroutine exits when ctx is
 	// cancelled on shutdown.
-	go runGC(ctx, gcInterval, store.PruneRefreshTokens, func(n int64) {
+	go runGC(ctx, cfg.GCInterval, store.PruneRefreshTokens, func(n int64) {
 		if n > 0 {
 			slog.Info("pruned expired refresh tokens", "rows", n)
 		}
@@ -111,14 +104,43 @@ func run(ctx context.Context) error {
 	}
 	srv := &http.Server{
 		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	slog.Info("listening", "addr", addr, "version", buildinfo.String(), "trust_proxy", trustProxy, "metrics", metricsToken != "")
-	return serve(ctx, srv, ln)
+	return serve(ctx, srv, ln, cfg.ShutdownTimeout)
+}
+
+// loadPoolConfig reads the Postgres pool tunables from the environment. Any
+// left unset stays zero, and pgstore leaves pgx's own default in place for it.
+func loadPoolConfig() pgstore.PoolConfig {
+	var pc pgstore.PoolConfig
+	if v := envOr("FLEET_DB_MAX_CONNS", ""); v != "" {
+		pc.MaxConns = int32(envInt("FLEET_DB_MAX_CONNS", 0))
+	}
+	if v := envOr("FLEET_DB_MIN_CONNS", ""); v != "" {
+		pc.MinConns = int32(envInt("FLEET_DB_MIN_CONNS", 0))
+	}
+	pc.MaxConnLifetime = envDurationOrZero("FLEET_DB_MAX_CONN_LIFETIME")
+	pc.MaxConnIdleTime = envDurationOrZero("FLEET_DB_MAX_CONN_IDLE_TIME")
+	return pc
+}
+
+// envDurationOrZero reads key as a duration, returning 0 when unset (so the
+// pool keeps pgx's default) and 0 with a warning when the value is invalid.
+func envDurationOrZero(key string) time.Duration {
+	if envOr(key, "") == "" {
+		return 0
+	}
+	// A sentinel default of -1 lets envDuration's <=0 guard flag a bad value;
+	// map that back to 0 (keep pgx's default) rather than propagate -1.
+	if d := envDuration(key, -1); d > 0 {
+		return d
+	}
+	return 0
 }
 
 // runGC prunes expired refresh tokens once immediately, then every interval,
@@ -149,9 +171,9 @@ func runGC(ctx context.Context, interval time.Duration, prune func(context.Conte
 }
 
 // serve runs srv on ln until ctx is cancelled, then drains in-flight requests
-// with a bounded timeout. It returns nil on a clean shutdown, or the serve or
+// within shutdownTimeout. It returns nil on a clean shutdown, or the serve or
 // shutdown error otherwise.
-func serve(ctx context.Context, srv *http.Server, ln net.Listener) error {
+func serve(ctx context.Context, srv *http.Server, ln net.Listener, shutdownTimeout time.Duration) error {
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {

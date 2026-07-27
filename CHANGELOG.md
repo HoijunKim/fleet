@@ -17,6 +17,16 @@ before its tag is pushed.
   `git rebase -i` as its own sequence editor. A conflict during replay is kept
   and handed to the existing conflict panel.
 
+### Changed
+
+- **`fleetd` is env-tunable** - the HTTP timeouts (`FLEET_READ_HEADER_TIMEOUT`,
+  `FLEET_READ_TIMEOUT`, `FLEET_WRITE_TIMEOUT`, `FLEET_IDLE_TIMEOUT`), the
+  graceful-shutdown budget (`FLEET_SHUTDOWN_TIMEOUT`), the refresh-token GC
+  cadence (`FLEET_GC_INTERVAL`), and the Postgres pool (`FLEET_DB_MAX_CONNS`,
+  `FLEET_DB_MIN_CONNS`, `FLEET_DB_MAX_CONN_LIFETIME`, `FLEET_DB_MAX_CONN_IDLE_TIME`)
+  can now be set via environment variables. Unset reproduces the previous
+  compiled-in defaults; an invalid value is ignored with a warning.
+
 ## [0.1.0] - 2026-07-27
 
 First tagged release: the whole app as it stands, published for Windows, macOS
