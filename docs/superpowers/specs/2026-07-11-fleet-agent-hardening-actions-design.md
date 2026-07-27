@@ -1,8 +1,8 @@
-# Fleet Agent Hardening + Gated Actions — Design Spec (Intel/Hardening Slice 1)
+# Fleet Agent Hardening + Gated Actions - Design Spec (Intel/Hardening Slice 1)
 
 **Date:** 2026-07-11
 **Status:** Approved for planning
-**Topic:** Deepen and harden the agentic deep-dive: let the agent propose commit/push/PR actions (each user-approved, default-branch push always blocked), and turn the approval moment into a first-class, trustworthy review UI — a readable diff, a plain-language summary of what will happen, and a severity badge — so a developer can approve confidently and fast.
+**Topic:** Deepen and harden the agentic deep-dive: let the agent propose commit/push/PR actions (each user-approved, default-branch push always blocked), and turn the approval moment into a first-class, trustworthy review UI - a readable diff, a plain-language summary of what will happen, and a severity badge - so a developer can approve confidently and fast.
 
 ## Goal
 
@@ -11,8 +11,8 @@ Make the agentic deep-dive both **more capable** (it can carry a change all the 
 ## Context
 
 - The agentic run is driven by the local `claude` CLI (`internal/agent/driver.go`), gated by fleet's own `PreToolUse` hook. The hook (`internal/agent/hook.go` `RunHook`) POSTs each tool call to fleet's loopback `ApprovalServer` (`internal/agent/approve.go`), which registers a pending decision, hands the action to the GUI via `onAction(ActionRequest)`, blocks on the `Coordinator` until the user decides, and answers `{approved, reason}`.
-- **Current policy** (`internal/agent/policy.go` `DefaultPolicy`): `Allowed` = `Read, Grep, Glob` + 5 read-only git Bash patterns; `Disallowed` = secret Reads + `Bash(rm:*)`, `Bash(git push:*)`, `Bash(sudo:*)`, `Bash(curl:*)`. Because `Edit`/`Write`/general `Bash` are in neither list and the hook matcher is `Edit|Write|Bash`, they already fall through to the approval hook — so **`git commit`, `git add`, `git checkout -b`, and `gh pr create` are already gated (approvable) today; only `git push` is hard-denied.**
-- **Current approval UI** (`frontend/src/lib/AgentOverlay.svelte`): the approval card shows `Approve <toolName>?` + the raw `toolInput` JSON in a `<pre>` + Approve/Reject. It is functional but not a review — an `Edit`'s old/new strings are shown as escaped JSON.
+- **Current policy** (`internal/agent/policy.go` `DefaultPolicy`): `Allowed` = `Read, Grep, Glob` + 5 read-only git Bash patterns; `Disallowed` = secret Reads + `Bash(rm:*)`, `Bash(git push:*)`, `Bash(sudo:*)`, `Bash(curl:*)`. Because `Edit`/`Write`/general `Bash` are in neither list and the hook matcher is `Edit|Write|Bash`, they already fall through to the approval hook - so **`git commit`, `git add`, `git checkout -b`, and `gh pr create` are already gated (approvable) today; only `git push` is hard-denied.**
+- **Current approval UI** (`frontend/src/lib/AgentOverlay.svelte`): the approval card shows `Approve <toolName>?` + the raw `toolInput` JSON in a `<pre>` + Approve/Reject. It is functional but not a review - an `Edit`'s old/new strings are shown as escaped JSON.
 - The `ActionRequest` (`approve.go`) carries `ID, ToolName, ToolInput, Cwd, SessionID`. The `agent:action` event forwards `id, toolName, toolInput` to the overlay.
 - The agentic run already streams `agent:activity` events (tool calls) into the overlay's activity feed.
 - Working-tree line-ending churn (`frontend/wailsjs/go/main/App.{d.ts,js}`, `go.mod` show as modified with an empty content diff) is a pure LF↔CRLF artifact from `wails build`; no real change.
@@ -22,16 +22,16 @@ Make the agentic deep-dive both **more capable** (it can carry a change all the 
 Copy verbatim into the plan's Global Constraints; every task inherits them.
 
 - **No new runtime dependencies.** Go stays stdlib-only for the agent package (matches the existing `internal/agent` constraint). Frontend adds no packages; the diff renderer is hand-written; motion uses the existing `motion.ts` helpers.
-- **The gate must not be weakened.** Fail-safe stays fail-safe: any classify/parse error, timeout, cancel, or ambiguity resolves to **deny**, never allow. Moving `git push` out of `--disallowedTools` is only safe because the server-side classifier now blocks default-branch pushes and fails closed — the plan must prove this with tests.
+- **The gate must not be weakened.** Fail-safe stays fail-safe: any classify/parse error, timeout, cancel, or ambiguity resolves to **deny**, never allow. Moving `git push` out of `--disallowedTools` is only safe because the server-side classifier now blocks default-branch pushes and fails closed - the plan must prove this with tests.
 - **Default-branch push is always blocked**, in every form (`git push origin main`, `git push origin HEAD:main`, a bare `git push` while the current branch is `main`/`master`, `--force`, refspec variants). If the classifier cannot determine a push's target is a non-default branch, it **denies** (fail-closed).
 - **`prefers-reduced-motion` honored** for any motion added to the approval card / activity feed (route through `motion.ts`).
-- **Craft bar:** the approval card renders a human review, not raw JSON — a readable diff for `Edit`/`Write`, a plain-language one-line summary for every action, and a severity badge. Copy is developer-facing and specific.
+- **Craft bar:** the approval card renders a human review, not raw JSON - a readable diff for `Edit`/`Write`, a plain-language one-line summary for every action, and a severity badge. Copy is developer-facing and specific.
 - **No regression to existing agent behavior:** consent gate, project-scoping, single-run, the existing read-only allow-list, and the fail-safe approval all keep working; existing `internal/agent` and `app` tests stay green.
 - **Green gates each task:** `go build ./...` + `go vet ./...` clean, `go test ./...` green, `npx svelte-check` 0 errors, `npx vitest run` green, and (for tasks touching the frontend) `wails build` succeeds.
 
-## Workstream 1 — Action classifier (server-side, pure, tested)
+## Workstream 1 - Action classifier (server-side, pure, tested)
 
-**New `internal/agent/classify.go`** — a pure, unit-tested function that is the single policy brain for gated actions:
+**New `internal/agent/classify.go`** - a pure, unit-tested function that is the single policy brain for gated actions:
 
 ```
 type Category string // "edit" | "shell" | "remote"
@@ -64,38 +64,38 @@ Rules:
 
 The push-target parser is the security-critical unit; the plan gives it its own exhaustive test table (all the bypass forms above resolve to deny).
 
-## Workstream 2 — Approval server uses the classifier; ActionRequest carries the review
+## Workstream 2 - Approval server uses the classifier; ActionRequest carries the review
 
 **Modify `internal/agent/approve.go`:**
 - `handleApprove` calls `Classify(p.ToolName, p.ToolInput, ctx)`. If `Decision == "deny"` → `writeDecision(w, false, verdict.Reason)` immediately, **without** `Register`/`onAction`/`Await` (the user is never asked to approve something that is auto-blocked; it just gets denied and the agent is told why).
 - If `Decision == "gate"` → register + `onAction` as today, but the `ActionRequest` now carries `Category`, `Severity`, `Summary` (new fields).
 - The `ClassifyContext` (current branch, protected branches) is supplied by the caller that constructs the `ApprovalServer` (`app.go`), from the project's known git branch; `ProtectedBranches` defaults to `["main","master"]`.
 
-**Modify `internal/agent/policy.go`:** remove `Bash(git push:*)` from `Disallowed` so pushes reach the hook/classifier. Keep `Bash(rm:*)`, `Bash(sudo:*)`, `Bash(curl:*)` denied (hard CLI block — they never need to reach the classifier). Expand the secret Read-deny globs (add `**/*token*`, `**/*.p12`, `**/*.pfx`, `**/.netrc`, `**/*.keystore`, `**/*.ovpn`).
+**Modify `internal/agent/policy.go`:** remove `Bash(git push:*)` from `Disallowed` so pushes reach the hook/classifier. Keep `Bash(rm:*)`, `Bash(sudo:*)`, `Bash(curl:*)` denied (hard CLI block - they never need to reach the classifier). Expand the secret Read-deny globs (add `**/*token*`, `**/*.p12`, `**/*.pfx`, `**/.netrc`, `**/*.keystore`, `**/*.ovpn`).
 
 **Modify `app.go`:** the `agent:action` event payload gains `category`, `severity`, `summary` (passed through from `ActionRequest`). No other binding/event changes.
 
-## Workstream 3 — Approval card as a real review (frontend craft)
+## Workstream 3 - Approval card as a real review (frontend craft)
 
-**Modify `frontend/src/lib/AgentOverlay.svelte`** — replace the raw-JSON approval card with a categorized review:
+**Modify `frontend/src/lib/AgentOverlay.svelte`** - replace the raw-JSON approval card with a categorized review:
 
 - **Header:** a severity-colored category badge (`edit` = accent/blue, `shell` = amber, `remote` = purple/red) + the `summary` line (e.g. "Push branch feat/x to origin", "Edit README.md").
 - **Body by category:**
-  - `edit` (`Edit`): a readable **diff** — split `old_string`/`new_string` into lines, render removed lines (`-`, red tint) then added lines (`+`, green tint) in a monospace block with `overflow-x: auto`. Show the target `file_path` as a header.
+  - `edit` (`Edit`): a readable **diff** - split `old_string`/`new_string` into lines, render removed lines (`-`, red tint) then added lines (`+`, green tint) in a monospace block with `overflow-x: auto`. Show the target `file_path` as a header.
   - `edit` (`Write`): the `file_path` + a content **preview** (first ~20 lines, monospace, scroll).
   - `shell` / `remote` (`Bash`): the command in a monospace block, plus (for `remote`) the resolved target ("→ origin/feat/x") so the user sees exactly what leaves the machine.
   - Unknown shape → fall back to the raw JSON `<pre>` (never crash).
-- **Actions:** Approve / Reject as today (`decide(true|false)`), with the icons from `Icon.svelte` (`check`/`x`). The card animates in via `fadeScaleIn()` (already used) — keep it, tuned so the review draws the eye.
-- A tiny diff renderer lives in a testable helper (`frontend/src/lib/agentAction.ts` — `parseAction(category, toolName, toolInput)` → a normalized shape the card renders), unit-tested with vitest.
+- **Actions:** Approve / Reject as today (`decide(true|false)`), with the icons from `Icon.svelte` (`check`/`x`). The card animates in via `fadeScaleIn()` (already used) - keep it, tuned so the review draws the eye.
+- A tiny diff renderer lives in a testable helper (`frontend/src/lib/agentAction.ts` - `parseAction(category, toolName, toolInput)` → a normalized shape the card renders), unit-tested with vitest.
 
-## Workstream 4 — Close the loop: action outcome in the activity feed
+## Workstream 4 - Close the loop: action outcome in the activity feed
 
 **Modify `frontend/src/lib/agentSession.ts` + `AgentOverlay.svelte`:** when the user decides, append a compact line to the activity feed so the transcript reads as a story:
 - Approve → `✓ approved: <summary>` (accent).
 - Reject → `⨯ rejected: <summary>` (muted).
-(Use the `Icon` set, not literal glyphs, honoring the branch's ASCII-punctuation direction.) This requires the overlay to know the current pending action's `summary` at decide-time — it already holds `$pending`; extend `pending` to carry `category`/`severity`/`summary` from the `agent:action` event. No backend round-trip; purely reflecting the decision the user just made.
+(Use the `Icon` set, not literal glyphs, honoring the branch's ASCII-punctuation direction.) This requires the overlay to know the current pending action's `summary` at decide-time - it already holds `$pending`; extend `pending` to carry `category`/`severity`/`summary` from the `agent:action` event. No backend round-trip; purely reflecting the decision the user just made.
 
-## Workstream 5 — Cleanup (fold the accepted debt)
+## Workstream 5 - Cleanup (fold the accepted debt)
 
 - **`.gitattributes`** at repo root normalizing line endings so `wails`-touched generated files (`frontend/wailsjs/**`, `go.mod`, `*.ts`, `*.svelte`, `*.go`) stop showing as phantom-modified (LF for text; mark generated wailsjs as `-text` or `eol=lf`). Verify `git status` is clean afterward on a fresh checkout.
 - **Deferred GUI Minors** (safe, from the gui-polish final review): unify the ellipsis usage (`...` vs `…`) toward ASCII `...` to match the new ASCII-punctuation direction; add the lost `/* Command-palette key hint */` comment above `.ic-jump`; add a `__reset()` to `agentSession.ts` for test isolation; remove the redundant leftover `on:keydown` on the overlay backdrop div (Escape is handled at `onOverlayKey`).
@@ -113,7 +113,7 @@ Unchanged transport; richer payload. Tool call → hook → `ApprovalServer.hand
 
 ## Testing Strategy
 
-- `classify_test.go`: an exhaustive table — every `git push` bypass form (`origin main`, `HEAD:main`, bare push on `main`, `--force origin main`, refspec `+main`) → deny; feature-branch pushes → gate `remote`; `Edit`/`Write` → gate `edit` with correct summary; `git commit -m x` → gate `shell` summary `Commit: x`; `gh pr create` → gate `remote`; secret-read Bash → deny; unknown → deny. Fail-closed on empty/garbage input.
+- `classify_test.go`: an exhaustive table - every `git push` bypass form (`origin main`, `HEAD:main`, bare push on `main`, `--force origin main`, refspec `+main`) → deny; feature-branch pushes → gate `remote`; `Edit`/`Write` → gate `edit` with correct summary; `git commit -m x` → gate `shell` summary `Commit: x`; `gh pr create` → gate `remote`; secret-read Bash → deny; unknown → deny. Fail-closed on empty/garbage input.
 - `approve_test.go` (extend): a POST that classifies as deny returns `{approved:false}` **without** registering a pending action (no `onAction` fired); a gate POST fires `onAction` with the populated `Category/Severity/Summary`.
 - `policy_test.go` (extend): `git push` no longer in `Disallowed`; new secret globs present; `rm/sudo/curl` still denied.
 - `agentAction.test.ts`: `parseAction` produces the right diff lines for an `Edit`, content preview for a `Write`, command+target for a push, and falls back safely on garbage.
@@ -121,9 +121,9 @@ Unchanged transport; richer payload. Tool call → hook → `ApprovalServer.hand
 
 ## Out of Scope (YAGNI / later slices)
 
-- True secret containment (OS sandbox / result filtering) — Grep/Glob content remains best-effort within the consented boundary; documented honestly in the consent copy + a code comment. (Later hardening.)
-- Cross-repo actions, GitHub/CI signals, deeper brief, cross-repo intel — later slices.
-- No auto-approval, no "approve all", no policy UI — every mutating action stays individually approved.
+- True secret containment (OS sandbox / result filtering) - Grep/Glob content remains best-effort within the consented boundary; documented honestly in the consent copy + a code comment. (Later hardening.)
+- Cross-repo actions, GitHub/CI signals, deeper brief, cross-repo intel - later slices.
+- No auto-approval, no "approve all", no policy UI - every mutating action stays individually approved.
 
 ## File Structure
 

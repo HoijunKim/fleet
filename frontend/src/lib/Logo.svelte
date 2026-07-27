@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  // Fleet brand mark — "Quiet orbit": bold F on a blue gradient squircle with a
+  // Fleet brand mark - "Quiet orbit": bold F on a blue gradient squircle with a
   // satellite tracing a short arc. Fixed brand colors (NOT currentColor): a logo
   // keeps its identity in both themes. Unique gradient id per instance.
   export let size: number = 20;

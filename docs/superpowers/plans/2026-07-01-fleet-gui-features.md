@@ -13,7 +13,7 @@
 - Reuse the `Runner` seam: every new git op is a `func(r Runner, dir string, ...)`; no direct `os/exec` for git outside `internal/git`.
 - All new git ops testable with a fake runner keyed on `args[0]` (+ subcommand where needed).
 - `app.go` bindings return `""` on success and error text on failure (via the existing `errMsg`), or a DTO for reads.
-- ASCII-only user-facing text (no `—`, `–`, `·`, `…`, `─`); polish via CSS.
+- ASCII-only user-facing text (no `-`, `-`, `·`, `…`, `─`); polish via CSS.
 - Preserve the existing binding/field contract; only ADD.
 - `go.mod` stays `go 1.22.0`, no `toolchain` line. Conventional Commits; NO Claude/AI co-author trailer.
 - Env: Go `C:\Program Files\Go\bin`, wails `C:\Users\hoijun\go\bin` (prefix PATH + `GOTOOLCHAIN=local`). Do NOT run `wails dev`. Verify with `wails build` + `go test ./...`.
@@ -110,7 +110,7 @@ func TestStashList(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run `go test ./internal/git/ -run "TestBranches|TestCommitAll|TestLog|TestStash" -v`** — expect FAIL (undefined).
+- [ ] **Step 2: Run `go test ./internal/git/ -run "TestBranches|TestCommitAll|TestLog|TestStash" -v`** - expect FAIL (undefined).
 
 - [ ] **Step 3: Write `internal/git/ops.go`**
 
@@ -197,7 +197,7 @@ func Stash(r Runner, dir string) error    { _, err := r.Run(dir, "stash", "push"
 func StashPop(r Runner, dir string) error { _, err := r.Run(dir, "stash", "pop"); return err }
 ```
 
-- [ ] **Step 4: Run the git tests** — expect PASS.
+- [ ] **Step 4: Run the git tests** - expect PASS.
 
 - [ ] **Step 5: Add `remoteToHTTPS` to `paths.go` + reveal helper**
 

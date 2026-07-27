@@ -43,7 +43,7 @@
 **Interfaces:**
 - Produces: `intel.Chat{Turns []Turn; UpdatedAt string}`; `Brief` gains `UpdatedAt string`; `Store.SetClock(func() time.Time)`; `Store.BriefUpdatedAt() string`; `Store.ChatUpdatedAt(id string) string`. `Chat` has a custom `UnmarshalJSON` accepting the old `[]Turn` shape. `Data.Chats` becomes `map[string]Chat`.
 
-- [ ] **Step 1: Write the failing test** — add to `internal/intel/intel_test.go`
+- [ ] **Step 1: Write the failing test** - add to `internal/intel/intel_test.go`
 
 ```go
 func TestSetChatStampsUpdatedAt(t *testing.T) {
@@ -91,9 +91,9 @@ func TestOpenAcceptsOldBareArrayChatShape(t *testing.T) {
 
 Add `"time"` to the test imports.
 
-- [ ] **Step 2: Run it** — `go test ./internal/intel/ -run "Stamp|OldBare"` → fails to build (`SetClock` undefined, `Chat` type changed).
+- [ ] **Step 2: Run it** - `go test ./internal/intel/ -run "Stamp|OldBare"` → fails to build (`SetClock` undefined, `Chat` type changed).
 
-- [ ] **Step 3: Implement** — in `intel.go`:
+- [ ] **Step 3: Implement** - in `intel.go`:
 
 Change the types:
 
@@ -208,7 +208,7 @@ func (s *Store) SetBrief(b Brief) error {
 
 Update `Snapshot`'s chat copy to `make(map[string]Chat, ...)`. Add `"bytes"` and `"time"` imports.
 
-- [ ] **Step 4: Green** — `go test ./internal/intel/ -v`. All pass (the tier-4d round-trip tests still pass because `Chat(id)`/`SetChat` keep their `[]Turn` external shape).
+- [ ] **Step 4: Green** - `go test ./internal/intel/ -v`. All pass (the tier-4d round-trip tests still pass because `Chat(id)`/`SetChat` keep their `[]Turn` external shape).
 
 - [ ] **Step 5: gofmt + commit**
 
@@ -227,7 +227,7 @@ git commit -m "feat(intel): stamp a per-document updatedAt for last-write-wins s
 **Interfaces:**
 - Produces: `State.Docs` is `map[string]map[string]DocState` (kind → doc_id → state). `loadState` migrates a flat pre-4e file into the `"project"` kind.
 
-- [ ] **Step 1: Write the failing test** — add to `state_test.go`
+- [ ] **Step 1: Write the failing test** - add to `state_test.go`
 
 ```go
 func TestLoadStateMigratesFlatToNested(t *testing.T) {
@@ -266,9 +266,9 @@ func TestLoadStateReadsNested(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it** — `go test ./internal/syncengine/ -run TestLoadState` → fails (nested indexing on a flat map / compile error once `State` changes).
+- [ ] **Step 2: Run it** - `go test ./internal/syncengine/ -run TestLoadState` → fails (nested indexing on a flat map / compile error once `State` changes).
 
-- [ ] **Step 3: Implement** — in `state.go`:
+- [ ] **Step 3: Implement** - in `state.go`:
 
 ```go
 // State is the persisted sync bookkeeping (sync.json). Docs is keyed by kind,
@@ -314,11 +314,11 @@ func loadState(path string) (State, error) {
 }
 ```
 
-Note: a nested-shape file unmarshals into `State` cleanly; a flat-shape file also unmarshals into `State` without error but leaves `s.Docs` values as `map[string]map...` of the wrong depth — so the guard is `s.Docs != nil` AND the nested values decode. To be unambiguous, detect the shape by trial: attempt nested, and if any value fails to be a map, fall back. Simplify by trying flat first when the nested decode yields entries whose inner type is not a map. **Concretely:** since `DocState` and `map[string]DocState` do not unmarshal-interchange cleanly, the first `Unmarshal` into `State` will error on a flat file (a `DocState` object cannot decode into `map[string]DocState`), so the `err == nil` guard already routes correctly. Keep the code above.
+Note: a nested-shape file unmarshals into `State` cleanly; a flat-shape file also unmarshals into `State` without error but leaves `s.Docs` values as `map[string]map...` of the wrong depth - so the guard is `s.Docs != nil` AND the nested values decode. To be unambiguous, detect the shape by trial: attempt nested, and if any value fails to be a map, fall back. Simplify by trying flat first when the nested decode yields entries whose inner type is not a map. **Concretely:** since `DocState` and `map[string]DocState` do not unmarshal-interchange cleanly, the first `Unmarshal` into `State` will error on a flat file (a `DocState` object cannot decode into `map[string]DocState`), so the `err == nil` guard already routes correctly. Keep the code above.
 
-- [ ] **Step 4: Green** — `go test ./internal/syncengine/ -run TestLoadState -v`. (The engine won't compile yet because `engine.go` still uses the flat map; that is Task 3. Run just this file's state tests by building the test binary is not possible mid-refactor — so this step's green is deferred to Task 3 Step 6, and Step 2's "fails" is observed as a compile error naming the `State.Docs` shape.)
+- [ ] **Step 4: Green** - `go test ./internal/syncengine/ -run TestLoadState -v`. (The engine won't compile yet because `engine.go` still uses the flat map; that is Task 3. Run just this file's state tests by building the test binary is not possible mid-refactor - so this step's green is deferred to Task 3 Step 6, and Step 2's "fails" is observed as a compile error naming the `State.Docs` shape.)
 
-- [ ] **Step 5: Commit** (code compiles as a unit once Task 3 lands; commit state.go with Task 3). Skip a standalone commit here — fold into Task 3 to keep the tree buildable. Mark this task done when Task 3's suite is green.
+- [ ] **Step 5: Commit** (code compiles as a unit once Task 3 lands; commit state.go with Task 3). Skip a standalone commit here - fold into Task 3 to keep the tree buildable. Mark this task done when Task 3's suite is green.
 
 ---
 
@@ -330,7 +330,7 @@ Note: a nested-shape file unmarshals into `State` cleanly; a flat-shape file als
 - Produces: `Source` interface; `Item{Payload []byte; UpdatedAt string}`; `NewProject(st *store.Store, remoteOf func(string) string, degraded func() error) Source`; `New(client *cloud.Client, statePath string, sources ...Source) *Engine`.
 - Consumes: nested `State` from Task 2.
 
-- [ ] **Step 1: Write `source.go`** — the interface plus `projectSource`, which reproduces today's engine logic exactly.
+- [ ] **Step 1: Write `source.go`** - the interface plus `projectSource`, which reproduces today's engine logic exactly.
 
 ```go
 package syncengine
@@ -401,7 +401,7 @@ func (p *projectSource) Degraded() error {
 
 Because the exact cut spans large blocks, implement `projectSource` by moving the code verbatim and adjusting only the receiver and the state access. The test suite (Step 5) is the acceptance gate: if any of the ten behavior tests fail, the move changed behavior and must be corrected.
 
-- [ ] **Step 2: Refactor `engine.go`** — the `Engine` holds `sources []Source`; `SyncOnce` loops over them. Keep, verbatim, the degraded/reconcilable guards as a whole-cycle abort for now (Task 5 changes the policy), so the two degraded tests stay green:
+- [ ] **Step 2: Refactor `engine.go`** - the `Engine` holds `sources []Source`; `SyncOnce` loops over them. Keep, verbatim, the degraded/reconcilable guards as a whole-cycle abort for now (Task 5 changes the policy), so the two degraded tests stay green:
 
 ```go
 type Engine struct {
@@ -430,14 +430,14 @@ func New(client *cloud.Client, statePath string, sources ...Source) *Engine {
 
 Keep `ErrLocalDataUnsafe`, `TookRemoteEdit`, `LostLocalEdit`, `Reset`, `conflictsPath`, `backupConflict`, `payloadHash`, `newer` unchanged in this task.
 
-- [ ] **Step 3: Update `engine_test.go` construction and internal-state access** — mechanical, not behavioral:
+- [ ] **Step 3: Update `engine_test.go` construction and internal-state access** - mechanical, not behavioral:
   - `newEngine` (`:91`): `e := New(cloud.New(url), statePath, NewProject(st, func(string) string { return "" }, nil))`
   - Reset (`:208`), Detached (`:245`,`:258`), degraded (`:472`): same `New(client, path, NewProject(st, remoteOf, degraded))` shape.
   - `:380`: `eB.state.Docs["m-1"]` → `eB.state.Docs["project"]["m-1"]`.
 
   Do NOT touch any assertion in the ten behavior tests.
 
-- [ ] **Step 4: Update `fakeSrv` to key by (kind, doc_id)** — the server stub at `engine_test.go:23-84` keys `f.docs` by `d.DocID`; the real server keys by `(user, kind, doc_id)`. Change the map key to `d.Kind + "\x00" + d.DocID` in the POST branch, and add a helper so existing tests that read `f.docs["m-1"]` / `f.docs["git:github.com/o/app"]` keep working:
+- [ ] **Step 4: Update `fakeSrv` to key by (kind, doc_id)** - the server stub at `engine_test.go:23-84` keys `f.docs` by `d.DocID`; the real server keys by `(user, kind, doc_id)`. Change the map key to `d.Kind + "\x00" + d.DocID` in the POST branch, and add a helper so existing tests that read `f.docs["m-1"]` / `f.docs["git:github.com/o/app"]` keep working:
 
 ```go
 func (f *fakeSrv) get(kind, id string) (cloud.Doc, bool) { d, ok := f.docs[kind+"\x00"+id]; return d, ok }
@@ -445,7 +445,7 @@ func (f *fakeSrv) get(kind, id string) (cloud.Doc, bool) { d, ok := f.docs[kind+
 
   Replace the tests' direct `f.docs["m-1"]` reads (`:251`, `:460`, `:477`) with `f.get("project", "m-1")` etc. The GET branch iterates all values, so it is unaffected.
 
-- [ ] **Step 5: Green — the whole suite, assertions unchanged**
+- [ ] **Step 5: Green - the whole suite, assertions unchanged**
 
 ```bash
 go test ./internal/syncengine/ ./internal/intel/ -v 2>&1 | grep -E "^(--- FAIL|FAIL|ok)"
@@ -470,7 +470,7 @@ git commit -m "refactor(sync): drive the engine through a Source interface; proj
 **Interfaces:**
 - Produces: `NewBrief(is *intel.Store) Source`, `NewChat(is *intel.Store) Source`.
 
-- [ ] **Step 1: Write the failing test** — `internal/syncengine/source_test.go` and additions to `engine_test.go`.
+- [ ] **Step 1: Write the failing test** - `internal/syncengine/source_test.go` and additions to `engine_test.go`.
 
 In `engine_test.go`, a collision + LWW test:
 
@@ -532,7 +532,7 @@ func TestChatSyncsAcrossDevicesLWW(t *testing.T) {
 
 `engine_test.go` needs the `intel` import.
 
-- [ ] **Step 2: Run it** — fails: `undefined: NewChat`.
+- [ ] **Step 2: Run it** - fails: `undefined: NewChat`.
 
 - [ ] **Step 3: Implement the intel sources** in `source.go`:
 
@@ -632,7 +632,7 @@ func (s *Store) SnapshotChats() map[string]Chat {
 
 Also add `Source` interface methods `Apply`/`Remove`/`Reconcilable`/`Snapshot` to the interface as finalized here, and make `projectSource` satisfy the same set (from Task 3). If the interface signatures shifted between Task 3 and here, reconcile them now so all three sources implement one interface.
 
-- [ ] **Step 4: Green** — `go test ./internal/syncengine/ ./internal/intel/ -v 2>&1 | grep -E "FAIL|^ok"`. All pass.
+- [ ] **Step 4: Green** - `go test ./internal/syncengine/ ./internal/intel/ -v 2>&1 | grep -E "FAIL|^ok"`. All pass.
 
 - [ ] **Step 5: gofmt + commit**
 
@@ -651,7 +651,7 @@ git commit -m "feat(sync): brief and chat sources; project and chat share a git 
 **Interfaces:**
 - Produces: `func (e *Engine) SkippedDegraded() []string` (returns and clears). Removes `ErrLocalDataUnsafe`.
 
-- [ ] **Step 1: Rewrite the two degraded tests** — replace the bodies of `TestSyncRefusesWhenStoreDegraded` (`:450`) and `TestSyncRefusesWhenStoreFileVanished` (`:485`) to assert the new contract. For the degraded one:
+- [ ] **Step 1: Rewrite the two degraded tests** - replace the bodies of `TestSyncRefusesWhenStoreDegraded` (`:450`) and `TestSyncRefusesWhenStoreFileVanished` (`:485`) to assert the new contract. For the degraded one:
 
 ```go
 	e2 := New(cloud.New(ts.URL), statePath, NewProject(broken, func(string) string { return "" }, broken.Degraded))
@@ -668,9 +668,9 @@ git commit -m "feat(sync): brief and chat sources; project and chat share a git 
 
 The file-vanished test similarly asserts `SyncOnce` returns nil, pushes zero project docs (compare `f.pushes` before/after, or assert the server doc is unchanged), and reports `"project"`.
 
-- [ ] **Step 2: Run** — the two rewritten tests fail (`SkippedDegraded` undefined; `SyncOnce` still returns `ErrLocalDataUnsafe`).
+- [ ] **Step 2: Run** - the two rewritten tests fail (`SkippedDegraded` undefined; `SyncOnce` still returns `ErrLocalDataUnsafe`).
 
-- [ ] **Step 3: Implement the policy** — in `engine.go`:
+- [ ] **Step 3: Implement the policy** - in `engine.go`:
   - Add `skippedDegraded []string` to `Engine` and:
 
 ```go
@@ -689,7 +689,7 @@ func (e *Engine) SkippedDegraded() []string {
   - In `SyncOnce`, reset `e.skippedDegraded = nil` at the top. For each source: `if err := src.Degraded(); err != nil { e.skippedDegraded = append(e.skippedDegraded, src.Kind()); continue }` and likewise skip its `Reconcilable` failure (append + continue). In the pull loop, if the target source is degraded or unknown, skip that doc.
   - Delete `ErrLocalDataUnsafe` and its doc comment.
 
-- [ ] **Step 4: Green** — `go test ./internal/syncengine/ -v 2>&1 | grep -E "FAIL|^ok"`. All pass, including the ten unchanged behavior tests.
+- [ ] **Step 4: Green** - `go test ./internal/syncengine/ -v 2>&1 | grep -E "FAIL|^ok"`. All pass, including the ten unchanged behavior tests.
 
 - [ ] **Step 5: gofmt + commit**
 
@@ -708,7 +708,7 @@ git commit -m "feat(sync): skip a degraded source and report it instead of abort
 **Interfaces:**
 - Consumes: `NewProject`, `NewBrief`, `NewChat`, `SkippedDegraded`.
 
-- [ ] **Step 1: Build the engine from sources** — in `app.go` `NewApp`, replace the `syncengine.New(...)` call (`app.go:136`):
+- [ ] **Step 1: Build the engine from sources** - in `app.go` `NewApp`, replace the `syncengine.New(...)` call (`app.go:136`):
 
 ```go
 	eng := syncengine.New(cl, syncPath,
@@ -721,7 +721,7 @@ git commit -m "feat(sync): skip a degraded source and report it instead of abort
 	)
 ```
 
-- [ ] **Step 2: Move the paused surfacing** — in `authsync.go`, delete the `ErrLocalDataUnsafe` branch (`:386-389`) and the `ErrLocalDataUnsafe` no-retry condition (`:470-474`, leaving the rest of that condition intact). After `a.setSyncState("synced", "")` (`:397`), before the lost/remote block:
+- [ ] **Step 2: Move the paused surfacing** - in `authsync.go`, delete the `ErrLocalDataUnsafe` branch (`:386-389`) and the `ErrLocalDataUnsafe` no-retry condition (`:470-474`, leaving the rest of that condition intact). After `a.setSyncState("synced", "")` (`:397`), before the lost/remote block:
 
 ```go
 	if skipped := a.engine.SkippedDegraded(); len(skipped) > 0 {
@@ -732,7 +732,7 @@ git commit -m "feat(sync): skip a degraded source and report it instead of abort
 
 Confirm `strings` is imported in `authsync.go` (it is used elsewhere; if not, add it). Remove the now-unused `syncengine.ErrLocalDataUnsafe` references and the `errors` import if it becomes unused (it will still be used for `cloud.ErrRefreshFailed`, so keep it).
 
-- [ ] **Step 3: Verify** — `go build ./... && go vet ./... && go test ./...` — clean, no FAIL. Grep confirms the sentinel is gone:
+- [ ] **Step 3: Verify** - `go build ./... && go vet ./... && go test ./...` - clean, no FAIL. Grep confirms the sentinel is gone:
 
 ```bash
 grep -rn "ErrLocalDataUnsafe" --include=*.go . ; echo "exit: expect no matches"
@@ -750,24 +750,24 @@ git commit -m "feat(app): sync intel alongside projects; paused pill from Skippe
 
 ### Task 7: Whole-suite verification and ship
 
-- [ ] **Step 1** — `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` — clean, no FAIL.
-- [ ] **Step 2** — gofmt diff on every touched Go file's LF blob: zero bytes.
+- [ ] **Step 1** - `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` - clean, no FAIL.
+- [ ] **Step 2** - gofmt diff on every touched Go file's LF blob: zero bytes.
 
 ```bash
 for f in internal/intel/intel.go internal/intel/intel_test.go internal/syncengine/source.go internal/syncengine/source_test.go internal/syncengine/state.go internal/syncengine/state_test.go internal/syncengine/engine.go internal/syncengine/engine_test.go app.go authsync.go; do
   echo "$f: $(git show HEAD:$f | gofmt -d | wc -c)"; done
 ```
 
-- [ ] **Step 3** — CHANGELOG `[Unreleased]`, under Changed, extend the intel line:
+- [ ] **Step 3** - CHANGELOG `[Unreleased]`, under Changed, extend the intel line:
   `- The AI brief and chat transcripts sync across your devices (last-write-wins), alongside projects.`
-- [ ] **Step 4** — `wails build`, launch, confirm by hand: sign in on one machine, brief/chat appear on a second signed-in machine after a sync; a corrupt `intel.json` shows the paused pill but projects still sync.
-- [ ] **Step 5** — push, confirm the three `desktop` checks are green, open a PR, merge once green.
+- [ ] **Step 4** - `wails build`, launch, confirm by hand: sign in on one machine, brief/chat appear on a second signed-in machine after a sync; a corrupt `intel.json` shows the paused pill but projects still sync.
+- [ ] **Step 5** - push, confirm the three `desktop` checks are green, open a PR, merge once green.
 
 ---
 
 ## Self-Review
 
 - **Spec coverage:** §1 store timestamps → Task 1; §2 Source interface + project/brief/chat sources → Tasks 3-4; §3 nested state + migration → Task 2, engine loop → Tasks 3+5, degraded report → Task 5; §4 paused wiring → Task 6. All covered.
-- **Type consistency:** `Item{Payload,UpdatedAt}`, `Source` with `Kind/Snapshot/Degraded/Apply/Remove/Reconcilable`, `NewProject/NewBrief/NewChat`, `SkippedDegraded() []string`, nested `State.Docs map[string]map[string]DocState`, `intel.Chat{Turns,UpdatedAt}`, `SetChatSynced/SetBriefSynced/SnapshotChats` used consistently across tasks. The `Source` interface is finalized in Task 4 Step 3 — Task 3 must adopt the same signatures (flagged there).
+- **Type consistency:** `Item{Payload,UpdatedAt}`, `Source` with `Kind/Snapshot/Degraded/Apply/Remove/Reconcilable`, `NewProject/NewBrief/NewChat`, `SkippedDegraded() []string`, nested `State.Docs map[string]map[string]DocState`, `intel.Chat{Turns,UpdatedAt}`, `SetChatSynced/SetBriefSynced/SnapshotChats` used consistently across tasks. The `Source` interface is finalized in Task 4 Step 3 - Task 3 must adopt the same signatures (flagged there).
 - **Placeholder scan:** the one soft spot is Task 3's "move verbatim" refactor note; it is explicit that the ten behavior tests are the acceptance gate rather than leaving the move underspecified. No TBDs.
 - **Risk:** Task 3 is the dangerous one; it is structured so the assertions of the ten behavior tests do not change, making any behavior drift a test failure.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Polish the Fleet desktop UI — move the agentic "Ask AI" session into a wide focused overlay, add disciplined app-wide entrance motion, replace CSS-drawn icons with an inline SVG set, and ship the "Fleet" name with a designed logo.
+**Goal:** Polish the Fleet desktop UI - move the agentic "Ask AI" session into a wide focused overlay, add disciplined app-wide entrance motion, replace CSS-drawn icons with an inline SVG set, and ship the "Fleet" name with a designed logo.
 
 **Architecture:** Frontend-only (Svelte-TS under `frontend/src`). New components (`AgentOverlay`, `Icon`, `Logo`) and one store module (`agentSession.ts`) that lifts the agentic run state out of `RepoChat.svelte`. Motion lives in the existing `frontend/src/lib/motion.ts` + tokens in `frontend/src/app.css`. No backend logic change; the existing agent events and bindings are reused verbatim.
 
@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-Every task inherits these — copy verbatim from the spec `docs/superpowers/specs/2026-07-10-fleet-gui-polish-design.md`:
+Every task inherits these - copy verbatim from the spec `docs/superpowers/specs/2026-07-10-fleet-gui-polish-design.md`:
 
 - **No new runtime dependencies.** `frontend/package.json` `dependencies`/`devDependencies` must not change. Icons/logo are hand-authored inline SVG; motion uses `svelte/transition` (already present) + `motion.ts`.
 - **No backend logic change.** No edits to `app.go`, `internal/**`, or Go logic; no new/changed Wails bindings or event names. Events consumed unchanged: `agent:text`, `agent:activity`, `agent:action`, `agent:done`, `agent:error`. Bindings unchanged: `AgentAvailable`, `AgentConsent`, `GiveAgentConsent`, `AgentAsk(id, q)`, `ApproveAction(id, approved)`, `CancelAgent`. **Sole permitted non-frontend edit (Task 3 only):** the app-name strings `Title` in `main.go:30` and `name` in `wails.json`, `fleet` → `Fleet`. String-only.
 - **`prefers-reduced-motion: reduce` honored for every animation.** Route JS-driven motion through `motion.ts` (which already gates on `reducedMotion()`); CSS animations get a `@media (prefers-reduced-motion: reduce)` off-switch.
-- **Enter-only discipline.** New motion is entrance/state-change only — no loops or bounce except the existing SyncPill `.spinner`. Micro ≈ `--t` (130ms); enter ≈ `--t-enter` (180ms). Staggered lists stay capped (`flyUp` already caps delay at index 8).
+- **Enter-only discipline.** New motion is entrance/state-change only - no loops or bounce except the existing SyncPill `.spinner`. Micro ≈ `--t` (130ms); enter ≈ `--t-enter` (180ms). Staggered lists stay capped (`flyUp` already caps delay at index 8).
 - **Preserve existing agentic guards.** The run's project-scoping (`agentStale`/`agentGenId` semantics), consent gate, fail-safe approval, single-run mutex, and per-repo chat persistence (`fleet.chat:<path>`) must not be weakened by the re-housing.
 - **Green gates each task:** `npx svelte-check` 0 errors, `npx vitest run` green, and (final) `wails build` succeeds. Match house style: design tokens (`var(--…)`), existing `btn`/`btn-primary`/`btn-sm` classes, `EventsOn` for events.
 
@@ -23,20 +23,20 @@ Every task inherits these — copy verbatim from the spec `docs/superpowers/spec
 
 ## File Structure
 
-- `frontend/src/lib/motion.ts` — add `fadeScaleIn()` (Task 1). Existing `reducedMotion()`, `flyUp()` reused.
-- `frontend/src/app.css` — add `--t-enter` token; swap `.ic-*`/`.gear`/`.brand-dot` for components + delete dead CSS (Tasks 1–3).
-- `frontend/src/lib/Icon.svelte` (new) — inline SVG glyph set, `currentColor` (Task 2).
-- `frontend/src/lib/Logo.svelte` (new) — fixed-color brand mark (Task 3).
-- `frontend/src/lib/agentSession.ts` (new) — agentic run store lifted from `RepoChat` (Task 4).
-- `frontend/src/lib/AgentOverlay.svelte` (new) — wide focused agentic session UI (Task 5).
-- `frontend/src/lib/RepoChat.svelte` — becomes launcher + single-shot fallback (Task 6).
-- `frontend/src/lib/DetailPanel.svelte` — Ask AI launcher wiring + panel enter motion (Tasks 6, 8).
-- `frontend/src/App.svelte` — mount `AgentOverlay` once; drive `setProject` on selection (Task 6).
-- `frontend/src/lib/Toolbar.svelte` — icons + logo + "Fleet" (Tasks 2, 3).
-- `frontend/src/lib/{AddProjectModal,DiffModal,SettingsModal}.svelte` — `brand-dot` → `<Logo/>` (Task 3).
-- `frontend/src/lib/SyncPill.svelte` — state cross-fade (Task 7).
-- `frontend/src/lib/ProjectTable.svelte`, `Graph.svelte` — entrance motion (Task 8).
-- `main.go`, `wails.json` — "Fleet" strings (Task 3).
+- `frontend/src/lib/motion.ts` - add `fadeScaleIn()` (Task 1). Existing `reducedMotion()`, `flyUp()` reused.
+- `frontend/src/app.css` - add `--t-enter` token; swap `.ic-*`/`.gear`/`.brand-dot` for components + delete dead CSS (Tasks 1-3).
+- `frontend/src/lib/Icon.svelte` (new) - inline SVG glyph set, `currentColor` (Task 2).
+- `frontend/src/lib/Logo.svelte` (new) - fixed-color brand mark (Task 3).
+- `frontend/src/lib/agentSession.ts` (new) - agentic run store lifted from `RepoChat` (Task 4).
+- `frontend/src/lib/AgentOverlay.svelte` (new) - wide focused agentic session UI (Task 5).
+- `frontend/src/lib/RepoChat.svelte` - becomes launcher + single-shot fallback (Task 6).
+- `frontend/src/lib/DetailPanel.svelte` - Ask AI launcher wiring + panel enter motion (Tasks 6, 8).
+- `frontend/src/App.svelte` - mount `AgentOverlay` once; drive `setProject` on selection (Task 6).
+- `frontend/src/lib/Toolbar.svelte` - icons + logo + "Fleet" (Tasks 2, 3).
+- `frontend/src/lib/{AddProjectModal,DiffModal,SettingsModal}.svelte` - `brand-dot` → `<Logo/>` (Task 3).
+- `frontend/src/lib/SyncPill.svelte` - state cross-fade (Task 7).
+- `frontend/src/lib/ProjectTable.svelte`, `Graph.svelte` - entrance motion (Task 8).
+- `main.go`, `wails.json` - "Fleet" strings (Task 3).
 - Tests: `motion.test.ts`, `Icon.test.ts`, `Logo.test.ts`, `agentSession.test.ts`, `AgentOverlay.test.ts` (new).
 
 ---
@@ -49,10 +49,10 @@ Every task inherits these — copy verbatim from the spec `docs/superpowers/spec
 - Test: `frontend/src/lib/motion.test.ts` (create)
 
 **Interfaces:**
-- Produces: `fadeScaleIn(): { duration: number; start: number; opacity: number }` — params for svelte's built-in `scale` transition (import `scale` from `svelte/transition`), collapsing to `{ duration: 0, start: 1, opacity: 1 }` under reduced motion. Existing `reducedMotion()` and `flyUp(i)` are reused by later tasks.
+- Produces: `fadeScaleIn(): { duration: number; start: number; opacity: number }` - params for svelte's built-in `scale` transition (import `scale` from `svelte/transition`), collapsing to `{ duration: 0, start: 1, opacity: 1 }` under reduced motion. Existing `reducedMotion()` and `flyUp(i)` are reused by later tasks.
 - Produces (CSS): token `--t-enter: 180ms cubic-bezier(0.2, 0, 0.2, 1)`.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/motion.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/motion.test.ts`
 
 ```ts
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -88,9 +88,9 @@ describe("motion helpers", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `cd frontend && npx vitest run src/lib/motion.test.ts`. Expected: FAIL (`fadeScaleIn` is not exported).
+- [ ] **Step 2: Run it, verify it fails** - Run: `cd frontend && npx vitest run src/lib/motion.test.ts`. Expected: FAIL (`fadeScaleIn` is not exported).
 
-- [ ] **Step 3: Implement** — append to `frontend/src/lib/motion.ts`:
+- [ ] **Step 3: Implement** - append to `frontend/src/lib/motion.ts`:
 
 ```ts
 // fadeScaleIn returns params for svelte's `scale` transition (a soft fade +
@@ -102,13 +102,13 @@ export function fadeScaleIn(): { duration: number; start: number; opacity: numbe
 }
 ```
 
-- [ ] **Step 4: Add the CSS token** — in `frontend/src/app.css`, in the `:root` block right after the `--t:` line (app.css:63), add:
+- [ ] **Step 4: Add the CSS token** - in `frontend/src/app.css`, in the `:root` block right after the `--t:` line (app.css:63), add:
 
 ```css
   --t-enter: 180ms cubic-bezier(0.2, 0, 0.2, 1);
 ```
 
-- [ ] **Step 5: Run tests, verify pass** — Run: `cd frontend && npx vitest run src/lib/motion.test.ts && npx svelte-check`. Expected: tests PASS, svelte-check 0 errors.
+- [ ] **Step 5: Run tests, verify pass** - Run: `cd frontend && npx vitest run src/lib/motion.test.ts && npx svelte-check`. Expected: tests PASS, svelte-check 0 errors.
 
 - [ ] **Step 6: Commit**
 
@@ -128,9 +128,9 @@ git commit -m "feat(motion): fadeScaleIn helper + --t-enter token (reduced-motio
 - Modify: `frontend/src/app.css` (delete dead `.ic-search*`, `.ic-jump*`, `.gear*` rules; keep `.icon-btn`)
 
 **Interfaces:**
-- Produces: `Icon.svelte` — props `name: string`, `size = 16`. Renders a 24×24 inline `<svg>` with `stroke="currentColor"`, `stroke-width="1.5"`, round caps/joins, `fill="none"`, from an internal `name → path-markup` map. Unknown name → empty `<svg>` (no throw). Names available: `search`, `settings`, `external`, `chevron-down`, `activity`, `check`, `x`, `stop`, `sparkle`, `file`, `terminal`.
+- Produces: `Icon.svelte` - props `name: string`, `size = 16`. Renders a 24×24 inline `<svg>` with `stroke="currentColor"`, `stroke-width="1.5"`, round caps/joins, `fill="none"`, from an internal `name → path-markup` map. Unknown name → empty `<svg>` (no throw). Names available: `search`, `settings`, `external`, `chevron-down`, `activity`, `check`, `x`, `stop`, `sparkle`, `file`, `terminal`.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/Icon.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/Icon.test.ts`
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -157,9 +157,9 @@ describe("Icon", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `cd frontend && npx vitest run src/lib/Icon.test.ts`. Expected: FAIL (module not found).
+- [ ] **Step 2: Run it, verify it fails** - Run: `cd frontend && npx vitest run src/lib/Icon.test.ts`. Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** — `frontend/src/lib/Icon.svelte`:
+- [ ] **Step 3: Implement** - `frontend/src/lib/Icon.svelte`:
 
 ```svelte
 <script lang="ts">
@@ -200,13 +200,13 @@ describe("Icon", () => {
 >{@html inner}</svg>
 ```
 
-- [ ] **Step 4: Run test, verify pass** — Run: `cd frontend && npx vitest run src/lib/Icon.test.ts`. Expected: PASS.
+- [ ] **Step 4: Run test, verify pass** - Run: `cd frontend && npx vitest run src/lib/Icon.test.ts`. Expected: PASS.
 
-- [ ] **Step 5: Swap the header icons** — in `frontend/src/lib/Toolbar.svelte`: add `import Icon from "./Icon.svelte";` to the script. Replace `<span class="ic-search"></span>` (Toolbar.svelte:136) with `<Icon name="search" />` and `<span class="gear"></span>` (Toolbar.svelte:139) with `<Icon name="settings" />`. If a `.ic-jump` span exists in this file, replace it with `<Icon name="external" />`. Leave the `.icon-btn` wrapper buttons and their `title`/`aria-label` unchanged.
+- [ ] **Step 5: Swap the header icons** - in `frontend/src/lib/Toolbar.svelte`: add `import Icon from "./Icon.svelte";` to the script. Replace `<span class="ic-search"></span>` (Toolbar.svelte:136) with `<Icon name="search" />` and `<span class="gear"></span>` (Toolbar.svelte:139) with `<Icon name="settings" />`. If a `.ic-jump` span exists in this file, replace it with `<Icon name="external" />`. Leave the `.icon-btn` wrapper buttons and their `title`/`aria-label` unchanged.
 
-- [ ] **Step 6: Delete dead icon CSS** — in `frontend/src/app.css`, remove the now-unused rules: `.ic-search`, `.ic-search::before`, `.ic-search::after`, `.ic-jump` and their `:hover` variants (app.css:257–296 region), and `.gear`, `.gear::before` (app.css:852–866 region). Keep `.icon-btn` and `.icon-btn:hover`. Do not remove `.dot`/status-dot rules.
+- [ ] **Step 6: Delete dead icon CSS** - in `frontend/src/app.css`, remove the now-unused rules: `.ic-search`, `.ic-search::before`, `.ic-search::after`, `.ic-jump` and their `:hover` variants (app.css:257-296 region), and `.gear`, `.gear::before` (app.css:852-866 region). Keep `.icon-btn` and `.icon-btn:hover`. Do not remove `.dot`/status-dot rules.
 
-- [ ] **Step 7: Verify** — Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: all green, 0 errors. Grep to confirm no dangling refs: `grep -rn "ic-search\|ic-jump\|\bgear\b" src` returns nothing in markup.
+- [ ] **Step 7: Verify** - Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: all green, 0 errors. Grep to confirm no dangling refs: `grep -rn "ic-search\|ic-jump\|\bgear\b" src` returns nothing in markup.
 
 - [ ] **Step 8: Commit**
 
@@ -228,9 +228,9 @@ git commit -m "feat(ui): inline SVG Icon set; replace CSS-drawn toolbar icons"
 - Modify: `main.go` (line 30 `Title`), `wails.json` (`name`)
 
 **Interfaces:**
-- Produces: `Logo.svelte` — prop `size = 20`. Renders the fixed-color "Quiet orbit" brand mark (blue gradient squircle + white F + orbit satellite). Each instance uses a unique gradient id (module counter) so multiple `<Logo/>` on one page don't collide.
+- Produces: `Logo.svelte` - prop `size = 20`. Renders the fixed-color "Quiet orbit" brand mark (blue gradient squircle + white F + orbit satellite). Each instance uses a unique gradient id (module counter) so multiple `<Logo/>` on one page don't collide.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/Logo.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/Logo.test.ts`
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -257,9 +257,9 @@ describe("Logo", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `cd frontend && npx vitest run src/lib/Logo.test.ts`. Expected: FAIL (module not found).
+- [ ] **Step 2: Run it, verify it fails** - Run: `cd frontend && npx vitest run src/lib/Logo.test.ts`. Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** — `frontend/src/lib/Logo.svelte`:
+- [ ] **Step 3: Implement** - `frontend/src/lib/Logo.svelte`:
 
 ```svelte
 <script lang="ts" context="module">
@@ -267,7 +267,7 @@ describe("Logo", () => {
 </script>
 
 <script lang="ts">
-  // Fleet brand mark — "Quiet orbit": bold F on a blue gradient squircle with a
+  // Fleet brand mark - "Quiet orbit": bold F on a blue gradient squircle with a
   // satellite tracing a short arc. Fixed brand colors (NOT currentColor): a logo
   // keeps its identity in both themes. Unique gradient id per instance.
   export let size: number = 20;
@@ -293,15 +293,15 @@ describe("Logo", () => {
 </svg>
 ```
 
-- [ ] **Step 4: Run test, verify pass** — Run: `cd frontend && npx vitest run src/lib/Logo.test.ts`. Expected: PASS.
+- [ ] **Step 4: Run test, verify pass** - Run: `cd frontend && npx vitest run src/lib/Logo.test.ts`. Expected: PASS.
 
-- [ ] **Step 5: Wire into the header** — in `frontend/src/lib/Toolbar.svelte`: add `import Logo from "./Logo.svelte";`. Replace `<span class="brand-dot"></span>` (Toolbar.svelte:54) with `<Logo size={20} />`. Change `<span class="brand-name">fleet</span>` (Toolbar.svelte:55) to `<span class="brand-name">Fleet</span>`.
+- [ ] **Step 5: Wire into the header** - in `frontend/src/lib/Toolbar.svelte`: add `import Logo from "./Logo.svelte";`. Replace `<span class="brand-dot"></span>` (Toolbar.svelte:54) with `<Logo size={20} />`. Change `<span class="brand-name">fleet</span>` (Toolbar.svelte:55) to `<span class="brand-name">Fleet</span>`.
 
-- [ ] **Step 6: Wire into the three modal headers** — in each of `AddProjectModal.svelte:49`, `DiffModal.svelte:60`, `SettingsModal.svelte:140`: add `import Logo from "./Logo.svelte";` and replace `<span class="brand-dot"></span>` with `<Logo size={16} />`.
+- [ ] **Step 6: Wire into the three modal headers** - in each of `AddProjectModal.svelte:49`, `DiffModal.svelte:60`, `SettingsModal.svelte:140`: add `import Logo from "./Logo.svelte";` and replace `<span class="brand-dot"></span>` with `<Logo size={16} />`.
 
-- [ ] **Step 7: Delete dead CSS + capitalize app name** — in `frontend/src/app.css` remove the `.brand-dot` rule(s). In `main.go` line 30 change `Title:  "fleet",` to `Title:  "Fleet",`. In `wails.json` change `"name": "fleet",` to `"name": "Fleet",`. Leave `"outputfilename": "fleet"` unchanged (exe stays `fleet.exe`).
+- [ ] **Step 7: Delete dead CSS + capitalize app name** - in `frontend/src/app.css` remove the `.brand-dot` rule(s). In `main.go` line 30 change `Title:  "fleet",` to `Title:  "Fleet",`. In `wails.json` change `"name": "fleet",` to `"name": "Fleet",`. Leave `"outputfilename": "fleet"` unchanged (exe stays `fleet.exe`).
 
-- [ ] **Step 8: Verify** — Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green, 0 errors. Grep confirms no dangling `brand-dot`: `grep -rn "brand-dot" src` returns nothing. Confirm Go still builds: `cd .. && go build ./...` exit 0.
+- [ ] **Step 8: Verify** - Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green, 0 errors. Grep confirms no dangling `brand-dot`: `grep -rn "brand-dot" src` returns nothing. Confirm Go still builds: `cd .. && go build ./...` exit 0.
 
 - [ ] **Step 9: Commit**
 
@@ -322,17 +322,17 @@ git commit -m "feat(brand): Fleet logo mark + capitalized name across header, mo
 - Consumes: bindings `AgentAvailable, AgentConsent, GiveAgentConsent, AgentAsk, ApproveAction, CancelAgent` from `../../wailsjs/go/main/App`; `EventsOn` from `../../wailsjs/runtime/runtime`.
 - Produces: a module with these exports (Svelte `writable` stores + functions):
   - Stores: `available: Writable<boolean>`, `consent: Writable<boolean>`, `running: Writable<boolean>`, `stream: Writable<string>`, `activity: Writable<{tool:string; input:string}[]>`, `pending: Writable<{id:string; toolName:string; toolInput:string} | null>`, `cost: Writable<{costUsd:number; inputTokens:number; outputTokens:number} | null>`, `turns: Writable<{role:"user"|"assistant"; text:string}[]>`, `overlayOpen: Writable<boolean>`.
-  - `initAgentSession(): Promise<void>` — idempotently subscribe to the five `agent:*` events once and refresh `available`/`consent`. Safe to call from `onMount`.
-  - `setProject(p: {path:string; repoPath?:string; name?:string} | null): void` — on a path change, cancel any live run (`CancelAgent` + bump generation), clear run state, load that repo's saved `turns`. Null clears.
-  - `giveConsent(): Promise<string>` — calls `GiveAgentConsent`; on empty (success) sets `consent=true`; returns the error string (or "").
-  - `ask(q: string): Promise<void>` — append the user turn, mark running, capture run identity, call `AgentAsk(repoPath||path, q)`; on stale/error handle like RepoChat's `askAgent`.
-  - `decide(approved: boolean): Promise<void>` — the `ApproveAction(id, approved)` round-trip with the double-click guard.
-  - `cancel(): void` — `CancelAgent` + bump generation + clear run state.
-  - `openOverlay(p): void` / `closeOverlay(): void` — set `overlayOpen`; `openOverlay` also calls `setProject(p)`. `closeOverlay` does NOT cancel the run.
+  - `initAgentSession(): Promise<void>` - idempotently subscribe to the five `agent:*` events once and refresh `available`/`consent`. Safe to call from `onMount`.
+  - `setProject(p: {path:string; repoPath?:string; name?:string} | null): void` - on a path change, cancel any live run (`CancelAgent` + bump generation), clear run state, load that repo's saved `turns`. Null clears.
+  - `giveConsent(): Promise<string>` - calls `GiveAgentConsent`; on empty (success) sets `consent=true`; returns the error string (or "").
+  - `ask(q: string): Promise<void>` - append the user turn, mark running, capture run identity, call `AgentAsk(repoPath||path, q)`; on stale/error handle like RepoChat's `askAgent`.
+  - `decide(approved: boolean): Promise<void>` - the `ApproveAction(id, approved)` round-trip with the double-click guard.
+  - `cancel(): void` - `CancelAgent` + bump generation + clear run state.
+  - `openOverlay(p): void` / `closeOverlay(): void` - set `overlayOpen`; `openOverlay` also calls `setProject(p)`. `closeOverlay` does NOT cancel the run.
 
-This lifts, unchanged in behavior, the agentic half of `RepoChat.svelte` (lines 24–146, 166–211 for chat persistence, and the `agent:*` handlers in `onMount`). Read `RepoChat.svelte` for the exact current logic; preserve the `agentStale()` scoping (`runPath`/`runGen` vs current project + generation), the per-repo `fleet.chat:<path>` persistence (`slice(-20)`), and the fail-safe/double-click guards.
+This lifts, unchanged in behavior, the agentic half of `RepoChat.svelte` (lines 24-146, 166-211 for chat persistence, and the `agent:*` handlers in `onMount`). Read `RepoChat.svelte` for the exact current logic; preserve the `agentStale()` scoping (`runPath`/`runGen` vs current project + generation), the per-repo `fleet.chat:<path>` persistence (`slice(-20)`), and the fail-safe/double-click guards.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/agentSession.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/agentSession.test.ts`
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -400,9 +400,9 @@ describe("agentSession", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `cd frontend && npx vitest run src/lib/agentSession.test.ts`. Expected: FAIL (module not found).
+- [ ] **Step 2: Run it, verify it fails** - Run: `cd frontend && npx vitest run src/lib/agentSession.test.ts`. Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** — `frontend/src/lib/agentSession.ts`:
+- [ ] **Step 3: Implement** - `frontend/src/lib/agentSession.ts`:
 
 ```ts
 import { writable, get } from "svelte/store";
@@ -515,22 +515,22 @@ export function openOverlay(p: Proj): void { setProject(p); overlayOpen.set(true
 export function closeOverlay(): void { overlayOpen.set(false); } // does NOT cancel the run
 ```
 
-> Note for the implementer: this module intentionally omits `toastError` (a component concern). `ask`/`giveConsent` return the error string; callers (RepoChat launcher / AgentOverlay) surface toasts. Behavior otherwise mirrors `RepoChat.svelte` lines 24–211.
+> Note for the implementer: this module intentionally omits `toastError` (a component concern). `ask`/`giveConsent` return the error string; callers (RepoChat launcher / AgentOverlay) surface toasts. Behavior otherwise mirrors `RepoChat.svelte` lines 24-211.
 
-- [ ] **Step 4: Run tests, verify pass** — Run: `cd frontend && npx vitest run src/lib/agentSession.test.ts`. Expected: PASS (3/3).
+- [ ] **Step 4: Run tests, verify pass** - Run: `cd frontend && npx vitest run src/lib/agentSession.test.ts`. Expected: PASS (3/3).
 
-- [ ] **Step 5: Verify types** — Run: `cd frontend && npx svelte-check`. Expected: 0 errors.
+- [ ] **Step 5: Verify types** - Run: `cd frontend && npx svelte-check`. Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add frontend/src/lib/agentSession.ts frontend/src/lib/agentSession.test.ts
-git commit -m "feat(agent): agentSession store — lift agentic run state/events out of RepoChat"
+git commit -m "feat(agent): agentSession store - lift agentic run state/events out of RepoChat"
 ```
 
 ---
 
-## Task 5: AgentOverlay — wide focused session UI
+## Task 5: AgentOverlay - wide focused session UI
 
 **Files:**
 - Create: `frontend/src/lib/AgentOverlay.svelte`
@@ -538,9 +538,9 @@ git commit -m "feat(agent): agentSession store — lift agentic run state/events
 
 **Interfaces:**
 - Consumes: `agentSession` stores + `giveConsent/ask/decide/cancel/closeOverlay`; `motion.fadeScaleIn`, `motion.flyUp`; `Icon`, `Logo`; `renderBrief` from `./markdown`; `toastError` from `./toasts`.
-- Produces: `AgentOverlay.svelte` — no props needed beyond reading the store; renders only when `overlayOpen` is true. Backdrop + centered panel; header (`<Logo/>` + `<name> · agentic deep-dive` + close `<Icon name="x"/>`); body = consent card (if `!consent`), activity feed (`flyUp` stagger), thread (`renderBrief`), approval card (`fadeScaleIn`), footer (cost + Cancel), input row. Esc / backdrop / ✕ → `closeOverlay()` (never cancels). Approve/Reject → `decide(true|false)`.
+- Produces: `AgentOverlay.svelte` - no props needed beyond reading the store; renders only when `overlayOpen` is true. Backdrop + centered panel; header (`<Logo/>` + `<name> · agentic deep-dive` + close `<Icon name="x"/>`); body = consent card (if `!consent`), activity feed (`flyUp` stagger), thread (`renderBrief`), approval card (`fadeScaleIn`), footer (cost + Cancel), input row. Esc / backdrop / ✕ → `closeOverlay()` (never cancels). Approve/Reject → `decide(true|false)`.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/AgentOverlay.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/AgentOverlay.test.ts`
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -582,9 +582,9 @@ describe("AgentOverlay", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `cd frontend && npx vitest run src/lib/AgentOverlay.test.ts`. Expected: FAIL (module not found).
+- [ ] **Step 2: Run it, verify it fails** - Run: `cd frontend && npx vitest run src/lib/AgentOverlay.test.ts`. Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** — `frontend/src/lib/AgentOverlay.svelte`. Move the agentic markup from `RepoChat.svelte` lines 365–397 (activity / stream / approval / cost) into the panel body, wire it to the `agentSession` stores, and add the overlay shell + motion. Full component:
+- [ ] **Step 3: Implement** - `frontend/src/lib/AgentOverlay.svelte`. Move the agentic markup from `RepoChat.svelte` lines 365-397 (activity / stream / approval / cost) into the panel body, wire it to the `agentSession` stores, and add the overlay shell + motion. Full component:
 
 ```svelte
 <script lang="ts">
@@ -747,15 +747,15 @@ describe("AgentOverlay", () => {
 </style>
 ```
 
-- [ ] **Step 4: Run tests, verify pass** — Run: `cd frontend && npx vitest run src/lib/AgentOverlay.test.ts`. Expected: PASS (2/2).
+- [ ] **Step 4: Run tests, verify pass** - Run: `cd frontend && npx vitest run src/lib/AgentOverlay.test.ts`. Expected: PASS (2/2).
 
-- [ ] **Step 5: Verify types** — Run: `cd frontend && npx svelte-check`. Expected: 0 errors.
+- [ ] **Step 5: Verify types** - Run: `cd frontend && npx svelte-check`. Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add frontend/src/lib/AgentOverlay.svelte frontend/src/lib/AgentOverlay.test.ts
-git commit -m "feat(ui): AgentOverlay — wide focused agentic session with entrance motion"
+git commit -m "feat(ui): AgentOverlay - wide focused agentic session with entrance motion"
 ```
 
 ---
@@ -770,8 +770,8 @@ git commit -m "feat(ui): AgentOverlay — wide focused agentic session with entr
 - Consumes: `agentSession` (`available, consent, running, turns, giveConsent, openOverlay, setProject`), `AgentOverlay`.
 - Produces: Ask-AI tab shows a launcher when `available`; the live session opens in the overlay. Single-shot fallback (non-agentic) unchanged.
 
-- [ ] **Step 1: RepoChat — remove the agentic run internals, add the launcher.** In `frontend/src/lib/RepoChat.svelte`:
-  - Delete the agentic state and functions now owned by the store: lines 24–43 (agentic locals + `agentStale`), 45–52 keep `fmtInput` only if still used (it is not after this change — remove it), the five `agent:*` `EventsOn` pushes and the `AgentAvailable/AgentConsent` reads in `onMount` (lines 54–94 → keep `onMount` only if other setup remains; otherwise remove), `giveConsent` (98–102), `askAgent` (104–127), `decide` (129–139), `cancelAgent` (141–146), and the agentic branch of the project-switch reactive block (172–183, keep the single-shot resets).
+- [ ] **Step 1: RepoChat - remove the agentic run internals, add the launcher.** In `frontend/src/lib/RepoChat.svelte`:
+  - Delete the agentic state and functions now owned by the store: lines 24-43 (agentic locals + `agentStale`), 45-52 keep `fmtInput` only if still used (it is not after this change - remove it), the five `agent:*` `EventsOn` pushes and the `AgentAvailable/AgentConsent` reads in `onMount` (lines 54-94 → keep `onMount` only if other setup remains; otherwise remove), `giveConsent` (98-102), `askAgent` (104-127), `decide` (129-139), `cancelAgent` (141-146), and the agentic branch of the project-switch reactive block (172-183, keep the single-shot resets).
   - Import the store: `import { available, consent, running, turns as agentTurns, giveConsent, openOverlay, setProject as agentSetProject } from "./agentSession";` and `import { initAgentSession } from "./agentSession";`. In `onMount`, call `await initAgentSession();`.
   - Keep everything for the single-shot path: `ask`, `buildContext`, `buildPrompt`, `parseTool`, `runTool`, `loadChat/saveChat/clearChat`, `turns` (single-shot), `loading`, `genId`, `cancelAsk`, `STARTERS`, `langName`.
   - Change `dispatch(text)` so the agentic branch opens the overlay instead of running inline:
@@ -784,13 +784,13 @@ git commit -m "feat(ui): AgentOverlay — wide focused agentic session with entr
 ```
 
   - Drive the store's project scope from this component's reactive block (so a project switch cancels a live agentic run even while the overlay is closed): in the `$: if (project && project.path !== loadedPath)` block, add `agentSetProject(project);` (alongside the existing single-shot resets).
-  - Replace the markup's agentic sections (current lines 354–397) with a launcher shown when agentic is available:
+  - Replace the markup's agentic sections (current lines 354-397) with a launcher shown when agentic is available:
 
 ```svelte
   {#if $available}
     <div class="rchat-launch">
       {#if !$consent}
-        <p class="rchat-hint">Agentic deep-dive — Claude Code reads this repo (you approve every edit/command). Opens in a focused view.</p>
+        <p class="rchat-hint">Agentic deep-dive - Claude Code reads this repo (you approve every edit/command). Opens in a focused view.</p>
       {/if}
       <button class="btn btn-primary btn-sm" on:click={() => { agentSetProject(project); openOverlay(project); }}>
         {$running ? "Resume agentic deep-dive…" : "Open agentic deep-dive"}
@@ -800,16 +800,16 @@ git commit -m "feat(ui): AgentOverlay — wide focused agentic session with entr
   {/if}
 ```
 
-  Keep the single-shot intro/thread/input markup (lines 399–447) as the fallback, but guard the "single-shot mode" note so it only shows when NOT agentic (it already keys off `!agentic`; change to `{#if !$available}`). Add minimal CSS for `.rchat-launch` (a bordered block, gap 8px) and `.rchat-run-dot` (a small pulsing `var(--accent)` dot — gate any pulse with `@media (prefers-reduced-motion: reduce) { animation: none; }`).
+  Keep the single-shot intro/thread/input markup (lines 399-447) as the fallback, but guard the "single-shot mode" note so it only shows when NOT agentic (it already keys off `!agentic`; change to `{#if !$available}`). Add minimal CSS for `.rchat-launch` (a bordered block, gap 8px) and `.rchat-run-dot` (a small pulsing `var(--accent)` dot - gate any pulse with `@media (prefers-reduced-motion: reduce) { animation: none; }`).
 
-- [ ] **Step 2: App.svelte — mount the overlay once and scope it.** In `frontend/src/App.svelte`:
+- [ ] **Step 2: App.svelte - mount the overlay once and scope it.** In `frontend/src/App.svelte`:
   - `import AgentOverlay from "./lib/AgentOverlay.svelte";` and `import { setProject as agentSetProject } from "./lib/agentSession";`.
   - The selected project is the existing `$: selected = projects.find((p) => p.id === selectedId) || null;` (App.svelte:147). Render the overlay once at the template top level, next to `<Toasts />` (App.svelte:760, outside the `view` conditionals so it persists across view switches): `<AgentOverlay projectName={selected?.name ?? ""} />`.
   - Add a reactive statement so changing (or clearing) the selection cancels a live run and rescopes the store: `$: agentSetProject(selected);` (`selected` is already `… || null`).
 
-- [ ] **Step 3: Verify build + types + tests** — Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: all green, 0 errors. Then confirm the whole app compiles: `cd .. && wails build`. Expected: builds `fleet.exe`.
+- [ ] **Step 3: Verify build + types + tests** - Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: all green, 0 errors. Then confirm the whole app compiles: `cd .. && wails build`. Expected: builds `fleet.exe`.
 
-- [ ] **Step 4: Manual smoke (documented, not automated)** — Launch `build/bin/fleet.exe`, open a project → Ask AI tab shows the launcher; clicking opens the overlay; Esc/backdrop/✕ closes without cancelling; switching project while a run is live cancels it. (This leg is inherently manual — record the result in the task report.)
+- [ ] **Step 4: Manual smoke (documented, not automated)** - Launch `build/bin/fleet.exe`, open a project → Ask AI tab shows the launcher; clicking opens the overlay; Esc/backdrop/✕ closes without cancelling; switching project while a run is live cancels it. (This leg is inherently manual - record the result in the task report.)
 
 - [ ] **Step 5: Commit**
 
@@ -829,7 +829,7 @@ git commit -m "feat(ui): Ask AI launches the agentic overlay; single-shot stays 
 - Consumes: `svelte/transition` `fade`, `motion.reducedMotion`.
 - Produces: the pill's state block cross-fades between `offline | syncing | synced | error | signedout`; the `.spinner` still spins only in `syncing`; `min-width` unchanged (no layout shift).
 
-- [ ] **Step 1: Implement** — in `frontend/src/lib/SyncPill.svelte`: `import { fade } from "svelte/transition";` and `import { reducedMotion } from "./motion";`. Add a helper `$: fadeMs = reducedMotion() ? 0 : 140;`. Wrap each state branch's content in a keyed block so a state change triggers the transition — restructure the `{#if}` chain to key on `state`:
+- [ ] **Step 1: Implement** - in `frontend/src/lib/SyncPill.svelte`: `import { fade } from "svelte/transition";` and `import { reducedMotion } from "./motion";`. Add a helper `$: fadeMs = reducedMotion() ? 0 : 140;`. Wrap each state branch's content in a keyed block so a state change triggers the transition - restructure the `{#if}` chain to key on `state`:
 
 ```svelte
 {#key state}
@@ -853,7 +853,7 @@ git commit -m "feat(ui): Ask AI launches the agentic overlay; single-shot stays 
 
 Add `.pill-inner { display: inline-flex; align-items: center; gap: 7px; }` and keep the outer `.pill`'s existing `min-width`/layout so width stays stable across states.
 
-- [ ] **Step 2: Verify** — Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green (existing tests unaffected), 0 errors. Confirm each state still renders (server-render assertion optional): the `{#key}` block must not change which literal strings appear (`Syncing…`, `Synced`, `Offline`, `Sync error`, `Sign in to sync`).
+- [ ] **Step 2: Verify** - Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green (existing tests unaffected), 0 errors. Confirm each state still renders (server-render assertion optional): the `{#key}` block must not change which literal strings appear (`Syncing…`, `Synced`, `Offline`, `Sync error`, `Sign in to sync`).
 
 - [ ] **Step 3: Commit**
 
@@ -874,13 +874,13 @@ git commit -m "feat(ui): SyncPill cross-fades between states (reduced-motion gat
 **Interfaces:**
 - Consumes: `svelte/transition` (`fly`, `scale`, `fade`), `motion.flyUp`, `motion.fadeScaleIn`.
 
-- [ ] **Step 1: ProjectTable rows** — in `frontend/src/lib/ProjectTable.svelte`: `import { fly } from "svelte/transition";` and `import { flyUp } from "./motion";`. On the repeated row element inside the `{#each}` of table rows, add `in:fly|local={flyUp(i)}` (bind the index as `{#each rows as row, i}` if not already). This staggers rows on load and on filter change; `flyUp` already caps the delay at index 8 so large lists stay snappy.
+- [ ] **Step 1: ProjectTable rows** - in `frontend/src/lib/ProjectTable.svelte`: `import { fly } from "svelte/transition";` and `import { flyUp } from "./motion";`. On the repeated row element inside the `{#each}` of table rows, add `in:fly|local={flyUp(i)}` (bind the index as `{#each rows as row, i}` if not already). This staggers rows on load and on filter change; `flyUp` already caps the delay at index 8 so large lists stay snappy.
 
-- [ ] **Step 2: DetailPanel enter** — in `frontend/src/lib/DetailPanel.svelte`: `import { scale } from "svelte/transition";` and `import { fadeScaleIn } from "./motion";`. On the root `<aside class="detail">` (DetailPanel.svelte:104), add `transition:scale={fadeScaleIn()}` so the panel eases in when a project is selected and out when cleared.
+- [ ] **Step 2: DetailPanel enter** - in `frontend/src/lib/DetailPanel.svelte`: `import { scale } from "svelte/transition";` and `import { fadeScaleIn } from "./motion";`. On the root `<aside class="detail">` (DetailPanel.svelte:104), add `transition:scale={fadeScaleIn()}` so the panel eases in when a project is selected and out when cleared.
 
-- [ ] **Step 3: Graph fade-in** — in `frontend/src/lib/Graph.svelte`: `import { fade } from "svelte/transition";` and `import { reducedMotion } from "./motion";`. On the graph's top-level container element, add `in:fade={{ duration: reducedMotion() ? 0 : 200 }}`. Do not touch the existing force-simulation code.
+- [ ] **Step 3: Graph fade-in** - in `frontend/src/lib/Graph.svelte`: `import { fade } from "svelte/transition";` and `import { reducedMotion } from "./motion";`. On the graph's top-level container element, add `in:fade={{ duration: reducedMotion() ? 0 : 200 }}`. Do not touch the existing force-simulation code.
 
-- [ ] **Step 4: Verify** — Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green, 0 errors. Then `cd .. && wails build` succeeds.
+- [ ] **Step 4: Verify** - Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green, 0 errors. Then `cd .. && wails build` succeeds.
 
 - [ ] **Step 5: Commit**
 

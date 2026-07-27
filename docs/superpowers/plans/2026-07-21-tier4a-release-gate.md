@@ -124,7 +124,7 @@ jobs:
 
 Why each choice, so a reviewer can check it:
 - `branches: ["**"]` matches branch pushes but not tags. Without it a `v*` tag would run this workflow twice: once on its own and once through `release.yml`'s `workflow_call`.
-- No `paths:` filter anywhere. That is the entire point of the task — `server.yml:4-19` has one, which is why the desktop tree has never been tested by CI.
+- No `paths:` filter anywhere. That is the entire point of the task - `server.yml:4-19` has one, which is why the desktop tree has never been tested by CI.
 - `-race` on Linux only: the Windows race detector needs a cgo toolchain, and `internal/git` already takes ~14s there because it shells out to real git.
 - `gofmt` on Linux only: gofmt is platform-independent, so a second run buys nothing.
 - `fail-fast: false`: a Windows-only failure must not hide a Linux-only one.
@@ -199,9 +199,9 @@ git commit -m "ci(desktop): test the desktop tree on every push and gate release
 
 **Interfaces:**
 - Consumes: nothing from Task 1.
-- Produces: `func (a *App) focus()` — raises and shows the main window; no-op when `a.ctx` is nil.
+- Produces: `func (a *App) focus()` - raises and shows the main window; no-op when `a.ctx` is nil.
 
-Background a reviewer needs: two fleet processes hold divergent full in-memory copies of every local store and rewrite each file whole on mutation (`app.go:118-131`), so the last writer silently destroys the other's projects, tasks, tags and deadlines. wails' `SingleInstanceLock` makes the second process exit inside `SetupSingleInstance`, called at the top of `Frontend.Run` — before `OnStartup` is dispatched, so the second process never starts the 60s sync loop.
+Background a reviewer needs: two fleet processes hold divergent full in-memory copies of every local store and rewrite each file whole on mutation (`app.go:118-131`), so the last writer silently destroys the other's projects, tasks, tags and deadlines. wails' `SingleInstanceLock` makes the second process exit inside `SetupSingleInstance`, called at the top of `Frontend.Run` - before `OnStartup` is dispatched, so the second process never starts the 60s sync loop.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -301,7 +301,7 @@ git commit -m "feat(app): single-instance lock so a second launch cannot clobber
 
 **Interfaces:**
 - Consumes: nothing from Tasks 1-2.
-- Produces: `func validateSigningKey(key []byte) error` — nil when the key is at least 32 bytes and has at least 8 distinct byte values.
+- Produces: `func validateSigningKey(key []byte) error` - nil when the key is at least 32 bytes and has at least 8 distinct byte values.
 
 Background: a short or dictionary secret boots cleanly and looks healthy forever, and every legitimately issued 15-minute token is then an offline cracking oracle for minting `sub=<any user id>`.
 
@@ -415,7 +415,7 @@ git commit -m "feat(server): refuse to boot on a short or low-entropy JWT_SIGNIN
 - Modify: `README.md:7-22` and `README.md:44`
 
 **Interfaces:**
-- Consumes: the signing-key floor from Task 3 (32 bytes) — the env table must state the same number.
+- Consumes: the signing-key floor from Task 3 (32 bytes) - the env table must state the same number.
 - Produces: nothing other tasks depend on.
 
 - [ ] **Step 1: Replace the run and build sections**
@@ -492,5 +492,5 @@ git commit -m "docs(readme): all three platforms, per-OS config path, claude CLI
 These cannot be checked before the workflows exist on the default branch. Do them once the branch lands:
 
 - [ ] Push and confirm three checks appear and go green: `desktop / go (windows-latest)`, `desktop / go (ubuntu-latest)`, `desktop / frontend`.
-- [ ] Confirm the Linux Go leg does not fail on `gofmt` — if it does, do NOT run `gofmt -w`; check whether the failure is line endings (`.gitattributes` should have forced LF) before touching any file.
+- [ ] Confirm the Linux Go leg does not fail on `gofmt` - if it does, do NOT run `gofmt -w`; check whether the failure is line endings (`.gitattributes` should have forced LF) before touching any file.
 - [ ] Push a throwaway tag (`git tag v0.0.0-test && git push origin v0.0.0-test`) and confirm the release run shows `test` completing before `build` starts. Delete the tag and its draft release afterwards.

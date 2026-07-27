@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let the agentic deep-dive carry a change to a pull request (commit/push/PR, each user-approved; default-branch push always blocked) and turn the approval moment into a real code review — readable diff, plain-language summary, severity badge.
+**Goal:** Let the agentic deep-dive carry a change to a pull request (commit/push/PR, each user-approved; default-branch push always blocked) and turn the approval moment into a real code review - readable diff, plain-language summary, severity badge.
 
 **Architecture:** A pure, server-side action **classifier** (`internal/agent/classify.go`) becomes the single policy brain: fleet's `ApprovalServer` classifies every gated tool call, auto-denies dangerous ones (default-branch push, shell secret-reads) without ever asking, and hands the rest to the GUI enriched with `category/severity/summary`. The overlay renders that as a review. No new dependencies; the gate stays fail-closed.
 
@@ -22,23 +22,23 @@ Copy verbatim from the spec `docs/superpowers/specs/2026-07-11-fleet-agent-harde
 
 ## Commit authorship (all tasks)
 
-Commit with `git -c user.name=hoijun -c user.email=hoijun.kim00@gmail.com commit -m "…"` — NO `Co-Authored-By`/Claude trailer.
+Commit with `git -c user.name=hoijun -c user.email=hoijun.kim00@gmail.com commit -m "…"` - NO `Co-Authored-By`/Claude trailer.
 
 ---
 
 ## File Structure
 
-- `internal/agent/classify.go` (new) — pure classifier (Task 1).
-- `internal/agent/classify_test.go` (new) — exhaustive table (Task 1).
-- `internal/agent/approve.go` — classifier wiring, `ActionRequest` fields, auto-deny (Task 2).
-- `internal/agent/policy.go` — `git push` out of disallow, secret globs (Task 2).
-- `internal/agent/approve_test.go`, `policy_test.go` — extend (Task 2).
-- `app.go` — inject classify closure that live-resolves the branch (Task 2).
-- `internal/git/*` — reuse or add `CurrentBranch(dir)` (Task 2).
-- `frontend/src/lib/agentAction.ts` (new) + `agentAction.test.ts` (new) — parse a gated action into a renderable shape (Task 3).
-- `frontend/src/lib/AgentOverlay.svelte` — review card + outcome line (Task 4).
-- `frontend/src/lib/agentSession.ts` — `pending` carries category/severity/summary; outcome line; `__reset()` (Task 4).
-- `frontend/src/app.css` — badge/diff styles (Task 4).
+- `internal/agent/classify.go` (new) - pure classifier (Task 1).
+- `internal/agent/classify_test.go` (new) - exhaustive table (Task 1).
+- `internal/agent/approve.go` - classifier wiring, `ActionRequest` fields, auto-deny (Task 2).
+- `internal/agent/policy.go` - `git push` out of disallow, secret globs (Task 2).
+- `internal/agent/approve_test.go`, `policy_test.go` - extend (Task 2).
+- `app.go` - inject classify closure that live-resolves the branch (Task 2).
+- `internal/git/*` - reuse or add `CurrentBranch(dir)` (Task 2).
+- `frontend/src/lib/agentAction.ts` (new) + `agentAction.test.ts` (new) - parse a gated action into a renderable shape (Task 3).
+- `frontend/src/lib/AgentOverlay.svelte` - review card + outcome line (Task 4).
+- `frontend/src/lib/agentSession.ts` - `pending` carries category/severity/summary; outcome line; `__reset()` (Task 4).
+- `frontend/src/app.css` - badge/diff styles (Task 4).
 - `.gitattributes` (new) + small GUI Minors (Task 5).
 
 ---
@@ -52,7 +52,7 @@ Commit with `git -c user.name=hoijun -c user.email=hoijun.kim00@gmail.com commit
 **Interfaces:**
 - Produces: `Category` (`"edit"|"shell"|"remote"`), `Severity` (`"low"|"medium"|"high"`), `ClassifyContext{CurrentBranch string; ProtectedBranches []string}`, `Verdict{Decision string /* "gate"|"deny" */; Reason string; Category Category; Severity Severity; Summary string}`, and `func Classify(toolName string, toolInput json.RawMessage, ctx ClassifyContext) Verdict`. Also exports `func DefaultProtectedBranches() []string` = `["main","master"]`.
 
-- [ ] **Step 1: Write the failing test** — `internal/agent/classify_test.go`
+- [ ] **Step 1: Write the failing test** - `internal/agent/classify_test.go`
 
 ```go
 package agent
@@ -142,9 +142,9 @@ func TestClassifyFailClosed(t *testing.T) {
 func jsonStr(s string) string { b, _ := json.Marshal(s); return string(b) }
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `go test ./internal/agent/ -run TestClassify`. Expected: FAIL (undefined: Classify).
+- [ ] **Step 2: Run it, verify it fails** - Run: `go test ./internal/agent/ -run TestClassify`. Expected: FAIL (undefined: Classify).
 
-- [ ] **Step 3: Implement** — `internal/agent/classify.go`:
+- [ ] **Step 3: Implement** - `internal/agent/classify.go`:
 
 ```go
 package agent
@@ -371,9 +371,9 @@ func truncate(s string, n int) string {
 }
 ```
 
-- [ ] **Step 4: Run tests, verify pass** — Run: `go test ./internal/agent/ -run TestClassify -v`. Expected: all Classify tests PASS.
+- [ ] **Step 4: Run tests, verify pass** - Run: `go test ./internal/agent/ -run TestClassify -v`. Expected: all Classify tests PASS.
 
-- [ ] **Step 5: Vet + full agent package** — Run: `go vet ./internal/agent/ && go test ./internal/agent/`. Expected: clean, green.
+- [ ] **Step 5: Vet + full agent package** - Run: `go vet ./internal/agent/ && go test ./internal/agent/`. Expected: clean, green.
 
 - [ ] **Step 6: Commit**
 
@@ -397,7 +397,7 @@ git commit -m "feat(agent): action classifier - gate/deny with category, severit
 - Consumes: `Classify`, `Verdict`, `ClassifyContext`, `DefaultProtectedBranches` (Task 1).
 - Produces: `ActionRequest` gains `Category Category`, `Severity Severity`, `Summary string` (json `category/severity/summary`). `NewApprovalServer` gains a final param `classify func(toolName string, toolInput json.RawMessage, cwd string) Verdict`; when nil, defaults to a gate-everything shim (so existing tests that don't care still gate). A `CurrentBranch(dir string) string` helper in `internal/git` (add if absent; returns "" on error).
 
-- [ ] **Step 1: Extend the policy test (RED)** — in `internal/agent/policy_test.go`, add:
+- [ ] **Step 1: Extend the policy test (RED)** - in `internal/agent/policy_test.go`, add:
 
 ```go
 func TestPolicyPushIsGatedNotDenied(t *testing.T) {
@@ -424,9 +424,9 @@ func TestPolicyPushIsGatedNotDenied(t *testing.T) {
 
 Run: `go test ./internal/agent/ -run TestPolicyPushIsGated`. Expected: FAIL (git push still in Disallowed).
 
-- [ ] **Step 2: Update policy.go** — in `DefaultPolicy`, remove `"Bash(git push:*)"` from `Disallowed`. Keep `"Bash(rm:*)"`, `"Bash(sudo:*)"`, `"Bash(curl:*)"`. Add secret globs to the Read denies: `"Read(**/*token*)"`, `"Read(**/*.p12)"`, `"Read(**/*.pfx)"`, `"Read(**/.netrc)"`, `"Read(**/*.keystore)"`, `"Read(**/*.ovpn)"`. Run the test → PASS.
+- [ ] **Step 2: Update policy.go** - in `DefaultPolicy`, remove `"Bash(git push:*)"` from `Disallowed`. Keep `"Bash(rm:*)"`, `"Bash(sudo:*)"`, `"Bash(curl:*)"`. Add secret globs to the Read denies: `"Read(**/*token*)"`, `"Read(**/*.p12)"`, `"Read(**/*.pfx)"`, `"Read(**/.netrc)"`, `"Read(**/*.keystore)"`, `"Read(**/*.ovpn)"`. Run the test → PASS.
 
-- [ ] **Step 3: Extend approve.go** — add fields to `ActionRequest`:
+- [ ] **Step 3: Extend approve.go** - add fields to `ActionRequest`:
 
 ```go
 type ActionRequest struct {
@@ -492,7 +492,7 @@ func (s *ApprovalServer) handleApprove(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-- [ ] **Step 4: Extend approve_test.go** — add a test that a deny-classified POST answers `{approved:false}` and does NOT fire onAction, and a gate POST does:
+- [ ] **Step 4: Extend approve_test.go** - add a test that a deny-classified POST answers `{approved:false}` and does NOT fire onAction, and a gate POST does:
 
 ```go
 func TestApprovalServerAutoDeniesWithoutAsking(t *testing.T) {
@@ -524,9 +524,9 @@ func TestApprovalServerAutoDeniesWithoutAsking(t *testing.T) {
 
 (Use the existing test file's imports; add `strings`, `net/http`, `encoding/json`, `time`, `context` if missing. A gate-path assertion can reuse the existing round-trip test, updated for the new constructor arity + populated Summary.)
 
-- [ ] **Step 5: Update existing approve_test.go call sites** — every existing `NewApprovalServer(...)` call gains the 5th arg. For tests that just exercise gating, pass `nil` (defaults to gate-everything).
+- [ ] **Step 5: Update existing approve_test.go call sites** - every existing `NewApprovalServer(...)` call gains the 5th arg. For tests that just exercise gating, pass `nil` (defaults to gate-everything).
 
-- [ ] **Step 6: Add `internal/git` current-branch helper** — check `internal/git/ops.go` for an existing current-branch reader; if none, add:
+- [ ] **Step 6: Add `internal/git` current-branch helper** - check `internal/git/ops.go` for an existing current-branch reader; if none, add:
 
 ```go
 // CurrentBranch returns the repo's current branch name, or "" on error/detached.
@@ -539,7 +539,7 @@ func CurrentBranch(dir string) string {
 
 (Match the file's existing git-exec helper name; if the package already exposes an equivalent, reuse it and skip this.)
 
-- [ ] **Step 7: Wire the classifier in app.go** — in `AgentAsk`, pass a classify closure to `NewApprovalServer` that live-resolves the branch from the tool's cwd:
+- [ ] **Step 7: Wire the classifier in app.go** - in `AgentAsk`, pass a classify closure to `NewApprovalServer` that live-resolves the branch from the tool's cwd:
 
 ```go
 	srv := agent.NewApprovalServer(ctx, a.agentCoord, 10*time.Minute,
@@ -555,7 +555,7 @@ func CurrentBranch(dir string) string {
 
 Add imports `encoding/json` and the `internal/git` package if not already imported. The `agent:action` event now carries the new fields automatically (it emits `req`).
 
-- [ ] **Step 8: Verify** — Run: `go build ./... && go vet ./... && go test ./...`. Expected: clean + green (all packages). Confirm `app_test.go`'s agentic tests still pass (they construct/exercise AgentAsk paths).
+- [ ] **Step 8: Verify** - Run: `go build ./... && go vet ./... && go test ./...`. Expected: clean + green (all packages). Confirm `app_test.go`'s agentic tests still pass (they construct/exercise AgentAsk paths).
 
 - [ ] **Step 9: Commit**
 
@@ -580,7 +580,7 @@ git commit -m "feat(agent): approval server classifies actions - auto-deny defau
   - `{ kind: "raw", json: string }` fallback (unparseable)
   `toolInput` may be an object or a JSON string; the parser handles both and never throws.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/agentAction.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/agentAction.test.ts`
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -612,9 +612,9 @@ describe("parseAction", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, verify it fails** — Run: `cd frontend && npx vitest run src/lib/agentAction.test.ts`. Expected: FAIL (module not found).
+- [ ] **Step 2: Run it, verify it fails** - Run: `cd frontend && npx vitest run src/lib/agentAction.test.ts`. Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** — `frontend/src/lib/agentAction.ts`:
+- [ ] **Step 3: Implement** - `frontend/src/lib/agentAction.ts`:
 
 ```ts
 // Normalize a gated agent action into a shape the approval card can render.
@@ -654,9 +654,9 @@ function safeJson(v: any): string {
 }
 ```
 
-- [ ] **Step 4: Run tests, verify pass** — Run: `cd frontend && npx vitest run src/lib/agentAction.test.ts`. Expected: PASS (4/4).
+- [ ] **Step 4: Run tests, verify pass** - Run: `cd frontend && npx vitest run src/lib/agentAction.test.ts`. Expected: PASS (4/4).
 
-- [ ] **Step 5: Verify types** — Run: `cd frontend && npx svelte-check`. Expected: 0 errors.
+- [ ] **Step 5: Verify types** - Run: `cd frontend && npx svelte-check`. Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
 
@@ -680,7 +680,7 @@ git commit -m "feat(ui): agentAction parser - normalize Edit/Write/Bash into a r
 - [ ] **Step 1: agentSession pending + outcome + reset.** In `frontend/src/lib/agentSession.ts`:
   - Widen `pending` to `{ id: string; toolName: string; toolInput: string; category: string; severity: string; summary: string } | null`.
   - In the `agent:action` handler, set `pending` with `category: a?.category ?? "shell"`, `severity: a?.severity ?? "medium"`, `summary: a?.summary ?? ""` alongside the existing fields.
-  - In `decide(approved)`, before clearing `pending`, capture `p.summary` and append an activity line reflecting the decision: `activity.update((x) => [...x, { tool: approved ? "approved" : "rejected", input: p.summary }])`. (The overlay renders `tool==="approved"`/`"rejected"` with an icon — no literal glyphs.)
+  - In `decide(approved)`, before clearing `pending`, capture `p.summary` and append an activity line reflecting the decision: `activity.update((x) => [...x, { tool: approved ? "approved" : "rejected", input: p.summary }])`. (The overlay renders `tool==="approved"`/`"rejected"` with an icon - no literal glyphs.)
   - Add `export function __reset(): void { … }` that resets every store to its initial value and clears module state (`project=null, loadedPath="", gen=0, runPath="", runGen=0, deciding=false`). Do NOT reset `started` (event subscription stays). This is for test isolation only.
 
 - [ ] **Step 2: AgentOverlay review card.** In `frontend/src/lib/AgentOverlay.svelte`, add `import { parseAction } from "./agentAction";` and replace the approval-card block. Compute `$: action = $pending ? parseAction($pending.category, $pending.toolName, $pending.toolInput) : null;`. Render:
@@ -719,7 +719,7 @@ git commit -m "feat(ui): agentAction parser - normalize Edit/Write/Bash into a r
 
 - [ ] **Step 3: Styles.** In `frontend/src/app.css`, add `.ov-cat` badge styles (small uppercase pill; `.ov-cat-edit` accent, `.ov-cat-shell` amber, `.ov-cat-remote` a distinct high-risk hue), `.sev-high` a stronger left border on the card, `.ov-diff`/`.ov-del`/`.ov-add`/`.ov-diff-file`/`.ov-cmd` (monospace, `overflow-x: auto`, red/green tints via existing `--err`/`--ok` tokens at low alpha). Keep it consistent with existing `.ov-*` tokens.
 
-- [ ] **Step 4: Verify** — Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green, 0 errors. Then `cd .. && wails build` succeeds.
+- [ ] **Step 4: Verify** - Run: `cd frontend && npx vitest run && npx svelte-check`. Expected: green, 0 errors. Then `cd .. && wails build` succeeds.
 
 - [ ] **Step 5: Commit**
 
@@ -736,7 +736,7 @@ git commit -m "feat(ui): approval card as a review - severity badge, readable di
 - Create: `.gitattributes`
 - Modify: `frontend/src/app.css` (`.ic-jump` comment), `frontend/src/lib/AgentOverlay.svelte` (remove redundant backdrop `on:keydown`), plus the `…` -> `...` unification where UI copy uses an ellipsis glyph.
 
-- [ ] **Step 1: `.gitattributes`** — create at repo root to stop the LF/CRLF phantom-modified churn:
+- [ ] **Step 1: `.gitattributes`** - create at repo root to stop the LF/CRLF phantom-modified churn:
 
 ```gitattributes
 * text=auto eol=lf
@@ -745,15 +745,15 @@ git commit -m "feat(ui): approval card as a review - severity badge, readable di
 *.exe binary
 ```
 
-Then renormalize: `git add --renormalize .` and confirm the previously phantom-modified `frontend/wailsjs/**`, `go.mod` no longer show as modified after a clean status. Do NOT commit unrelated content changes — only the renormalization + `.gitattributes`.
+Then renormalize: `git add --renormalize .` and confirm the previously phantom-modified `frontend/wailsjs/**`, `go.mod` no longer show as modified after a clean status. Do NOT commit unrelated content changes - only the renormalization + `.gitattributes`.
 
-- [ ] **Step 2: `.ic-jump` comment** — in `frontend/src/app.css`, add `/* Command-palette key hint */` above the `.ic-jump` rule.
+- [ ] **Step 2: `.ic-jump` comment** - in `frontend/src/app.css`, add `/* Command-palette key hint */` above the `.ic-jump` rule.
 
-- [ ] **Step 3: Remove the redundant backdrop keydown** — in `frontend/src/lib/AgentOverlay.svelte`, remove the leftover `on:keydown={onOverlayKey}` on the `<div class="ov-backdrop">` (the window-level handler already covers Escape). Keep the div's other attributes.
+- [ ] **Step 3: Remove the redundant backdrop keydown** - in `frontend/src/lib/AgentOverlay.svelte`, remove the leftover `on:keydown={onOverlayKey}` on the `<div class="ov-backdrop">` (the window-level handler already covers Escape). Keep the div's other attributes.
 
-- [ ] **Step 4: Ellipsis unification** — grep the frontend for the `…` glyph in user-facing copy (`grep -rn "…" frontend/src`) and replace with `...` to match the ASCII-punctuation direction (e.g. `Syncing…` -> `Syncing...`, `working in the repo…` -> `...`). Do not touch non-copy occurrences.
+- [ ] **Step 4: Ellipsis unification** - grep the frontend for the `…` glyph in user-facing copy (`grep -rn "…" frontend/src`) and replace with `...` to match the ASCII-punctuation direction (e.g. `Syncing…` -> `Syncing...`, `working in the repo…` -> `...`). Do not touch non-copy occurrences.
 
-- [ ] **Step 5: Verify** — Run: `cd frontend && npx vitest run && npx svelte-check` (green, 0 errors), `cd .. && go build ./...` (OK), and `git status` shows a clean tree except the intended `.gitattributes`/renormalized files.
+- [ ] **Step 5: Verify** - Run: `cd frontend && npx vitest run && npx svelte-check` (green, 0 errors), `cd .. && go build ./...` (OK), and `git status` shows a clean tree except the intended `.gitattributes`/renormalized files.
 
 - [ ] **Step 6: Commit**
 

@@ -14,10 +14,10 @@
 - **Desktop dependency policy:** stdlib only, EXCEPT the single new dependency `github.com/zalando/go-keyring` (OS credential storage for the refresh token). No other new desktop deps. (Server-only deps like pgx/chi/jwt/oauth2/migrate belong to Plan A and MUST NOT be imported by any desktop package.)
 - **ASCII-only source** for all desktop Go files.
 - **`gofmt` clean and `go vet ./...` clean** for every task. Existing desktop tests stay green.
-- **LWW rule (client side):** apply a pulled doc locally only if `parse(pulled.updated_at)` is strictly newer than the local record's `UpdatedAt` (or the doc is absent locally); tombstones (`deleted:true`) delete locally. A push that the server rejects (stale) is not an error — the following pull reconciles it.
+- **LWW rule (client side):** apply a pulled doc locally only if `parse(pulled.updated_at)` is strictly newer than the local record's `UpdatedAt` (or the doc is absent locally); tombstones (`deleted:true`) delete locally. A push that the server rejects (stale) is not an error - the following pull reconciles it.
 - **Config dir:** `sync.json` lives beside `projects.json` in the fleet config dir (`%APPDATA%\fleet` on Windows), resolved from `filepath.Dir(cfgPath)` where `cfgPath` comes from `config.Load()`.
 - **Backend base URL:** constant `defaultAPIURL = "https://fleet-api.fly.dev"`, overridable by env `FLEET_API_URL`.
-- **Contract types/endpoints/event names are fixed** — use them verbatim (see each task's Interfaces block). Event names: `auth:changed`, `sync:changed` (both required). One supplementary event `sync:remoteEdit` (no payload) drives the "updated on another device" toast.
+- **Contract types/endpoints/event names are fixed** - use them verbatim (see each task's Interfaces block). Event names: `auth:changed`, `sync:changed` (both required). One supplementary event `sync:remoteEdit` (no payload) drives the "updated on another device" toast.
 
 ---
 
@@ -82,7 +82,7 @@ func TestUpdateStampsUpdatedAt(t *testing.T) {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/store/ -run "UpdatedAt" -v`
-Expected: FAIL — compile error `rec.UpdatedAt undefined (type Record has no field or method UpdatedAt)`.
+Expected: FAIL - compile error `rec.UpdatedAt undefined (type Record has no field or method UpdatedAt)`.
 
 - [ ] **Step 3: Add the field**
 
@@ -170,8 +170,8 @@ git commit -m "feat(store): Record에 UpdatedAt 추가, Update 중앙 스탬프�
 **Interfaces:**
 - Consumes: `git.Runner` (`Run(dir string, args ...string) (string, error)`) from `internal/git/runner.go`.
 - Produces:
-  - `func NormalizeRemote(remote string) string` — strip scheme+creds, lowercase host+path, strip trailing `.git`.
-  - `func RemoteURL(r Runner, dir string) (string, error)` — runs `git remote get-url origin`, trims.
+  - `func NormalizeRemote(remote string) string` - strip scheme+creds, lowercase host+path, strip trailing `.git`.
+  - `func RemoteURL(r Runner, dir string) (string, error)` - runs `git remote get-url origin`, trims.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -217,7 +217,7 @@ func TestRemoteURL(t *testing.T) {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/git/ -run "NormalizeRemote|RemoteURL" -v`
-Expected: FAIL — `undefined: NormalizeRemote` / `undefined: RemoteURL`.
+Expected: FAIL - `undefined: NormalizeRemote` / `undefined: RemoteURL`.
 
 - [ ] **Step 3: Implement**
 
@@ -284,7 +284,7 @@ git commit -m "feat(git): RemoteURL 헬퍼와 NormalizeRemote 순수 함수 추�
 
 ---
 
-### Task 3: cloud package — contract types + Client methods
+### Task 3: cloud package - contract types + Client methods
 
 **Files:**
 - Create: `internal/cloud/cloud.go`
@@ -408,7 +408,7 @@ func TestExchangeParsesUser(t *testing.T) {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/cloud/ -v`
-Expected: FAIL — package/`New` undefined (build error).
+Expected: FAIL - package/`New` undefined (build error).
 
 - [ ] **Step 3: Implement the package**
 
@@ -647,7 +647,7 @@ git commit -m "feat(cloud): 계약 타입과 Client(exchange/refresh/logout/pull
 
 ---
 
-### Task 4: cloud.Session — refresh-on-401 wrapper
+### Task 4: cloud.Session - refresh-on-401 wrapper
 
 **Files:**
 - Create: `internal/cloud/session.go`
@@ -659,7 +659,7 @@ git commit -m "feat(cloud): 계약 타입과 Client(exchange/refresh/logout/pull
   - `type Session struct { Client *Client; ... }`
   - `func NewSession(c *Client, access, refresh string, onRotate func(Tokens)) *Session`
   - `func (s *Session) Access() string`
-  - `func (s *Session) WithAccess(fn func(access string) error) error` — runs `fn` with the current access token; on `ErrUnauthorized`, refreshes (rotating tokens and invoking `onRotate`) and retries `fn` exactly once.
+  - `func (s *Session) WithAccess(fn func(access string) error) error` - runs `fn` with the current access token; on `ErrUnauthorized`, refreshes (rotating tokens and invoking `onRotate`) and retries `fn` exactly once.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -727,7 +727,7 @@ func TestSessionRefreshesOn401(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/cloud/ -run TestSessionRefreshesOn401 -v`
-Expected: FAIL — `undefined: NewSession`.
+Expected: FAIL - `undefined: NewSession`.
 
 - [ ] **Step 3: Implement**
 
@@ -815,7 +815,7 @@ git commit -m "feat(cloud): 401 시 자동 리프레시하는 Session 래퍼 추
 
 ---
 
-### Task 5: cloud.CredStore — keychain refresh-token storage
+### Task 5: cloud.CredStore - keychain refresh-token storage
 
 **Files:**
 - Create: `internal/cloud/credstore.go`
@@ -827,7 +827,7 @@ git commit -m "feat(cloud): 401 시 자동 리프레시하는 Session 래퍼 추
 - Produces:
   - `type CredStore interface { SaveRefresh(token string) error; LoadRefresh() (string, error); DeleteRefresh() error }`
   - `type KeyringStore struct { Service string; User string }` implementing `CredStore` via the OS keychain (missing entry -> `("", nil)`).
-  - `type MemCredStore struct { ... }` — an in-memory `CredStore` for tests/other packages.
+  - `type MemCredStore struct { ... }` - an in-memory `CredStore` for tests/other packages.
 
 - [ ] **Step 1: Add the dependency**
 
@@ -870,7 +870,7 @@ func TestMemCredStoreRoundTrip(t *testing.T) {
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/cloud/ -run TestMemCredStoreRoundTrip -v`
-Expected: FAIL — `undefined: CredStore` / `undefined: KeyringStore`.
+Expected: FAIL - `undefined: CredStore` / `undefined: KeyringStore`.
 
 - [ ] **Step 4: Implement**
 
@@ -975,7 +975,7 @@ git commit -m "feat(cloud): CredStore 인터페이스와 go-keyring 자격증명
 
 ---
 
-### Task 6: syncengine — state persistence, doc_id, hashing, backoff (pure)
+### Task 6: syncengine - state persistence, doc_id, hashing, backoff (pure)
 
 **Files:**
 - Create: `internal/syncengine/state.go`
@@ -1071,7 +1071,7 @@ func TestNextBackoff(t *testing.T) {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/syncengine/ -v`
-Expected: FAIL — package does not compile (`undefined: DocID`).
+Expected: FAIL - package does not compile (`undefined: DocID`).
 
 - [ ] **Step 3: Implement**
 
@@ -1220,7 +1220,7 @@ git commit -m "feat(syncengine): 상태 저장, doc_id 파생, 해시, 백오프
 
 ---
 
-### Task 7: syncengine.Engine — SyncOnce (push/pull/LWW/persist)
+### Task 7: syncengine.Engine - SyncOnce (push/pull/LWW/persist)
 
 **Files:**
 - Create: `internal/syncengine/engine.go`
@@ -1232,7 +1232,7 @@ git commit -m "feat(syncengine): 상태 저장, doc_id 파생, 해시, 백오프
   - `type Engine struct { ... }`
   - `func New(st *store.Store, client *cloud.Client, statePath string, remoteOf func(path string) string) *Engine`
   - `func (e *Engine) SyncOnce(access string) error`
-  - `func (e *Engine) TookRemoteEdit() bool` — returns and clears whether the last sync overwrote a local edit (drives the "updated on another device" toast).
+  - `func (e *Engine) TookRemoteEdit() bool` - returns and clears whether the last sync overwrote a local edit (drives the "updated on another device" toast).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1485,7 +1485,7 @@ func TestSyncDetachedCodeDocNotRepushed(t *testing.T) {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `go test ./internal/syncengine/ -run "TestSync" -v`
-Expected: FAIL — `undefined: New` / `undefined: (*Engine).SyncOnce`.
+Expected: FAIL - `undefined: New` / `undefined: (*Engine).SyncOnce`.
 
 - [ ] **Step 3: Implement**
 
@@ -2129,7 +2129,7 @@ git commit -m "feat(app): AuthStart/AuthStatus/SignOut/SyncNow/SyncState 바인�
 
 ---
 
-### Task 9: GUI — SignIn, AccountChip, SyncPill wired into the top bar
+### Task 9: GUI - SignIn, AccountChip, SyncPill wired into the top bar
 
 > Use the frontend-design skill at implementation time for visual craft; the code below is complete and functional and matches the existing dark-theme CSS variables (`--bg`, `--surface`, `--raised`, `--text`, `--muted`, `--faint`, `--border`, `--accent`, `--accent-soft`, `--accent-line`, `--ok`, `--err`, `--err-line`, `--r-pill`, `--r-btn`, `--t`).
 

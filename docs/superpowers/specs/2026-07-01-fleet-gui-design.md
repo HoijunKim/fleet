@@ -1,4 +1,4 @@
-# fleet GUI — Wails Desktop App (design addendum)
+# fleet GUI - Wails Desktop App (design addendum)
 
 **Date:** 2026-07-01
 **Status:** Design approved
@@ -29,39 +29,39 @@ The `App` struct holds a `git.Runner` (real `ExecRunner` in production, a fake i
 tests) and the loaded `config.Config`. It exposes these methods to the front end
 (names are the JS binding names):
 
-- `ScanRepos() []RepoView` — discover repos under the configured roots; returns
+- `ScanRepos() []RepoView` - discover repos under the configured roots; returns
   skeleton views (Name/Path/IsGit set, not yet loaded).
-- `LoadRepo(path string) RepoView` — load one repo's git + meta data, return the
+- `LoadRepo(path string) RepoView` - load one repo's git + meta data, return the
   full view. The front end calls this per repo in parallel, so rows fill in live.
-- `Fetch(path string) string` / `Pull(path string) string` — run git fetch / pull
+- `Fetch(path string) string` / `Pull(path string) string` - run git fetch / pull
   --ff-only; return an error message or "".
-- `OpenEditor(path string) string` / `OpenTerminal(path string) string` — launch the
+- `OpenEditor(path string) string` / `OpenTerminal(path string) string` - launch the
   configured editor/terminal at the repo; return an error message or "".
-- `RunCommand(path, line string) string` — run a command line in the repo, return
+- `RunCommand(path, line string) string` - run a command line in the repo, return
   combined output.
-- `GetConfig() config.Config` / `SaveConfig(c config.Config) string` — read/write
+- `GetConfig() config.Config` / `SaveConfig(c config.Config) string` - read/write
   config.
 
 `repo.Repo` carries an `error` field that does not serialize to JS, so a `RepoView`
 DTO mirrors it with `ErrMsg string` instead, plus flattened last-commit fields.
 
 Live loading is JavaScript-driven (front end calls `LoadRepo` per repo via
-`Promise`), not Go-event-driven — simpler and equally concurrent, since each Wails
+`Promise`), not Go-event-driven - simpler and equally concurrent, since each Wails
 binding call runs in its own goroutine.
 
 ## Front end (`frontend/`, Svelte-TS)
 
-- `App.svelte` — top-level state (repos, filter, sort, selection); on mount calls
+- `App.svelte` - top-level state (repos, filter, sort, selection); on mount calls
   `ScanRepos` then `LoadRepo` for each; renders Toolbar + RepoTable + DetailPanel.
-- `lib/Toolbar.svelte` — filter input, aggregate counts (repos/dirty/behind),
+- `lib/Toolbar.svelte` - filter input, aggregate counts (repos/dirty/behind),
   Fetch-All and Refresh buttons.
-- `lib/RepoTable.svelte` — the repo rows: name, branch, status pill (colored),
+- `lib/RepoTable.svelte` - the repo rows: name, branch, status pill (colored),
   ahead/behind, last commit, language, TODO; row click selects; per-row loading
   spinner.
-- `lib/DetailPanel.svelte` — selected repo's path/commit/remote/dirty files, with
+- `lib/DetailPanel.svelte` - selected repo's path/commit/remote/dirty files, with
   per-repo action buttons (Fetch, Pull, Editor, Terminal, Run command).
-- `app.css` — dark theme, colored status pills, clean modern layout (the "premium"
-  look). ASCII-only text in code; no `—`/`·`/`…`/`─`.
+- `app.css` - dark theme, colored status pills, clean modern layout (the "premium"
+  look). ASCII-only text in code; no `-`/`·`/`…`/`─`.
 
 ## Build & distribution
 

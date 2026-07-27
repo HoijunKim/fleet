@@ -15,28 +15,28 @@ Every task's requirements implicitly include this section.
 - **Go 1.22** (`go 1.22.0` in `go.mod`; CI and Docker use Go 1.22).
 - **Desktop packages stay stdlib-only and ASCII-only source; gofmt-clean.** Do not add third-party imports to any package under `internal/` that the desktop (`app.go`) imports, and do not add non-ASCII bytes to desktop source. The new `internal/server/*` and `cmd/fleetd` packages are server-only (never imported by `app.go`) and MAY use the allowed server deps below.
 - **`go vet` clean and gofmt-clean** for all new server packages: `go vet ./cmd/fleetd/... ./internal/server/...` must pass.
-- **Allowed NEW server dependencies (only these):** `github.com/jackc/pgx/v5`, `github.com/golang-jwt/jwt/v5`, `golang.org/x/oauth2` (permitted; not required — the GitHub client is stdlib `net/http` behind an interface), `github.com/go-chi/chi/v5`, `github.com/golang-migrate/migrate/v4`, plus `github.com/google/uuid` (already an indirect dep, promoted to direct).
-- **Allowed NEW desktop dependency:** `github.com/zalando/go-keyring` ONLY (out of scope for this plan — desktop is Plan B).
+- **Allowed NEW server dependencies (only these):** `github.com/jackc/pgx/v5`, `github.com/golang-jwt/jwt/v5`, `golang.org/x/oauth2` (permitted; not required - the GitHub client is stdlib `net/http` behind an interface), `github.com/go-chi/chi/v5`, `github.com/golang-migrate/migrate/v4`, plus `github.com/google/uuid` (already an indirect dep, promoted to direct).
+- **Allowed NEW desktop dependency:** `github.com/zalando/go-keyring` ONLY (out of scope for this plan - desktop is Plan B).
 - **LWW rule (server), verbatim:** accept a pushed doc iff `parse(updated_at) > stored.updated_at` OR the doc is absent. On accept: `user_versions.current += 1` (same tx); `documents.version = new current`; store payload/updated_at/deleted. On reject: `accepted=false`, `version=stored.version`. Pull returns docs where `version > since`, ordered by `version asc`; `cursor = max version returned` (or the given `since` if none).
 - **Per-user isolation:** every server query is scoped by `user_id`.
 - **Tokens:** access = HS256 JWT, claim `sub=user_id`, exp ~15m, signed with `JWT_SIGNING_KEY`. refresh = 32 random bytes base64url; stored as sha256 hex hash; TTL ~30d; rotating (rotate revokes old, issues new).
 
 ## File Map
 
-- `cmd/fleetd/main.go` — server entrypoint: read env, run migrations, wire deps, `ListenAndServe`.
-- `internal/server/pgstore/store.go` — shared domain types (`GitHubIdentity`, `User`, `Doc`, `PushResult`) + the `Store` interface.
-- `internal/server/pgstore/pg.go` — pgx pool + user/refresh-token repositories.
-- `internal/server/pgstore/documents.go` — `Push`/`Pull` (LWW + cursor, one tx).
-- `internal/server/pgstore/migrate.go` + `internal/server/pgstore/migrations/*.sql` — embedded golang-migrate migrations.
-- `internal/server/auth/token.go` — JWT issue/verify.
-- `internal/server/auth/refresh.go` — refresh token generation + hashing.
-- `internal/server/auth/pkce.go` — PKCE S256 verify.
-- `internal/server/auth/ttlstore.go` — generic one-time TTL store (pending-auth + link-code).
-- `internal/server/auth/github.go` — GitHub client interface + real `net/http` impl.
-- `internal/server/auth/handlers.go` — OAuth handlers (login/callback/exchange/refresh/logout).
-- `internal/server/http/router.go` — chi router + `/healthz` + wiring.
-- `internal/server/http/middleware.go` — slog logging, Bearer-JWT auth, rate limit, context.
-- `internal/server/http/sync.go` — `GET`/`POST /sync` handlers.
+- `cmd/fleetd/main.go` - server entrypoint: read env, run migrations, wire deps, `ListenAndServe`.
+- `internal/server/pgstore/store.go` - shared domain types (`GitHubIdentity`, `User`, `Doc`, `PushResult`) + the `Store` interface.
+- `internal/server/pgstore/pg.go` - pgx pool + user/refresh-token repositories.
+- `internal/server/pgstore/documents.go` - `Push`/`Pull` (LWW + cursor, one tx).
+- `internal/server/pgstore/migrate.go` + `internal/server/pgstore/migrations/*.sql` - embedded golang-migrate migrations.
+- `internal/server/auth/token.go` - JWT issue/verify.
+- `internal/server/auth/refresh.go` - refresh token generation + hashing.
+- `internal/server/auth/pkce.go` - PKCE S256 verify.
+- `internal/server/auth/ttlstore.go` - generic one-time TTL store (pending-auth + link-code).
+- `internal/server/auth/github.go` - GitHub client interface + real `net/http` impl.
+- `internal/server/auth/handlers.go` - OAuth handlers (login/callback/exchange/refresh/logout).
+- `internal/server/http/router.go` - chi router + `/healthz` + wiring.
+- `internal/server/http/middleware.go` - slog logging, Bearer-JWT auth, rate limit, context.
+- `internal/server/http/sync.go` - `GET`/`POST /sync` handlers.
 - `Dockerfile`, `fly.toml`, `README.md` (notes), `.github/workflows/server.yml`.
 
 ---
@@ -92,7 +92,7 @@ func TestHealthzOK(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/server/http/ -run TestHealthzOK`
-Expected: FAIL — build error `undefined: NewRouter` / `undefined: Options`.
+Expected: FAIL - build error `undefined: NewRouter` / `undefined: Options`.
 
 - [ ] **Step 3: Add the chi dependency**
 
@@ -584,7 +584,7 @@ func TestRefreshTokenRotation(t *testing.T) {
 }
 ```
 
-- [ ] **Step 8: Run to verify it builds and skips (or passes) — offline**
+- [ ] **Step 8: Run to verify it builds and skips (or passes) - offline**
 
 Run: `go test ./internal/server/pgstore/ -run 'TestUpsertUserByGitHubIsIdempotent|TestRefreshTokenRotation'`
 Expected: PASS with the two tests reported as skipped (`DATABASE_URL_TEST not set`). If `DATABASE_URL_TEST` is set, both PASS.
@@ -598,7 +598,7 @@ git commit -m "feat(server): pgstore types, migrations, users + rotating refresh
 
 ---
 
-### Task 3: Documents store — Push/Pull with LWW + monotonic cursor (one tx)
+### Task 3: Documents store - Push/Pull with LWW + monotonic cursor (one tx)
 
 **Files:**
 - Create: `internal/server/pgstore/documents.go`
@@ -725,7 +725,7 @@ func TestPushPerUserIsolation(t *testing.T) {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/server/pgstore/ -run TestPush`
-Expected: FAIL — build error `pg.Push undefined` / `pg.Pull undefined`.
+Expected: FAIL - build error `pg.Push undefined` / `pg.Pull undefined`.
 
 - [ ] **Step 3: Write the documents store**
 
@@ -867,7 +867,7 @@ git commit -m "feat(server): document store with LWW, tombstones, per-user curso
 
 ---
 
-### Task 4: Auth primitives — JWT, refresh hashing, PKCE
+### Task 4: Auth primitives - JWT, refresh hashing, PKCE
 
 **Files:**
 - Create: `internal/server/auth/token.go`
@@ -976,7 +976,7 @@ func TestVerifyPKCE(t *testing.T) {
 - [ ] **Step 3: Run to verify failure**
 
 Run: `go test ./internal/server/auth/ -run 'TestIssue|TestVerify|TestRefresh|TestVerifyPKCE'`
-Expected: FAIL — build errors `undefined: IssueAccess` etc.
+Expected: FAIL - build errors `undefined: IssueAccess` etc.
 
 - [ ] **Step 4: Write token.go**
 
@@ -1152,7 +1152,7 @@ func TestTTLStoreExpires(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./internal/server/auth/ -run TestTTLStore`
-Expected: FAIL — `undefined: newTTLStore`.
+Expected: FAIL - `undefined: newTTLStore`.
 
 - [ ] **Step 3: Write ttlstore.go**
 
@@ -1296,7 +1296,7 @@ func TestHTTPGitHubExchangeAndUser(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./internal/server/auth/ -run TestHTTPGitHub`
-Expected: FAIL — `undefined: HTTPGitHub` / `GitHubClient`.
+Expected: FAIL - `undefined: HTTPGitHub` / `GitHubClient`.
 
 - [ ] **Step 3: Write github.go**
 
@@ -1698,7 +1698,7 @@ func TestExchangeRejectsBadPKCE(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./internal/server/auth/ -run 'TestOAuthFullFlow|TestExchangeRejectsBadPKCE'`
-Expected: FAIL — `undefined: New` / `undefined: Config`.
+Expected: FAIL - `undefined: New` / `undefined: Config`.
 
 - [ ] **Step 3: Write handlers.go**
 
@@ -1958,10 +1958,10 @@ git commit -m "feat(server): github oauth login/callback + token exchange/refres
 
 ---
 
-### Task 8: HTTP middleware — Bearer-JWT auth, rate limit, request context
+### Task 8: HTTP middleware - Bearer-JWT auth, rate limit, request context
 
 **Files:**
-- Modify: `internal/server/http/middleware.go` (full-file replacement — keeps `statusWriter`/`LogRequests`, adds auth + rate limit + context)
+- Modify: `internal/server/http/middleware.go` (full-file replacement - keeps `statusWriter`/`LogRequests`, adds auth + rate limit + context)
 - Test: `internal/server/http/middleware_test.go`
 
 **Interfaces:**
@@ -2047,7 +2047,7 @@ func TestRateLimiterAllowAndRefill(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./internal/server/http/ -run 'TestAuthMiddleware|TestRateLimiter'`
-Expected: FAIL — `undefined: AuthMiddleware` / `undefined: NewRateLimiter` / `undefined: UserID`.
+Expected: FAIL - `undefined: AuthMiddleware` / `undefined: NewRateLimiter` / `undefined: UserID`.
 
 - [ ] **Step 3: Replace middleware.go with the full auth + rate-limit + context version**
 
@@ -2208,7 +2208,7 @@ func (rl *RateLimiter) ByUser(next http.Handler) http.Handler {
 - [ ] **Step 4: Run to verify pass**
 
 Run: `go test ./internal/server/http/ -run 'TestAuthMiddleware|TestRateLimiter'`
-Expected: PASS. (`TestHealthzOK` from Task 1 still passes — `LogRequests`/`statusWriter` are preserved.)
+Expected: PASS. (`TestHealthzOK` from Task 1 still passes - `LogRequests`/`statusWriter` are preserved.)
 
 - [ ] **Step 5: Commit**
 
@@ -2371,7 +2371,7 @@ func TestSyncRequiresAuth(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./internal/server/http/ -run TestSync`
-Expected: FAIL — build errors: `Options` has no field `Store`/`Auth`/`SigningKey`; `undefined: Sync`.
+Expected: FAIL - build errors: `Options` has no field `Store`/`Auth`/`SigningKey`; `undefined: Sync`.
 
 - [ ] **Step 3: Write sync.go**
 
@@ -2563,7 +2563,7 @@ func TestEnvOr(t *testing.T) {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `go test ./cmd/fleetd/ -run TestEnvOr`
-Expected: FAIL — build error `undefined: envOr` (no Go files in `cmd/fleetd`).
+Expected: FAIL - build error `undefined: envOr` (no Go files in `cmd/fleetd`).
 
 - [ ] **Step 3: Write main.go**
 
@@ -2664,7 +2664,7 @@ git commit -m "feat(server): fleetd entrypoint - env, migrations, http server"
 
 ---
 
-### Task 11: Deploy assets — Dockerfile, fly.toml, README notes
+### Task 11: Deploy assets - Dockerfile, fly.toml, README notes
 
 **Files:**
 - Create: `Dockerfile`
@@ -2793,7 +2793,7 @@ git commit -m "chore(server): dockerfile, fly.toml (nrt), and backend README not
 
 ---
 
-### Task 12: CI — build and test the server
+### Task 12: CI - build and test the server
 
 **Files:**
 - Create: `.github/workflows/server.yml`

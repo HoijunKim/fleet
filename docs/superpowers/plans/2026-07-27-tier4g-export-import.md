@@ -39,7 +39,7 @@
 - Produces: `type ImportSummary struct{...}`; `func (a *App) importSummary(path string) ImportSummary`; `func (a *App) importCommit(path string) error`.
 - Consumes: `a.store` (Update/Snapshot/Degraded), `a.intel` (SetBrief/SetChat/SnapshotChats/Degraded), `a.triggerSync`.
 
-- [ ] **Step 1: Write the failing tests** — add to `app_test.go`
+- [ ] **Step 1: Write the failing tests** - add to `app_test.go`
 
 ```go
 func writeExportFile(t *testing.T, path string, projects map[string]store.Record, in intel.Data) {
@@ -173,9 +173,9 @@ func TestImportSummaryCountsAndMalformed(t *testing.T) {
 
 `json`, `os`, `filepath`, `store`, `intel` are already imported in `app_test.go`.
 
-- [ ] **Step 2: Run them** — `go test . -run "TestImport"` → fails to build (`importCommit`/`importSummary`/`ImportSummary` undefined).
+- [ ] **Step 2: Run them** - `go test . -run "TestImport"` → fails to build (`importCommit`/`importSummary`/`ImportSummary` undefined).
 
-- [ ] **Step 3: Implement** — add to `app.go`, near `ExportData`/`writeExport`:
+- [ ] **Step 3: Implement** - add to `app.go`, near `ExportData`/`writeExport`:
 
 ```go
 // ImportSummary is the preview of an import file: what it holds and how much of
@@ -269,9 +269,9 @@ func (a *App) importCommit(path string) error {
 
 `fmt` is already imported in `app.go`.
 
-- [ ] **Step 4: Green** — `go test . -run TestImport -v`. All pass.
+- [ ] **Step 4: Green** - `go test . -run TestImport -v`. All pass.
 
-- [ ] **Step 5: Add the re-push test** — following tier 4f's pattern (`app_test.go`):
+- [ ] **Step 5: Add the re-push test** - following tier 4f's pattern (`app_test.go`):
 
 ```go
 func TestImportedRecordIsRePushed(t *testing.T) {
@@ -319,7 +319,7 @@ func TestImportedRecordIsRePushed(t *testing.T) {
 }
 ```
 
-- [ ] **Step 6: Green** — `go test . -run "TestImport|TestImported" -v`.
+- [ ] **Step 6: Green** - `go test . -run "TestImport|TestImported" -v`.
 
 - [ ] **Step 7: gofmt + commit**
 
@@ -338,7 +338,7 @@ git commit -m "feat(app): import an export - upsert projects and intel, re-stamp
 **Interfaces:**
 - Produces: `func (a *App) ImportPreview() ImportSummary`; `func (a *App) ImportCommit(path string) string`.
 
-- [ ] **Step 1: Implement the bindings** — in `app.go`, after `importCommit`:
+- [ ] **Step 1: Implement the bindings** - in `app.go`, after `importCommit`:
 
 ```go
 // ImportPreview opens a file dialog and returns what importing the chosen file
@@ -361,7 +361,7 @@ func (a *App) ImportPreview() ImportSummary {
 func (a *App) ImportCommit(path string) string { return errMsg(a.importCommit(path)) }
 ```
 
-- [ ] **Step 2: A binding smoke test** — `ImportCommit` is a thin wrapper; assert it maps success/error to the string convention (`app_test.go`):
+- [ ] **Step 2: A binding smoke test** - `ImportCommit` is a thin wrapper; assert it maps success/error to the string convention (`app_test.go`):
 
 ```go
 func TestImportCommitBindingReturnsErrMsg(t *testing.T) {
@@ -378,7 +378,7 @@ func TestImportCommitBindingReturnsErrMsg(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Green** — `go test . -run TestImportCommitBinding -v && go build ./... && go vet ./...`
+- [ ] **Step 3: Green** - `go test . -run TestImportCommitBinding -v && go build ./... && go vet ./...`
 
 - [ ] **Step 4: Regenerate bindings**
 
@@ -405,7 +405,7 @@ git commit -m "feat(app): ImportPreview/ImportCommit bindings with a native file
 **Interfaces:**
 - Consumes: `ImportPreview`, `ImportCommit`, `onSaved`.
 
-- [ ] **Step 1: Wire the handler** — add `ImportPreview, ImportCommit` to the `../../wailsjs/go/main/App` import, and:
+- [ ] **Step 1: Wire the handler** - add `ImportPreview, ImportCommit` to the `../../wailsjs/go/main/App` import, and:
 
 ```ts
   let importing = false;
@@ -429,7 +429,7 @@ git commit -m "feat(app): ImportPreview/ImportCommit bindings with a native file
   }
 ```
 
-- [ ] **Step 2: Add the button** — beside Export (`SettingsModal.svelte`, the `.set-data-row` holding the Export button):
+- [ ] **Step 2: Add the button** - beside Export (`SettingsModal.svelte`, the `.set-data-row` holding the Export button):
 
 ```svelte
             <button class="btn btn-secondary btn-sm" on:click={doImport} disabled={importing}>
@@ -437,7 +437,7 @@ git commit -m "feat(app): ImportPreview/ImportCommit bindings with a native file
             </button>
 ```
 
-- [ ] **Step 3: Green** — `npm run check --prefix frontend && npm test --prefix frontend`. Both green.
+- [ ] **Step 3: Green** - `npm run check --prefix frontend && npm test --prefix frontend`. Both green.
 
 - [ ] **Step 4: Commit**
 
@@ -450,12 +450,12 @@ git commit -m "feat(ui): import an export from Settings, with a counts confirm"
 
 ### Task 4: Verify and ship
 
-- [ ] **Step 1** — `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` — clean, no FAIL.
-- [ ] **Step 2** — gofmt diff on `app.go` and `app_test.go` LF blobs: zero bytes.
-- [ ] **Step 3** — CHANGELOG `[Unreleased]`, extend the export/backup area under Added:
+- [ ] **Step 1** - `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` - clean, no FAIL.
+- [ ] **Step 2** - gofmt diff on `app.go` and `app_test.go` LF blobs: zero bytes.
+- [ ] **Step 3** - CHANGELOG `[Unreleased]`, extend the export/backup area under Added:
   `- Import an exported data file - projects and intel are upserted (never deleting local-only records) and re-pushed to win on every device.`
-- [ ] **Step 4** — `wails build`, launch, confirm by hand: Export to a file, change a project, Import that file, confirm the counts dialog and that the project reverts; a local-only project added after the export survives the import.
-- [ ] **Step 5** — push, confirm the three `desktop` checks are green, open a PR, merge once green.
+- [ ] **Step 4** - `wails build`, launch, confirm by hand: Export to a file, change a project, Import that file, confirm the counts dialog and that the project reverts; a local-only project added after the export survives the import.
+- [ ] **Step 5** - push, confirm the three `desktop` checks are green, open a PR, merge once green.
 
 ---
 

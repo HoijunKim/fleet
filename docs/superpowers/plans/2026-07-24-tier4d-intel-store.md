@@ -46,7 +46,7 @@
 - Consumes: `internal/fileguard` (`Quarantine(path) (string, error)`).
 - Produces: `intel.Store` with `Open(path) (*Store, error)`, `Brief() Brief`, `SetBrief(Brief) error`, `Chat(id string) []Turn`, `SetChat(id string, turns []Turn) error`, `ClearChat(id string) error`, `Snapshot() Data`, `Degraded() error`, `Quarantined() string`; types `Brief{Text,At,Lang string}`, `Turn{Role,Text string}`, `Data{Brief Brief; Chats map[string][]Turn}`.
 
-- [ ] **Step 1: Write the failing test** — `internal/intel/intel_test.go`
+- [ ] **Step 1: Write the failing test** - `internal/intel/intel_test.go`
 
 ```go
 package intel
@@ -154,7 +154,7 @@ func TestMissingFileIsEmptyNoError(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it, watch it fail to build** — `go test ./internal/intel/` → `undefined: Open`.
+- [ ] **Step 2: Run it, watch it fail to build** - `go test ./internal/intel/` → `undefined: Open`.
 
 - [ ] **Step 3: Implement** `internal/intel/intel.go`
 
@@ -332,7 +332,7 @@ func (s *Store) saveLocked() error {
 
 Remove the stray `_ = strings.TrimSpace` and the `strings` import from the test if `go vet` flags them; they are placeholders to keep the import list honest. (If unused, delete the import line and that line.)
 
-- [ ] **Step 4: Green** — `go test ./internal/intel/ -v`. All pass.
+- [ ] **Step 4: Green** - `go test ./internal/intel/ -v`. All pass.
 
 - [ ] **Step 5: gofmt + commit**
 
@@ -353,7 +353,7 @@ git commit -m "feat(intel): file-backed brief/chat store with the tier-3d integr
 - Consumes: `git.Runner`, `git.RemoteURL(r, path) (string, error)`, `git.NormalizeRemote(string) string`.
 - Produces: `intel.ChatID(runner git.Runner, path string) string` and the constant `intel.FleetID = "__fleet__"`.
 
-- [ ] **Step 1: Write the failing test** — `internal/intel/identity_test.go`
+- [ ] **Step 1: Write the failing test** - `internal/intel/identity_test.go`
 
 ```go
 package intel
@@ -412,7 +412,7 @@ func TestChatIDFallsBackToLocalWithoutRemote(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it** — `go test ./internal/intel/ -run TestChatID` → `undefined: ChatID`.
+- [ ] **Step 2: Run it** - `go test ./internal/intel/ -run TestChatID` → `undefined: ChatID`.
 
 - [ ] **Step 3: Implement** `internal/intel/identity.go`
 
@@ -457,7 +457,7 @@ func shortHash(s string) string {
 
 Delete the two `_ =` placeholder lines from the test once it builds; they only keep the imports honest while the file is first written. If `os`/`path/filepath` end up unused, drop those imports.
 
-- [ ] **Step 4: Green** — `go test ./internal/intel/ -run TestChatID -v`.
+- [ ] **Step 4: Green** - `go test ./internal/intel/ -run TestChatID -v`.
 
 - [ ] **Step 5: gofmt + commit**
 
@@ -478,7 +478,7 @@ git commit -m "feat(intel): stable chat identity matching the project doc-id con
 - Consumes: `intel.Open`, `intel.ChatID`, `intel.Brief`, `intel.Turn`, the store methods from Task 1.
 - Produces: `App.GetBrief() intel.Brief`, `App.SaveBrief(text, at, lang string) string`, `App.GetChat(path string) []intel.Turn`, `App.SaveChat(path string, turns []intel.Turn) string`, `App.ClearChat(path string) string`.
 
-- [ ] **Step 1: Write the failing test** — add to `app_test.go`
+- [ ] **Step 1: Write the failing test** - add to `app_test.go`
 
 ```go
 func TestIntelBindingsRoundTrip(t *testing.T) {
@@ -517,9 +517,9 @@ func TestIntelBindingsRoundTrip(t *testing.T) {
 
 `gitRun` already exists in `app_test.go` (added in tier 4c). `intel` and `filepath` imports: `filepath` is already imported; add `"github.com/hoijun/fleet/internal/intel"`.
 
-- [ ] **Step 2: Run it** — `go test . -run TestIntelBindings` → `App has no field or method intel`.
+- [ ] **Step 2: Run it** - `go test . -run TestIntelBindings` → `App has no field or method intel`.
 
-- [ ] **Step 3: Add the struct field** — in `app.go`, next to `store *store.Store` (`app.go:44`):
+- [ ] **Step 3: Add the struct field** - in `app.go`, next to `store *store.Store` (`app.go:44`):
 
 ```go
 	store    *store.Store
@@ -528,7 +528,7 @@ func TestIntelBindingsRoundTrip(t *testing.T) {
 
 Add the import `"github.com/hoijun/fleet/internal/intel"` to the block (alphabetical: after `internal/gh`, before `internal/git`... it sorts as `intel` after `git`; place it after `internal/git`).
 
-- [ ] **Step 4: Wire it in `NewApp`** — after `st, storeErr := store.Open(storePath)` (`app.go:122`):
+- [ ] **Step 4: Wire it in `NewApp`** - after `st, storeErr := store.Open(storePath)` (`app.go:122`):
 
 ```go
 	intelPath := filepath.Join(dir, "intel.json")
@@ -537,7 +537,7 @@ Add the import `"github.com/hoijun/fleet/internal/intel"` to the block (alphabet
 
 and add `intel: is,` to the returned `&App{...}` literal, next to `store: st,`. The load error is intentionally dropped here for now: intel is not yet in `StartupHealth`, and a degraded store already refuses writes on its own. (A follow-up may surface it; out of scope for this tier.)
 
-- [ ] **Step 5: Add the bindings** — after `GetConfig` (`app.go:258`, near the other getters):
+- [ ] **Step 5: Add the bindings** - after `GetConfig` (`app.go:258`, near the other getters):
 
 ```go
 // GetBrief returns the stored fleet-wide brief.
@@ -565,7 +565,7 @@ func (a *App) ClearChat(path string) string {
 }
 ```
 
-- [ ] **Step 6: Green** — `go test . -run TestIntelBindings -v && go build ./... && go vet ./...`
+- [ ] **Step 6: Green** - `go test . -run TestIntelBindings -v && go build ./... && go vet ./...`
 
 - [ ] **Step 7: Regenerate bindings**
 
@@ -594,7 +594,7 @@ git commit -m "feat(app): intel store wiring and brief/chat bindings"
 - Consumes: `a.intel.Snapshot()`.
 - Produces: an export body `{"projects": {...}, "intel": {...}}`.
 
-- [ ] **Step 1: Write the failing test** — add to `app_test.go`
+- [ ] **Step 1: Write the failing test** - add to `app_test.go`
 
 ```go
 func TestExportIncludesIntel(t *testing.T) {
@@ -632,9 +632,9 @@ func TestExportIncludesIntel(t *testing.T) {
 
 `json` and `os` are already imported in `app_test.go`.
 
-- [ ] **Step 2: Run it** — `go test . -run TestExportIncludesIntel` → fails (current export is a bare project map, so `body.Projects` is empty and `body.Intel` zero, tripping the brief assertion).
+- [ ] **Step 2: Run it** - `go test . -run TestExportIncludesIntel` → fails (current export is a bare project map, so `body.Projects` is empty and `body.Intel` zero, tripping the brief assertion).
 
-- [ ] **Step 3: Implement** — replace `writeExport` (`app.go`, the 6-line function):
+- [ ] **Step 3: Implement** - replace `writeExport` (`app.go`, the 6-line function):
 
 ```go
 func (a *App) writeExport(dest string) error {
@@ -649,7 +649,7 @@ func (a *App) writeExport(dest string) error {
 }
 ```
 
-- [ ] **Step 4: Green** — `go test . -run TestExportIncludesIntel -v`
+- [ ] **Step 4: Green** - `go test . -run TestExportIncludesIntel -v`
 
 - [ ] **Step 5: gofmt + commit**
 
@@ -669,9 +669,9 @@ git commit -m "feat(app): include intel in the data export"
 
 **Interfaces:**
 - Consumes: `SaveBrief`, `SaveChat`, `GetChat` bindings.
-- Produces: `migrateIntel(): Promise<void>` — idempotent, guarded by `fleet.intelMigrated`.
+- Produces: `migrateIntel(): Promise<void>` - idempotent, guarded by `fleet.intelMigrated`.
 
-- [ ] **Step 1: Write the failing test** — `frontend/src/lib/intelMigrate.test.ts`
+- [ ] **Step 1: Write the failing test** - `frontend/src/lib/intelMigrate.test.ts`
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -729,7 +729,7 @@ describe("migrateIntel", () => {
 });
 ```
 
-- [ ] **Step 2: Run it** — `npm test --prefix frontend -- intelMigrate` → fails, module not found.
+- [ ] **Step 2: Run it** - `npm test --prefix frontend -- intelMigrate` → fails, module not found.
 
 - [ ] **Step 3: Implement** `frontend/src/lib/intelMigrate.ts`
 
@@ -787,9 +787,9 @@ export async function migrateIntel(): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Green** — `npm test --prefix frontend -- intelMigrate`
+- [ ] **Step 4: Green** - `npm test --prefix frontend -- intelMigrate`
 
-- [ ] **Step 5: Call it from `App.svelte`** — in `onMount` (`App.svelte:707`), as the FIRST awaited call, before `refreshHealth`:
+- [ ] **Step 5: Call it from `App.svelte`** - in `onMount` (`App.svelte:707`), as the FIRST awaited call, before `refreshHealth`:
 
 ```ts
   onMount(async () => {
@@ -804,7 +804,7 @@ and add the import near the top of the script:
   import { migrateIntel } from "./lib/intelMigrate";
 ```
 
-- [ ] **Step 6: Green** — `npm run check --prefix frontend && npm test --prefix frontend`
+- [ ] **Step 6: Green** - `npm run check --prefix frontend && npm test --prefix frontend`
 
 - [ ] **Step 7: Commit**
 
@@ -824,7 +824,7 @@ git commit -m "feat(frontend): one-time migration of intel from localStorage int
 - Consumes: `GetChat`, `SaveChat`, `ClearChat`, `GetBrief`, `SaveBrief`.
 - Produces: nothing new; removes the `localStorage` chat/brief paths.
 
-- [ ] **Step 1: agentSession.ts** — add the imports to the existing binding import block (`agentSession.ts:2-4`):
+- [ ] **Step 1: agentSession.ts** - add the imports to the existing binding import block (`agentSession.ts:2-4`):
 
 ```ts
 import {
@@ -851,7 +851,7 @@ Delete `chatKey` (`:43`), `loadChat` (`:44-51`), and `saveChat` (`:52-55`). Repl
 
 - Replace both `saveChat()` calls (`:73`, `:78`) with `void SaveChat(loadedPath, get(turns).slice(-20));` (the binding also caps, but slicing here keeps the payload small).
 
-- [ ] **Step 2: RepoChat.svelte** — add to its binding imports:
+- [ ] **Step 2: RepoChat.svelte** - add to its binding imports:
 
 ```ts
   import { GetChat, SaveChat, ClearChat } from "../../wailsjs/go/main/App";
@@ -865,7 +865,7 @@ Delete `chatKey`/`loadChat`/`saveChat`/`clearChat` (`:72-97`). Replace usage:
 
 Confirm the component tracks `loadedPath` the same way it does today (it does: `RepoChat.svelte:86-88`).
 
-- [ ] **Step 3: Today.svelte** — add:
+- [ ] **Step 3: Today.svelte** - add:
 
 ```ts
   import { GetBrief, SaveBrief } from "../../wailsjs/go/main/App";
@@ -887,7 +887,7 @@ Confirm the component tracks `loadedPath` the same way it does today (it does: `
 - Keep `fleet.briefAutoDate` (`:145`, `:162`) on `localStorage`: it is a per-day, per-device "already auto-ran" guard, not user data.
 - The `briefLang` reactive read (`:114`) may keep its `localStorage` seed for the initial value, but its authoritative persistence now rides along in `SaveBrief`. To avoid a second source of truth, seed `briefLang` from `GetBrief().lang` on mount (falling back to `"ko"`), and drop the `localStorage.setItem("fleet.briefLang", ...)` write (`:116`).
 
-- [ ] **Step 4: Green** — `npm run check --prefix frontend && npm test --prefix frontend`. All green, no `localStorage` chat/brief references remain:
+- [ ] **Step 4: Green** - `npm run check --prefix frontend && npm test --prefix frontend`. All green, no `localStorage` chat/brief references remain:
 
 ```bash
 grep -rn "fleet.chat\|fleet.brief\"" frontend/src/lib/agentSession.ts frontend/src/lib/RepoChat.svelte frontend/src/lib/Today.svelte
@@ -906,18 +906,18 @@ git commit -m "feat(frontend): read and write brief/chat through the intel store
 
 ### Task 7: Whole-suite verification and ship
 
-- [ ] **Step 1** — `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` — clean, no FAIL.
-- [ ] **Step 2** — gofmt diff on every touched Go file's LF blob: zero bytes.
+- [ ] **Step 1** - `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` - clean, no FAIL.
+- [ ] **Step 2** - gofmt diff on every touched Go file's LF blob: zero bytes.
 
 ```bash
 for f in internal/intel/intel.go internal/intel/identity.go internal/intel/intel_test.go internal/intel/identity_test.go app.go app_test.go; do
   echo "$f: $(git show HEAD:$f | gofmt -d | wc -c)"; done
 ```
 
-- [ ] **Step 3** — CHANGELOG `[Unreleased]` gains, under Changed:
+- [ ] **Step 3** - CHANGELOG `[Unreleased]` gains, under Changed:
   `- Brief and chat transcripts are stored in the local data directory (and included in the export) instead of the browser's localStorage.`
-- [ ] **Step 4** — `wails build`, launch, confirm by hand: an existing user's brief and repo chats survive the upgrade (migration ran), a new chat persists across an app restart, and the exported JSON contains an `intel` object.
-- [ ] **Step 5** — push, confirm the three `desktop` checks are green, open a PR, merge once green.
+- [ ] **Step 4** - `wails build`, launch, confirm by hand: an existing user's brief and repo chats survive the upgrade (migration ran), a new chat persists across an app restart, and the exported JSON contains an `intel` object.
+- [ ] **Step 5** - push, confirm the three `desktop` checks are green, open a PR, merge once green.
 
 ---
 

@@ -35,9 +35,9 @@
 
 **Interfaces:**
 - Consumes: `a.store.Update`, `a.triggerSync`, the `sync-conflicts.jsonl` line shape `{at, localId, name, payload}`.
-- Produces: `func (a *App) RestoreBackup(localID, when string) string` — `""` on success, an error string otherwise.
+- Produces: `func (a *App) RestoreBackup(localID, when string) string` - `""` on success, an error string otherwise.
 
-- [ ] **Step 1: Write the failing tests** — add to `app_test.go`
+- [ ] **Step 1: Write the failing tests** - add to `app_test.go`
 
 ```go
 func writeBackupLine(t *testing.T, dir, localID, when, name string, rec store.Record) {
@@ -130,9 +130,9 @@ func TestRestoreBackupPicksTheRightLineAmongMany(t *testing.T) {
 
 `json`, `os`, `filepath`, `store` are already imported in `app_test.go`.
 
-- [ ] **Step 2: Run them** — `go test . -run TestRestoreBackup` → fails to build (`a.RestoreBackup undefined`).
+- [ ] **Step 2: Run them** - `go test . -run TestRestoreBackup` → fails to build (`a.RestoreBackup undefined`).
 
-- [ ] **Step 3: Implement** — add to `app.go`, next to `ConflictBackups`:
+- [ ] **Step 3: Implement** - add to `app.go`, next to `ConflictBackups`:
 
 ```go
 // RestoreBackup writes a backed-up record (identified by its localId + backup
@@ -175,9 +175,9 @@ func (a *App) RestoreBackup(localID, when string) string {
 }
 ```
 
-- [ ] **Step 4: Green** — `go test . -run TestRestoreBackup -v`. All pass.
+- [ ] **Step 4: Green** - `go test . -run TestRestoreBackup -v`. All pass.
 
-- [ ] **Step 5: Add the re-push test** — this one uses a real engine + fake server, following `TestDiscardCorruptStoreDoesNotTombstoneTheCloud`'s setup (`app_test.go`):
+- [ ] **Step 5: Add the re-push test** - this one uses a real engine + fake server, following `TestDiscardCorruptStoreDoesNotTombstoneTheCloud`'s setup (`app_test.go`):
 
 ```go
 func TestRestoredRecordIsRePushed(t *testing.T) {
@@ -225,7 +225,7 @@ func TestRestoredRecordIsRePushed(t *testing.T) {
 
 `httptest`, `http`, `cloud`, `syncengine` are already imported in `app_test.go`.
 
-- [ ] **Step 6: Green** — `go test . -run "TestRestore|TestRestored" -v`.
+- [ ] **Step 6: Green** - `go test . -run "TestRestore|TestRestored" -v`.
 
 - [ ] **Step 7: Regenerate bindings + gofmt + commit**
 
@@ -247,7 +247,7 @@ Confirm `frontend/wailsjs/go/main/App.d.ts` now declares `RestoreBackup`.
 **Interfaces:**
 - Consumes: `RestoreBackup(localId, when)`, `ConflictBackups`, `onSaved`.
 
-- [ ] **Step 1: Wire the binding + handler** — in `SettingsModal.svelte`, add `RestoreBackup` to the `../../wailsjs/go/main/App` import, and a handler:
+- [ ] **Step 1: Wire the binding + handler** - in `SettingsModal.svelte`, add `RestoreBackup` to the `../../wailsjs/go/main/App` import, and a handler:
 
 ```ts
   let restoring = "";
@@ -266,7 +266,7 @@ Confirm `frontend/wailsjs/go/main/App.d.ts` now declares `RestoreBackup`.
   }
 ```
 
-- [ ] **Step 2: Add the button to the row** — in the `{#each backups.slice(0, 8) as b, i (...)}` list item (`SettingsModal.svelte:317-321`), add after the when span:
+- [ ] **Step 2: Add the button to the row** - in the `{#each backups.slice(0, 8) as b, i (...)}` list item (`SettingsModal.svelte:317-321`), add after the when span:
 
 ```svelte
                 <button class="btn btn-secondary btn-sm set-backup-restore"
@@ -282,9 +282,9 @@ and a style so the button sits at the row's end:
   .set-backup-restore { margin-left: auto; }
 ```
 
-(If `.set-backups li` already has display rules, extend rather than duplicate them — check the existing block first.)
+(If `.set-backups li` already has display rules, extend rather than duplicate them - check the existing block first.)
 
-- [ ] **Step 3: Frontend test** — the SettingsModal is SSR-rendered in tests like the others. Add `frontend/src/lib/SettingsModal.test.ts` (or extend an existing one) that renders the modal on the integrations... no: the backup list is on the General tab, which is the default. Mock the bindings, seed `ConflictBackups` to return one row, and assert a "Restore" button is present. Because the list is populated by an async `ConflictBackups()` that SSR does not await, assert instead at the unit level: export nothing new, and rely on the Go test for behavior. **Concretely**, add a minimal test that the component renders without throwing when `ConflictBackups` returns a row, and that the string "Restore" appears once `backups` is set — done by rendering with a mocked binding that resolves synchronously is not possible under SSR, so this test asserts only that the mock is wired and the component compiles. Keep it small:
+- [ ] **Step 3: Frontend test** - the SettingsModal is SSR-rendered in tests like the others. Add `frontend/src/lib/SettingsModal.test.ts` (or extend an existing one) that renders the modal on the integrations... no: the backup list is on the General tab, which is the default. Mock the bindings, seed `ConflictBackups` to return one row, and assert a "Restore" button is present. Because the list is populated by an async `ConflictBackups()` that SSR does not await, assert instead at the unit level: export nothing new, and rely on the Go test for behavior. **Concretely**, add a minimal test that the component renders without throwing when `ConflictBackups` returns a row, and that the string "Restore" appears once `backups` is set - done by rendering with a mocked binding that resolves synchronously is not possible under SSR, so this test asserts only that the mock is wired and the component compiles. Keep it small:
 
 ```ts
 // SettingsModal loads backups async (SSR does not await), so the button's
@@ -294,7 +294,7 @@ and a style so the button sits at the row's end:
 
 If a lightweight assertion is achievable (the project's other SSR tests show the pattern), prefer it; otherwise this task's gate is `npm run check` passing with the new code.
 
-- [ ] **Step 4: Green** — `npm run check --prefix frontend && npm test --prefix frontend`. Both green.
+- [ ] **Step 4: Green** - `npm run check --prefix frontend && npm test --prefix frontend`. Both green.
 
 - [ ] **Step 5: Commit**
 
@@ -307,12 +307,12 @@ git commit -m "feat(ui): restore an overwritten copy from Settings, behind a con
 
 ### Task 3: Verify and ship
 
-- [ ] **Step 1** — `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` — clean, no FAIL.
-- [ ] **Step 2** — gofmt diff on `app.go` and `app_test.go` LF blobs: zero bytes.
-- [ ] **Step 3** — CHANGELOG `[Unreleased]`, under Added:
+- [ ] **Step 1** - `cd frontend && npm ci && npm run build && cd .. && go build ./... && go vet ./... && go test ./...` - clean, no FAIL.
+- [ ] **Step 2** - gofmt diff on `app.go` and `app_test.go` LF blobs: zero bytes.
+- [ ] **Step 3** - CHANGELOG `[Unreleased]`, under Added:
   `- Restore a record that sync overwrote or deleted, from its backup in Settings - the restore re-pushes and wins on every device.`
-- [ ] **Step 4** — `wails build`, launch, confirm by hand: overwrite a project via a second device (or simulate a backup line), click Restore in Settings, confirm the record returns and the confirm dialog appears.
-- [ ] **Step 5** — push, confirm the three `desktop` checks are green, open a PR, merge once green.
+- [ ] **Step 4** - `wails build`, launch, confirm by hand: overwrite a project via a second device (or simulate a backup line), click Restore in Settings, confirm the record returns and the confirm dialog appears.
+- [ ] **Step 5** - push, confirm the three `desktop` checks are green, open a PR, merge once green.
 
 ---
 

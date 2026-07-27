@@ -1,4 +1,4 @@
-# fleet — Multi-repo Command Center TUI
+# fleet - Multi-repo Command Center TUI
 
 **Date:** 2026-07-01
 **Status:** Design approved, pending spec review
@@ -9,7 +9,7 @@
 A single Go binary that shows every git repository under one or more configured
 root directories on one screen, and lets the user manage them without leaving the
 terminal: inspect status, run git actions, open an editor or terminal at a repo,
-and run arbitrary commands. Zero runtime dependencies — download the binary and run
+and run arbitrary commands. Zero runtime dependencies - download the binary and run
 it on Windows, macOS, or Linux.
 
 **Problem it kills:** the user keeps many projects side by side (arsi, emg,
@@ -75,7 +75,7 @@ show_non_git = true                     # show non-git folders (dimmed) or hide 
 - **TODO:** count of `TODO`/`FIXME` markers via `git grep -cE "TODO|FIXME"` over tracked
   files only (fast, and respects `.gitignore`).
 
-Non-git folders under a root are shown dimmed (or skipped) — they still appear so the
+Non-git folders under a root are shown dimmed (or skipped) - they still appear so the
 user sees the whole directory, but carry no git data.
 
 ## 5. UI layout

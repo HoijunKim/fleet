@@ -118,7 +118,7 @@ var shellSepRe = regexp.MustCompile(`&&|\|\||;|\||&|\n|\r`)
 // splitSegments breaks a command line into the sub-commands the shell would run.
 // Splitting is deliberately quote-unaware: it is a best-effort over-approximation
 // that errs toward MORE segments. A quoted separator can spuriously split a token
-// (e.g. a commit message) — at worst yielding an extra segment that gates, or a
+// (e.g. a commit message) - at worst yielding an extra segment that gates, or a
 // refspec with a stray quote that then gates rather than resolving to a protected
 // branch. It never merges segments to drop a `push` token; any push riding a
 // separator lands on its own segment where classifySegment's backstop inspects it.
@@ -156,7 +156,7 @@ func classifyBash(cmd string, ctx ClassifyContext) Verdict {
 	// Compound commands (`a && b`, `a & b`, `a; b`, `a | b`, newline, ...) are
 	// classified per segment: deny if ANY segment denies, else a single gate whose
 	// Summary shows the WHOLE command. Because splitting is quote-unaware the
-	// per-segment summary is not the safety mechanism — each segment is run
+	// per-segment summary is not the safety mechanism - each segment is run
 	// independently through classifySegment's bare-`push`-token backstop, so a push
 	// hidden behind a separator (or an odd binary form) is denied on its own
 	// segment. splitSegments only splits when a separator is present, so
@@ -705,7 +705,7 @@ func splitTopComma(body string) []string {
 
 // secretArgRe matches a secret path at an argument boundary (start-of-string, a
 // path separator, whitespace, or a shell operator), so ANY reading command hits
-// it — cat, /bin/cat, `command cat`, sed, awk, dd, cp, `grep -r … .env`, … —
+// it - cat, /bin/cat, `command cat`, sed, awk, dd, cp, `grep -r … .env`, … -
 // rather than a fixed command allowlist.
 var secretArgRe = regexp.MustCompile(`(?i)(^|/|\s|&&|;|\|)[^\s/]*(\.env(\.\w+)?|id_rsa|id_ed25519|\.pem|\.key|\.p12|\.pfx|\.netrc|credentials|secret|\.ssh/)`)
 

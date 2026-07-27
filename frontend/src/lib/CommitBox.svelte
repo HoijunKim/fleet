@@ -234,7 +234,7 @@
       <div class="op-banner-head">
         <span class="op-title">
           {opLabel} in progress
-          {#if hasConflict}<span class="op-sub">— {conflicts.length} file{conflicts.length === 1 ? "" : "s"} conflict</span>{/if}
+          {#if hasConflict}<span class="op-sub">- {conflicts.length} file{conflicts.length === 1 ? "" : "s"} conflict</span>{/if}
         </span>
         <div class="op-actions">
           <button class="btn btn-primary btn-sm" on:click={finishOp} disabled={busy || hasConflict}
