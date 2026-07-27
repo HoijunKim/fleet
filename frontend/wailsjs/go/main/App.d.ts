@@ -194,7 +194,7 @@ export function SaveConfig(arg1:config.Config):Promise<string>;
 
 export function ScanRepos():Promise<Array<main.RepoView>>;
 
-export function SearchAll(arg1:string,arg2:boolean):Promise<Array<main.SearchHit>>;
+export function SearchAll(arg1:string,arg2:boolean,arg3:boolean,arg4:boolean):Promise<Array<main.SearchHit>>;
 
 export function SearchFiles(arg1:string):Promise<Array<main.FileHit>>;
 

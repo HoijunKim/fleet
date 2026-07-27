@@ -582,7 +582,7 @@ func newTestStore(t *testing.T) *store.Store {
 
 func TestSearchAllEmptyQuery(t *testing.T) {
 	a := newTestApp(t)
-	if got := a.SearchAll("   ", false); got == nil || len(got) != 0 {
+	if got := a.SearchAll("   ", false, false, false); got == nil || len(got) != 0 {
 		t.Errorf("blank query must return empty non-nil, got %v", got)
 	}
 }
@@ -598,7 +598,7 @@ func TestSearchAllAssembles(t *testing.T) {
 	cfg := config.Default()
 	cfg.Roots = []string{root}
 	a := &App{cfg: cfg, runner: fakeRunner{out: map[string]string{"grep": "main.go:1:package main\n"}}, store: newTestStore(t)}
-	hits := a.SearchAll("package", false)
+	hits := a.SearchAll("package", false, false, false)
 	if len(hits) != 1 {
 		t.Fatalf("hits=%v", hits)
 	}
@@ -1073,7 +1073,7 @@ func TestSearchAllRoundRobinFairness(t *testing.T) {
 		filepath.Join(root, "aaa"): "f1:1:x\nf2:2:x\n",
 		filepath.Join(root, "zzz"): "g1:1:x\n",
 	}}, store: newTestStore(t)}
-	hits := a.SearchAll("x", false)
+	hits := a.SearchAll("x", false, false, false)
 	repos := map[string]int{}
 	for _, h := range hits {
 		repos[h.Repo]++
@@ -1822,11 +1822,11 @@ func TestSearchAllIgnoreCaseThreadsThrough(t *testing.T) {
 	a := &App{cfg: cfg, runner: git.ExecRunner{}}
 
 	// Case-insensitive finds the uppercase TODO from a lowercase query.
-	if hits := a.SearchAll("todo", true); len(hits) == 0 {
+	if hits := a.SearchAll("todo", true, false, false); len(hits) == 0 {
 		t.Error("ignoreCase search should match TODO from 'todo'")
 	}
 	// Case-sensitive does not.
-	if hits := a.SearchAll("todo", false); len(hits) != 0 {
+	if hits := a.SearchAll("todo", false, false, false); len(hits) != 0 {
 		t.Errorf("case-sensitive search should not match TODO from 'todo', got %+v", hits)
 	}
 }
@@ -1919,5 +1919,41 @@ func TestReflogBindingLists(t *testing.T) {
 	entries := a.Reflog(dir, 10)
 	if len(entries) == 0 || entries[0].Ref != "HEAD@{0}" {
 		t.Errorf("Reflog binding = %+v, want a HEAD@{0} entry", entries)
+	}
+}
+
+func TestSearchAllFixedVsRegexAndWholeWord(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "r")
+	gitRun(t, root, "-c", "init.defaultBranch=master", "init", "r")
+	gitRun(t, repo, "config", "gc.auto", "0")
+	gitRun(t, repo, "config", "user.email", "t@t")
+	gitRun(t, repo, "config", "user.name", "T")
+	os.WriteFile(filepath.Join(repo, "f.txt"), []byte("value a.c here\nvalue abc here\nthe category is set\nthe cat sat\n"), 0o644)
+	gitRun(t, repo, "add", "-A")
+	gitRun(t, repo, "commit", "-m", "init")
+
+	cfg := config.Default()
+	cfg.Roots = []string{root}
+	cfg.ScanDepth = 2
+	a := &App{cfg: cfg, runner: git.ExecRunner{}}
+
+	// Fixed string: "a.c" matches only the literal, not "abc".
+	fixed := a.SearchAll("a.c", false, false, false)
+	if len(fixed) != 1 {
+		t.Errorf("fixed 'a.c' should match one literal line, got %d: %+v", len(fixed), fixed)
+	}
+	// Regex: "a.c" matches both "a.c" and "abc".
+	rx := a.SearchAll("a.c", false, true, false)
+	if len(rx) != 2 {
+		t.Errorf("regex 'a.c' should match two lines, got %d: %+v", len(rx), rx)
+	}
+	// Whole word: "cat" matches "the cat sat" but not "category".
+	ww := a.SearchAll("cat", false, false, true)
+	if len(ww) != 1 {
+		t.Errorf("whole-word 'cat' should match one line (not 'category'), got %d: %+v", len(ww), ww)
 	}
 }
