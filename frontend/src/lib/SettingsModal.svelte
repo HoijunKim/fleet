@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir, BuildVersion, RestoreBackup } from "../../wailsjs/go/main/App";
+  import { GetConfig, SaveConfig, AICheck, AskAI, NotionDatabases, DetectEditors, ExportData, DirExists, ConflictBackups, RevealDataDir, BuildVersion, RestoreBackup, ImportPreview, ImportCommit } from "../../wailsjs/go/main/App";
   import type { config, main } from "../../wailsjs/go/models";
   import { toastSuccess, toastError } from "./toasts";
   import { editorSelection } from "./editorSelection";
@@ -35,6 +35,29 @@
       onSaved(); // parent rescans so the restored record reappears
     } finally {
       restoring = "";
+    }
+  }
+
+  // Import an exported file: preview counts, confirm, then commit. Imported
+  // records are re-stamped server-side, so they re-push and win on all devices -
+  // hence the confirm with counts.
+  let importing = false;
+  async function doImport() {
+    if (importing) return;
+    importing = true;
+    try {
+      const s = await ImportPreview();
+      if (!s.path) return; // cancelled
+      if (s.error) { toastError("Import: " + s.error); return; }
+      const parts = [`${s.projects} projects (${s.projectsOverwrite} replace existing)`, `${s.chats} chats`];
+      if (s.brief) parts.push("the brief");
+      if (!confirm(`Import ${parts.join(", ")} from this file? Replaced records win on all your devices.`)) return;
+      const err = await ImportCommit(s.path);
+      if (err) { toastError("Import: " + err); return; }
+      toastSuccess("Data imported");
+      onSaved(); // rescan so the imported records appear
+    } finally {
+      importing = false;
     }
   }
 
@@ -319,7 +342,10 @@
             <button class="btn btn-secondary btn-sm" on:click={doExport} disabled={exporting}>
               {exporting ? "Exporting..." : "Export data (JSON)"}
             </button>
-            <span class="ai-hint">Save all projects and tasks to a JSON file on this machine.</span>
+            <button class="btn btn-secondary btn-sm" on:click={doImport} disabled={importing}>
+              {importing ? "Importing..." : "Import data (JSON)"}
+            </button>
+            <span class="ai-hint">Save or restore all projects, tasks and intel as a JSON file.</span>
           </div>
         </div>
 
