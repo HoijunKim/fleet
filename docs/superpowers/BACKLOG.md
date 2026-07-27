@@ -46,7 +46,11 @@ an item leaves the "Remaining" list only when a tier ships it.
 
 | Item | Deferred by |
 | --- | --- |
-| `auto_fetch_minutes` timer, bounded scan worker pool | `specs/2026-07-01-fleet-gui-design.md:80-84` |
+| `auto_fetch_minutes` timer (periodic background fetch; needs a cadence/settings design pass) | `specs/2026-07-01-fleet-gui-design.md:80-84` |
+
+> The "bounded worker pool" half of this row is already satisfied: the GitHub-signals
+> path caps concurrency at 6 (`app.go` `sem`) and the frontend caps `LoadRepo`
+> fan-out via `runPool` (`App.svelte`). Only the auto-fetch timer remains.
 
 ### Needs external infrastructure - not buildable in this environment
 
