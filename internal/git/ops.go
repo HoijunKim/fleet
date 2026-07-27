@@ -136,6 +136,7 @@ func OperationInProgress(dir string) string {
 		{"MERGE_HEAD", "merge"},
 		{"rebase-merge", "rebase"},
 		{"rebase-apply", "rebase"},
+		{"CHERRY_PICK_HEAD", "cherry-pick"},
 	} {
 		if _, err := os.Stat(filepath.Join(gitDir, m.path)); err == nil {
 			return m.op
@@ -246,7 +247,13 @@ func WorktreeDiff(r Runner, dir string) (string, error) {
 
 // Log returns the last n commits.
 func Log(r Runner, dir string, n int) ([]repo.Commit, error) {
-	out, err := r.Run(dir, "log", "-n", strconv.Itoa(n), "--format=%H%x1f%an%x1f%cI%x1f%s")
+	return LogRef(r, dir, "HEAD", n)
+}
+
+// LogRef is Log restricted to a ref (branch, tag, or commit-ish), so a source
+// branch's recent commits can be listed for cherry-pick.
+func LogRef(r Runner, dir, ref string, n int) ([]repo.Commit, error) {
+	out, err := r.Run(dir, "log", ref, "-n", strconv.Itoa(n), "--format=%H%x1f%an%x1f%cI%x1f%s")
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +265,26 @@ func Log(r Runner, dir string, n int) ([]repo.Commit, error) {
 		commits = append(commits, parseLastCommit(line))
 	}
 	return commits, nil
+}
+
+// CherryPick applies commit hash onto the current branch. A real content
+// conflict is KEPT (state left in place for the conflict panel to resolve) and
+// returned as ErrConflict, exactly like a conflicting merge; any other failure
+// that leaves a cherry-pick in progress is rolled back so the tree is never
+// stranded. A clean pick returns nil.
+func CherryPick(r Runner, dir, hash string) error {
+	_, err := r.Run(dir, "cherry-pick", hash)
+	if err == nil {
+		return nil
+	}
+	unmerged, _ := r.Run(dir, "ls-files", "-u")
+	if strings.TrimSpace(unmerged) != "" {
+		return fmt.Errorf("cherry-pick stopped on a conflict: %w", ErrConflict)
+	}
+	if OperationInProgress(dir) == "cherry-pick" {
+		_, _ = r.Run(dir, "cherry-pick", "--abort")
+	}
+	return err
 }
 
 // StashList returns the stash entries.

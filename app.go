@@ -627,6 +627,13 @@ func (a *App) Push(path string) string           { return errMsg(git.Push(a.runn
 func (a *App) MergeUpstream(path string) string  { return errMsg(git.MergeUpstream(a.runner, path)) }
 func (a *App) RebaseUpstream(path string) string { return errMsg(git.RebaseUpstream(a.runner, path)) }
 
+// CherryPick applies commit hash onto the current branch. A conflict leaves the
+// operation in progress (the UI re-checks GitOperation and the conflict panel
+// takes over), the same flow the diverged Merge/Rebase buttons use.
+func (a *App) CherryPick(path, hash string) string {
+	return errMsg(git.CherryPick(a.runner, path, strings.TrimSpace(hash)))
+}
+
 // RepoDiff returns the repo's uncommitted working changes (capped), for the
 // AI deep-dive prompt.
 func (a *App) RepoDiff(path string) string { return git.Diff(a.runner, path) }
@@ -653,7 +660,16 @@ func (a *App) DiffAll(path string) string {
 }
 
 func (a *App) Log(path string, n int) []CommitView {
-	commits, err := git.Log(a.runner, path, n)
+	return a.logCommits(git.Log(a.runner, path, n))
+}
+
+// LogRef lists a specific branch/ref's recent commits, for choosing a
+// cherry-pick source from a branch other than the current one.
+func (a *App) LogRef(path, ref string, n int) []CommitView {
+	return a.logCommits(git.LogRef(a.runner, path, ref, n))
+}
+
+func (a *App) logCommits(commits []repo.Commit, err error) []CommitView {
 	if err != nil {
 		return []CommitView{}
 	}

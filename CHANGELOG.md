@@ -53,6 +53,9 @@ contain - the whole app as it stands on `master`.
   an "Aa" toggle to match case.
 - **Sort persistence** - the project-table sort you pick is remembered across
   restarts.
+- **Cherry-pick** - apply a commit from another branch onto the current one, from
+  the detail panel; a conflict is handled by the same resolve/continue/abort
+  panel as merge and rebase.
 
 ### Changed
 

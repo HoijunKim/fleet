@@ -86,6 +86,10 @@ export function Checkout(arg1, arg2) {
   return window['go']['main']['App']['Checkout'](arg1, arg2);
 }
 
+export function CherryPick(arg1, arg2) {
+  return window['go']['main']['App']['CherryPick'](arg1, arg2);
+}
+
 export function ClearChat(arg1) {
   return window['go']['main']['App']['ClearChat'](arg1);
 }
@@ -240,6 +244,10 @@ export function LoadRepo(arg1) {
 
 export function Log(arg1, arg2) {
   return window['go']['main']['App']['Log'](arg1, arg2);
+}
+
+export function LogRef(arg1, arg2, arg3) {
+  return window['go']['main']['App']['LogRef'](arg1, arg2, arg3);
 }
 
 export function MergeUpstream(arg1) {

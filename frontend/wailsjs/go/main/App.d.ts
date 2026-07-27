@@ -46,6 +46,8 @@ export function CancelAuth():Promise<void>;
 
 export function Checkout(arg1:string,arg2:string):Promise<string>;
 
+export function CherryPick(arg1:string,arg2:string):Promise<string>;
+
 export function ClearChat(arg1:string):Promise<string>;
 
 export function CloneUncloned(arg1:string,arg2:string):Promise<string>;
@@ -123,6 +125,8 @@ export function ListProjects():Promise<Array<main.ProjectView>>;
 export function LoadRepo(arg1:string):Promise<main.RepoView>;
 
 export function Log(arg1:string,arg2:number):Promise<Array<main.CommitView>>;
+
+export function LogRef(arg1:string,arg2:string,arg3:number):Promise<Array<main.CommitView>>;
 
 export function MergeUpstream(arg1:string):Promise<string>;
 

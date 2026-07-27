@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -393,5 +394,140 @@ func TestContinueAndAbortErrorWithNothingInProgress(t *testing.T) {
 	}
 	if err := AbortOperation(ExecRunner{}, dir); err == nil {
 		t.Error("AbortOperation on a clean repo must error")
+	}
+}
+
+// setupCherryPickConflict builds a repo where cherry-picking a commit from a
+// side branch conflicts with the current branch, and returns its working dir
+// plus the conflicting commit's hash.
+func setupCherryPickConflict(t *testing.T) (string, string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
+	gitOK(t, dir, "config", "user.email", "t@t")
+	gitOK(t, dir, "config", "user.name", "T")
+	writeFile(t, dir, "f.txt", "base\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "base")
+
+	// Side branch changes the line one way.
+	gitOK(t, dir, "checkout", "-b", "side")
+	writeFile(t, dir, "f.txt", "side change\n")
+	gitOK(t, dir, "commit", "-am", "side edit")
+	hash := strings.TrimSpace(gitOK(t, dir, "rev-parse", "HEAD"))
+
+	// master changes the same line the other way.
+	gitOK(t, dir, "checkout", "master")
+	writeFile(t, dir, "f.txt", "master change\n")
+	gitOK(t, dir, "commit", "-am", "master edit")
+	return dir, hash
+}
+
+func TestCherryPickCleanApplies(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
+	gitOK(t, dir, "config", "user.email", "t@t")
+	gitOK(t, dir, "config", "user.name", "T")
+	writeFile(t, dir, "a.txt", "a\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "base")
+	// Side branch adds a NEW file (no conflict with master).
+	gitOK(t, dir, "checkout", "-b", "side")
+	writeFile(t, dir, "new.txt", "from side\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "add new")
+	hash := strings.TrimSpace(gitOK(t, dir, "rev-parse", "HEAD"))
+	gitOK(t, dir, "checkout", "master")
+
+	if err := CherryPick(ExecRunner{}, dir, hash); err != nil {
+		t.Fatalf("clean cherry-pick: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.txt")); err != nil {
+		t.Error("cherry-pick did not apply the commit's file")
+	}
+	if op := OperationInProgress(dir); op != "" {
+		t.Errorf("a clean cherry-pick must not leave state, got %q", op)
+	}
+}
+
+func TestCherryPickConflictIsKept(t *testing.T) {
+	dir, hash := setupCherryPickConflict(t)
+	err := CherryPick(ExecRunner{}, dir, hash)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
+	}
+	if op := OperationInProgress(dir); op != "cherry-pick" {
+		t.Errorf("OperationInProgress = %q, want cherry-pick", op)
+	}
+	if left, _ := Conflicts(ExecRunner{}, dir); len(left) == 0 {
+		t.Error("expected unmerged paths from the conflicting pick")
+	}
+}
+
+func TestCherryPickConflictContinueAndAbort(t *testing.T) {
+	dir, hash := setupCherryPickConflict(t)
+	if err := CherryPick(ExecRunner{}, dir, hash); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
+	}
+	if err := ResolveConflict(ExecRunner{}, dir, "cherry-pick", "f.txt", SideIncoming); err != nil {
+		t.Fatalf("ResolveConflict: %v", err)
+	}
+	if err := ContinueOperation(ExecRunner{}, dir); err != nil {
+		t.Fatalf("ContinueOperation: %v", err)
+	}
+	assertClean(t, dir)
+	if got := fileContent(t, dir, "f.txt"); got != "side change\n" {
+		t.Errorf("f.txt = %q, want the picked side change", got)
+	}
+
+	// Abort path on a fresh conflict restores the pre-pick HEAD.
+	other, h2 := setupCherryPickConflict(t)
+	before := strings.TrimSpace(gitOK(t, other, "rev-parse", "HEAD"))
+	if err := CherryPick(ExecRunner{}, other, h2); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict, got %v", err)
+	}
+	if err := AbortOperation(ExecRunner{}, other); err != nil {
+		t.Fatalf("AbortOperation: %v", err)
+	}
+	assertClean(t, other)
+	if after := strings.TrimSpace(gitOK(t, other, "rev-parse", "HEAD")); after != before {
+		t.Errorf("HEAD = %s, want the pre-pick %s", after, before)
+	}
+}
+
+func TestLogRefListsANamedBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "user.email", "t@t")
+	gitOK(t, dir, "config", "user.name", "T")
+	writeFile(t, dir, "a.txt", "a\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "on master")
+	gitOK(t, dir, "checkout", "-b", "feature")
+	writeFile(t, dir, "b.txt", "b\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "on feature")
+	gitOK(t, dir, "checkout", "master")
+
+	commits, err := LogRef(ExecRunner{}, dir, "feature", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) == 0 || commits[0].Message != "on feature" {
+		t.Errorf("LogRef(feature) top = %+v, want 'on feature'", commits)
 	}
 }
