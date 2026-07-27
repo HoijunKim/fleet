@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="fleet is a desktop git dashboard: watch every repo under your project roots, see what is dirty or behind, and fetch, commit, resolve conflicts and search across them from one window. Free for noncommercial use.">
+<meta property="og:title" content="fleet - your repos at a glance">
+<meta property="og:description" content="A desktop dashboard for every git repo under your project roots.">
+<meta property="og:type" content="website">
+<title>fleet - your repos at a glance</title>
+<style>
+  :root {
+    --ground: #0b0f16;
+    --surface: #141a24;
+    --surface-2: #1b2330;
+    --line: #26303f;
+    --line-soft: #1e2733;
+    --text: #e6edf3;
+    --muted: #8b97a7;
+    --faint: #5c6675;
+    --accent: #5b8cff;
+    --accent-soft: rgba(91, 140, 255, 0.14);
+    --ok: #3fb950;
+    --dirty: #d29922;
+    --behind: #58a6ff;
+    --crit: #f85149;
+    --r: 12px;
+    --maxw: 1060px;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f8fb;
+    --surface: #ffffff;
+    --surface-2: #f0f3f8;
+    --line: #d7dee8;
+    --line-soft: #e6ebf2;
+    --text: #10151d;
+    --muted: #56606f;
+    --faint: #8592a3;
+    --accent: #2f6bff;
+    --accent-soft: rgba(47, 107, 255, 0.10);
+    --ok: #1a7f37;
+    --dirty: #9a6700;
+    --behind: #0969da;
+    --crit: #cf222e;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground: #f6f8fb;
+      --surface: #ffffff;
+      --surface-2: #f0f3f8;
+      --line: #d7dee8;
+      --line-soft: #e6ebf2;
+      --text: #10151d;
+      --muted: #56606f;
+      --faint: #8592a3;
+      --accent: #2f6bff;
+      --accent-soft: rgba(47, 107, 255, 0.10);
+      --ok: #1a7f37;
+      --dirty: #9a6700;
+      --behind: #0969da;
+      --crit: #cf222e;
+      color-scheme: light;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* header */
+  header.site {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--ground) 86%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .site .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; }
+  .mark {
+    width: 26px; height: 26px; border-radius: 8px; flex: none;
+    background: linear-gradient(145deg, #6ea8ff, #3f6bd6);
+    display: grid; place-items: center;
+    color: #fff; font-family: var(--mono); font-weight: 800; font-size: 15px;
+    box-shadow: 0 2px 10px rgba(63, 107, 214, 0.4);
+  }
+  .brand .name { font-family: var(--mono); font-size: 16px; }
+  .brand .ver { font-family: var(--mono); font-size: 11px; color: var(--faint); border: 1px solid var(--line); border-radius: 20px; padding: 1px 7px; }
+  .site nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .site nav a { font-size: 13px; color: var(--muted); text-decoration: none; padding: 7px 11px; border-radius: 8px; }
+  .site nav a:hover { color: var(--text); background: var(--surface); }
+  .ghlink { border: 1px solid var(--line); }
+
+  /* hero */
+  .hero { padding: 72px 0 40px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-size: clamp(34px, 5.4vw, 58px); line-height: 1.04; margin: 0 0 18px;
+    letter-spacing: -0.02em; text-wrap: balance; font-weight: 780;
+  }
+  h1 .fade { color: var(--muted); }
+  .lede { font-size: clamp(16px, 2vw, 19px); color: var(--muted); max-width: 60ch; margin: 0 0 30px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px; text-decoration: none;
+    font-size: 14px; font-weight: 600; padding: 11px 18px; border-radius: 10px;
+    border: 1px solid transparent; transition: transform .12s ease, background .12s ease, border-color .12s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--accent) 88%, #fff); }
+  .btn-ghost { border-color: var(--line); color: var(--text); background: var(--surface); }
+  .btn-ghost:hover { border-color: var(--accent); }
+  .cta-note { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  /* app mock - the product's status board */
+  .board {
+    margin-top: 46px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--surface); box-shadow: 0 24px 60px -30px rgba(0,0,0,0.7);
+  }
+  .board-bar { display: flex; align-items: center; gap: 8px; padding: 11px 15px; border-bottom: 1px solid var(--line-soft); background: var(--surface-2); }
+  .tl { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+  .tl.r { background: #ff5f57; } .tl.y { background: #febc2e; } .tl.g { background: #28c840; }
+  .board-title { margin-left: 10px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .board-search { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border: 1px solid var(--line); border-radius: 7px; padding: 3px 10px; }
+  table.repos { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.repos thead th {
+    text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600; padding: 10px 16px; border-bottom: 1px solid var(--line-soft); background: var(--surface);
+  }
+  table.repos td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.repos tr:last-child td { border-bottom: none; }
+  table.repos tr:hover td { background: var(--accent-soft); }
+  .repo-name { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent); }
+  .dot.ok { color: var(--ok); background: var(--ok); }
+  .dot.dirty { color: var(--dirty); background: var(--dirty); animation: pulse 2.6s ease-in-out infinite; }
+  .dot.crit { color: var(--crit); background: var(--crit); }
+  .repo-name b { font-weight: 600; }
+  .branch { font-family: var(--mono); color: var(--muted); }
+  .nums { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+  .nums .a { color: var(--ok); } .nums .b { color: var(--behind); }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 20px; padding: 1px 9px; }
+  .muted-cell { color: var(--faint); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .dot.dirty { animation: none; } .btn:hover { transform: none; } }
+
+  /* section scaffolding */
+  section { padding: 56px 0; }
+  .sec-head { max-width: 62ch; margin: 0 0 34px; }
+  .sec-eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
+  h2 { font-size: clamp(24px, 3.4vw, 34px); margin: 0 0 12px; letter-spacing: -0.015em; text-wrap: balance; font-weight: 720; }
+  .sec-head p { color: var(--muted); margin: 0; font-size: 16px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { border: 1px solid var(--line); border-radius: var(--r); padding: 20px; background: var(--surface); }
+  .card h3 { margin: 12px 0 7px; font-size: 15.5px; letter-spacing: -0.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+  .card .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-family: var(--mono); font-weight: 700; font-size: 14px; }
+
+  /* git strip */
+  .strip { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+  .git-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 40px; margin: 0; padding: 0; list-style: none; }
+  .git-list li { display: flex; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+  .git-list li:nth-last-child(-n+2) { border-bottom: none; }
+  .git-list .k { font-family: var(--mono); color: var(--accent); font-size: 12.5px; flex: none; width: 120px; padding-top: 1px; }
+  .git-list .v { color: var(--muted); font-size: 13.5px; }
+
+  /* download */
+  .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .dl-card {
+    display: flex; flex-direction: column; gap: 6px; text-decoration: none;
+    border: 1px solid var(--line); border-radius: var(--r); padding: 22px; background: var(--surface);
+    transition: border-color .12s ease, transform .12s ease;
+  }
+  .dl-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .dl-os { font-size: 16px; font-weight: 700; }
+  .dl-file { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .dl-go { margin-top: 12px; font-size: 13px; color: var(--accent); font-weight: 600; }
+  .dl-note { margin-top: 22px; font-size: 13px; color: var(--muted); }
+  .dl-note code { font-family: var(--mono); background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 6px; padding: 1px 6px; font-size: 12px; }
+
+  /* footer */
+  footer.site { border-top: 1px solid var(--line-soft); padding: 40px 0 56px; color: var(--muted); }
+  footer .cols { display: flex; flex-wrap: wrap; gap: 30px 60px; justify-content: space-between; }
+  footer .lic { max-width: 46ch; font-size: 13px; }
+  footer .lic b { color: var(--text); }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer .links { display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+  footer .copy { margin-top: 30px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+
+  @media (max-width: 820px) {
+    .grid, .dl-grid { grid-template-columns: 1fr; }
+    .git-list { grid-template-columns: 1fr; }
+    .board-search { display: none; }
+    table.repos .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <span class="brand">
+      <span class="mark">F</span>
+      <span class="name">fleet</span>
+      <span class="ver">v0.1.0</span>
+    </span>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#git">Git</a>
+      <a href="#download">Download</a>
+      <a class="ghlink" href="https://github.com/hoijun-kim/fleet" target="_blank" rel="noopener">GitHub &#8599;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Desktop git dashboard</p>
+      <h1>Every repo you own,<br><span class="fade">at a glance.</span></h1>
+      <p class="lede">
+        fleet watches every git repository under your project roots and shows which are dirty, behind,
+        or stale - then lets you fetch, pull, commit, resolve conflicts, and run a command, all from one window.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#download">Download for your platform</a>
+        <a class="btn btn-ghost" href="https://github.com/hoijun-kim/fleet" target="_blank" rel="noopener">View source</a>
+        <span class="cta-note">Free for noncommercial use</span>
+      </div>
+
+      <div class="board" role="img" aria-label="Screenshot mock of the fleet project table showing repositories with their git status">
+        <div class="board-bar">
+          <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+          <span class="board-title">fleet - ~/Projects</span>
+          <span class="board-search">Ctrl+K</span>
+        </div>
+        <table class="repos">
+          <thead>
+            <tr><th>Repository</th><th>Branch</th><th class="hide-sm">State</th><th class="hide-sm">Tasks</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="repo-name"><span class="dot dirty"></span><b>api-gateway</b></span></td>
+              <td class="branch">feat/rate-limit</td>
+              <td class="nums hide-sm">3 uncommitted &nbsp;<span class="b">2&#8595;</span></td>
+              <td class="hide-sm"><span class="tag">4 open</span></td>
+            </tr>
+            <tr>
+              <td><span class="repo-name"><span class="dot ok"></span><b>fleet</b></span></td>
+              <td class="branch">master</td>
+              <td class="nums hide-sm"><span class="a">clean</span></td>
+              <td class="hide-sm muted-cell">-</td>
+            </tr>
+            <tr>
+              <td><span class="repo-name"><span class="dot crit"></span><b>billing-svc</b></span></td>
+              <td class="branch">main</td>
+              <td class="nums hide-sm">CI failing &nbsp;<span class="b">5&#8595;</span></td>
+              <td class="hide-sm"><span class="tag">due today</span></td>
+            </tr>
+            <tr>
+              <td><span class="repo-name"><span class="dot ok"></span><b>design-system</b></span></td>
+              <td class="branch">release/2.4</td>
+              <td class="nums hide-sm"><span class="a">1&#8593; unpushed</span></td>
+              <td class="hide-sm muted-cell">2/6</td>
+            </tr>
+            <tr>
+              <td><span class="repo-name"><span class="dot dirty"></span><b>infra-terraform</b></span></td>
+              <td class="branch">main</td>
+              <td class="nums hide-sm">1 uncommitted</td>
+              <td class="hide-sm muted-cell">stale 12d</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="sec-eyebrow">What it does</p>
+        <h2>One window for the whole fleet.</h2>
+        <p>Point it at your project folders. It finds every repo, keeps their status live, and gives you the tools without a terminal.</p>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <div class="ic">&#9673;</div>
+          <h3>Live repo status</h3>
+          <p>Dirty, behind, ahead, stale, CI failing - at a glance across every repo under your roots. Fetch, pull or push them in bulk.</p>
+        </div>
+        <div class="card">
+          <div class="ic">&#8646;</div>
+          <h3>Git without a terminal</h3>
+          <p>Stage per file, commit, amend, push, merge and rebase a diverged upstream, cherry-pick, reflog recovery - conflicts resolved inline.</p>
+        </div>
+        <div class="card">
+          <div class="ic">&#9633;</div>
+          <h3>Project management</h3>
+          <p>Tasks, deadlines, tags and a cross-project Agenda for code repos and manual projects alike, in a Today view that surfaces what needs attention.</p>
+        </div>
+        <div class="card">
+          <div class="ic">&#10022;</div>
+          <h3>AI brief &amp; chat</h3>
+          <p>An AI brief that weighs GitHub CI/PR/issue signals, a per-repo chat, and an agent that reads, greps and runs commands under per-action approval.</p>
+        </div>
+        <div class="card">
+          <div class="ic">&#9906;</div>
+          <h3>Search across repos</h3>
+          <p>Fuzzy file quick-open and case-insensitive content search across every repository, grouped and ranked best-first. A command palette on Ctrl+K.</p>
+        </div>
+        <div class="card">
+          <div class="ic">&#8635;</div>
+          <h3>Optional cloud sync</h3>
+          <p>Sign in with GitHub to sync your projects, tasks and intel across devices, last-write-wins. Export and import everything as JSON.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="git" class="strip">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="sec-eyebrow">Git depth</p>
+        <h2>The recovery tools, built in.</h2>
+        <p>The operations you would otherwise drop to a terminal for - and the safety nets for when they go wrong.</p>
+      </div>
+      <ul class="git-list">
+        <li><span class="k">stage &amp; commit</span><span class="v">Per-file staging, amend, and AI-drafted commit messages.</span></li>
+        <li><span class="k">merge / rebase</span><span class="v">Integrate a diverged upstream; a conflict is kept, not aborted.</span></li>
+        <li><span class="k">resolve</span><span class="v">Pick a side per file (rebase-aware) or edit by hand, then continue.</span></li>
+        <li><span class="k">cherry-pick</span><span class="v">Apply a commit from another branch, conflicts handled the same way.</span></li>
+        <li><span class="k">reflog</span><span class="v">Move a branch back to a previous HEAD; refused when the tree is dirty.</span></li>
+        <li><span class="k">branches</span><span class="v">Create, switch, delete - an unmerged branch offers a force delete.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="sec-eyebrow">Get it</p>
+        <h2>Download fleet 0.1.0</h2>
+        <p>Pick the build for your machine, or build from source. No account required to run it.</p>
+      </div>
+      <div class="dl-grid">
+        <a class="dl-card" href="https://github.com/hoijun-kim/fleet/releases/latest/download/fleet.exe">
+          <span class="dl-os">Windows</span>
+          <span class="dl-file">fleet.exe &middot; x64</span>
+          <span class="dl-go">Download &#8595;</span>
+        </a>
+        <a class="dl-card" href="https://github.com/hoijun-kim/fleet/releases/latest/download/fleet-macos.zip">
+          <span class="dl-os">macOS</span>
+          <span class="dl-file">fleet-macos.zip &middot; universal</span>
+          <span class="dl-go">Download &#8595;</span>
+        </a>
+        <a class="dl-card" href="https://github.com/hoijun-kim/fleet/releases/latest/download/fleet">
+          <span class="dl-os">Linux</span>
+          <span class="dl-file">fleet &middot; x64</span>
+          <span class="dl-go">Download &#8595;</span>
+        </a>
+      </div>
+      <p class="dl-note">
+        First run writes a config next to your data directory; <code>roots</code> defaults to <code>~/Projects</code>.
+        Prefer to build it yourself? <code>wails build</code> from a clone - see the
+        <a href="https://github.com/hoijun-kim/fleet#build-from-source" style="color:var(--accent);text-decoration:none">README</a>.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="cols">
+      <div class="lic">
+        <b>fleet</b> is source-available under the <b>PolyForm Noncommercial License 1.0.0</b>:
+        free to use, study, modify and share for any noncommercial purpose. Commercial use is not permitted.
+        <a href="https://github.com/hoijun-kim/fleet/blob/master/LICENSE">Read the license</a>.
+      </div>
+      <div class="links">
+        <a href="https://github.com/hoijun-kim/fleet">Source on GitHub</a>
+        <a href="https://github.com/hoijun-kim/fleet/releases">All releases</a>
+        <a href="https://github.com/hoijun-kim/fleet/blob/master/CHANGELOG.md">Changelog</a>
+        <a href="https://github.com/hoijun-kim/fleet/issues">Report an issue</a>
+      </div>
+    </div>
+    <p class="copy">Copyright &copy; 2026 H.K. &middot; Built with Wails, Go and Svelte.</p>
+  </div>
+</footer>
+
+</body>
+</html>
