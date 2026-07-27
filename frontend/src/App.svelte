@@ -13,6 +13,7 @@
   import Overview from "./lib/Overview.svelte";
   import Today from "./lib/Today.svelte";
   import { migrateIntel } from "./lib/intelMigrate";
+  import { loadSortPref, saveSortPref } from "./lib/sortPref";
   import Graph from "./lib/Graph.svelte";
   import ProjectsFilterBar from "./lib/ProjectsFilterBar.svelte";
   import UnclonedProjects from "./lib/UnclonedProjects.svelte";
@@ -33,8 +34,10 @@
   let pmStatusFilter: "all" | "active" | "paused" | "done" = "all";
   let highPriorityOnly = false;
   let tagFilter = "all";
-  let sortKey = "";
-  let sortDir: "asc" | "desc" = "asc";
+  // Restored from localStorage so the chosen sort survives a restart.
+  const _sortPref = loadSortPref();
+  let sortKey = _sortPref.key;
+  let sortDir: "asc" | "desc" = _sortPref.dir;
   let selectedId = "";
   // Ids checked via the per-row checkboxes, for bulk actions. Stale ids (rows
   // that were removed) are simply ignored by everything that reads this.
@@ -500,6 +503,7 @@
     if (sortKey !== key) { sortKey = key; sortDir = "asc"; }
     else if (sortDir === "asc") { sortDir = "desc"; }
     else { sortKey = ""; sortDir = "asc"; }
+    saveSortPref(sortKey, sortDir);
   }
 
   // ---- selection movement -------------------------------------------------
