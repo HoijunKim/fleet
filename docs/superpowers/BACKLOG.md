@@ -20,6 +20,7 @@ an item leaves the "Remaining" list only when a tier ships it.
 | Case-insensitive content search + match-case toggle | 4j |
 | Project-table sort persistence | 4k |
 | Cherry-pick a commit from another branch (conflicts via the 4c panel) | 4l |
+| Reflog recovery (move the branch back to a previous HEAD, refused when dirty) | 4m |
 | Open editor at a line (`OpenEditorAt`) | already shipped pre-4 |
 
 ---
@@ -31,7 +32,7 @@ an item leaves the "Remaining" list only when a tier ships it.
 | Item | Deferred by | Notes |
 | --- | --- | --- |
 | Interactive hunk staging | `specs/2026-07-16-tier3a-git-depth-design.md:84-87` | Biggest git item; a partial-stage UI over `git add -p`. |
-| Interactive rebase; reflog | same | Cherry-pick shipped in 4l; interactive rebase + reflog remain the harder half. |
+| Interactive rebase | same | Cherry-pick (4l) and reflog (4m) shipped; interactive rebase (reorder/squash/edit) is the remaining, hardest git item. |
 | Fuzzy file matching/ranking; regex + whole-word search modes | `specs/2026-07-11-fleet-search-enhancements-design.md:63-68` | Extends the case toggle shipped in 4j. |
 | Selective per-project sync; undo for account deletion | `specs/2026-07-16-tier2c-sync-account-design.md:74-77` | Sync-policy design decisions. |
 | Fleet MCP server exposing cross-repo/PM tools to the agent | `specs/2026-07-10-fleet-intel-agent-design.md:209-214` | Largest single item; a whole subsystem. |
