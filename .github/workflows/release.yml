@@ -15,11 +15,7 @@ jobs:
         include:
           - os: windows-latest
             platform: windows/amd64
-          # macos-13 (Intel), not macos-latest: on macOS 14+ arm64 runners the
-          # go-installed wails CLI aborts with "missing LC_UUID" under the newer
-          # dyld. macos-13's dyld does not enforce it, and darwin/universal still
-          # builds (wails lipo-combines both arches).
-          - os: macos-13
+          - os: macos-latest
             platform: darwin/universal
           - os: ubuntu-latest
             platform: linux/amd64
@@ -27,7 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: "1.22" }
+        # Go 1.24, not 1.22: on macOS 14+ arm64 runners a go-1.22-linked binary
+        # can lack an LC_UUID load command, which the newer dyld rejects with an
+        # abort - hitting both the go-installed wails CLI and the built app. 1.24
+        # emits it. The module still declares go 1.22; a newer toolchain builds it.
+        with: { go-version: "1.24" }
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - name: Install Linux webkit deps
@@ -44,7 +44,7 @@ jobs:
           -X github.com/hoijun/fleet/internal/buildinfo.commit=${{ github.sha }}
           -X github.com/hoijun/fleet/internal/buildinfo.date=${{ github.event.head_commit.timestamp }}"
       - name: Package macOS app
-        if: matrix.os == 'macos-13'
+        if: matrix.os == 'macos-latest'
         run: |
           ditto -c -k --keepParent build/bin/fleet.app build/bin/fleet-macos.zip
           rm -rf build/bin/fleet.app
