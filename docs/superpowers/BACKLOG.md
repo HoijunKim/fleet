@@ -25,6 +25,7 @@ an item leaves the "Remaining" list only when a tier ships it.
 | Fuzzy file-name search with best-first ranking | 4o |
 | Content search modes: fixed-string default + regex + whole-word | 4p |
 | Interactive rebase: reorder / drop / fixup recent local commits | 4q |
+| Env-tunable `fleetd` timeouts, GC interval, and DB pool sizing | 4r |
 | Open editor at a line (`OpenEditorAt`) | already shipped pre-4 |
 
 ---
@@ -45,7 +46,6 @@ an item leaves the "Remaining" list only when a tier ships it.
 
 | Item | Deferred by |
 | --- | --- |
-| Env-tunable server timeouts and GC interval; DB pool sizing | `specs/2026-07-13-server-lifecycle-resilience-design.md:77-82`, `specs/2026-07-14-refresh-token-gc-design.md:62-66` |
 | `auto_fetch_minutes` timer, bounded scan worker pool | `specs/2026-07-01-fleet-gui-design.md:80-84` |
 
 ### Needs external infrastructure - not buildable in this environment
