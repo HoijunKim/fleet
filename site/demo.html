@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Animated demo of fleet: status board, bulk fetch, fuzzy search and inline conflict resolution.">
+<title>fleet - animated demo</title>
+<style>
+  :root {
+    --ground: #0b0f16; --surface: #141a24; --surface-2: #1b2330;
+    --line: #26303f; --line-soft: #1e2733;
+    --text: #e6edf3; --muted: #8b97a7; --faint: #5c6675;
+    --accent: #5b8cff; --accent-soft: rgba(91,140,255,.14);
+    --ok: #3fb950; --dirty: #d29922; --behind: #58a6ff; --crit: #f85149;
+    --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(120% 120% at 50% -10%, #121a29 0%, var(--ground) 60%); color: var(--text); font-family: var(--sans); min-height: 100vh; display: grid; place-items: center; padding: 28px; }
+  .stage { width: min(880px, 96vw); }
+
+  /* window chrome */
+  .win { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 30px 80px -34px rgba(0,0,0,.8); }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 11px 15px; border-bottom: 1px solid var(--line-soft); background: var(--surface-2); }
+  .tl { width: 11px; height: 11px; border-radius: 50%; } .tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
+  .bar .title { margin-left: 10px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .bar .tools { margin-left: auto; display: flex; gap: 6px; }
+  .tbtn { font-family: var(--mono); font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; transition: color .2s, border-color .2s, background .2s; }
+  .tbtn.hot { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+  /* viewport */
+  .view { position: relative; min-height: 322px; }
+
+  table.repos { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.repos th { text-align: left; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding: 9px 16px; border-bottom: 1px solid var(--line-soft); }
+  table.repos td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tr.repo { transition: background .25s, opacity .4s, transform .4s; }
+  tr.repo.sel td { background: var(--accent-soft); }
+  tr.repo.dim { opacity: .28; }
+  .name { display: flex; align-items: center; gap: 10px; }
+  .name b { font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent); transition: color .35s, background .35s; }
+  .dot.ok{color:var(--ok);background:var(--ok)} .dot.dirty{color:var(--dirty);background:var(--dirty)} .dot.crit{color:var(--crit);background:var(--crit)}
+  .dot.pulse { animation: pulse 1.6s ease-in-out infinite; }
+  .branch { font-family: var(--mono); color: var(--muted); }
+  .state { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; transition: color .3s; }
+  .state .a{color:var(--ok)} .state .b{color:var(--behind)} .state .c{color:var(--crit)}
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 20px; padding: 1px 9px; }
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px; }
+
+  /* search overlay */
+  .search { position: absolute; inset: 0; background: color-mix(in srgb, var(--ground) 78%, transparent); backdrop-filter: blur(3px); display: flex; flex-direction: column; padding: 16px; opacity: 0; pointer-events: none; transition: opacity .3s; }
+  .search.on { opacity: 1; }
+  .search-in { display: flex; align-items: center; gap: 10px; border: 1px solid var(--accent); border-radius: 10px; background: var(--surface); padding: 10px 14px; box-shadow: 0 0 0 4px var(--accent-soft); }
+  .search-in .q { font-family: var(--mono); font-size: 15px; color: var(--text); }
+  .caret { display: inline-block; width: 2px; height: 18px; background: var(--accent); animation: blink 1s step-end infinite; vertical-align: -3px; }
+  .search-in .mode { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .hits { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .hit { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 12.5px; opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s, background .2s; }
+  .hit.show { opacity: 1; transform: none; }
+  .hit.top { background: var(--accent-soft); }
+  .hit .path { font-family: var(--mono); color: var(--muted); }
+  .hit .path em { color: var(--accent); font-style: normal; font-weight: 700; }
+  .hit .repo { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+  /* conflict panel (slides up over the table) */
+  .conflict { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--dirty); padding: 14px 16px; transform: translateY(110%); transition: transform .4s cubic-bezier(.2,0,.2,1), border-color .3s; }
+  .conflict.on { transform: none; }
+  .conflict.done { border-top-color: var(--ok); }
+  .cf-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .cf-title { font-size: 13px; font-weight: 600; } .cf-title .sub{color:var(--dirty);font-weight:400}
+  .cf-actions { margin-left: auto; display: flex; gap: 6px; }
+  .cbtn { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--line); color: var(--text); background: var(--surface-2); transition: transform .12s, background .2s, border-color .2s; }
+  .cbtn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cbtn.press { transform: scale(.94); }
+  .cf-file { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+  .cf-file .mono { font-family: var(--mono); color: var(--text); }
+  .cf-file .sides { margin-left: auto; display: flex; gap: 5px; }
+  .side { font-family: var(--mono); font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 16px; padding: 1px 9px; transition: background .2s, color .2s, border-color .2s; }
+  .side.pick { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cf-file.resolved .mono { color: var(--muted); text-decoration: line-through; }
+
+  /* caption + progress */
+  .cap { margin-top: 16px; height: 22px; text-align: center; }
+  .cap span { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; color: var(--muted); opacity: 0; transition: opacity .35s; }
+  .cap span.on { opacity: 1; }
+  .cap b { color: var(--accent); font-weight: 600; }
+  .prog { margin: 12px auto 0; width: 220px; height: 3px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
+  .prog i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .search, .conflict { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="win">
+    <div class="bar">
+      <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+      <span class="title">fleet - ~/Projects</span>
+      <span class="tools">
+        <span class="tbtn" id="t-fetch">Fetch all</span>
+        <span class="tbtn" id="t-search">Search &#8984;K</span>
+      </span>
+    </div>
+    <div class="view">
+      <table class="repos">
+        <thead><tr><th>Repository</th><th>Branch</th><th>State</th><th>Tasks</th></tr></thead>
+        <tbody id="rows">
+          <tr class="repo" data-k="api">
+            <td><span class="name"><span class="dot dirty"></span><b>api-gateway</b></span></td>
+            <td class="branch">feat/rate-limit</td>
+            <td class="state" data-base="3 uncommitted &nbsp;<span class='b'>2&#8595;</span>">3 uncommitted &nbsp;<span class="b">2&#8595;</span></td>
+            <td><span class="tag">4 open</span></td>
+          </tr>
+          <tr class="repo" data-k="fleet">
+            <td><span class="name"><span class="dot ok"></span><b>fleet</b></span></td>
+            <td class="branch">master</td>
+            <td class="state"><span class="a">clean</span></td>
+            <td class="muted">-</td>
+          </tr>
+          <tr class="repo" data-k="billing">
+            <td><span class="name"><span class="dot crit"></span><b>billing-svc</b></span></td>
+            <td class="branch">main</td>
+            <td class="state" data-base="CI failing &nbsp;<span class='b'>5&#8595;</span>">CI failing &nbsp;<span class="b">5&#8595;</span></td>
+            <td><span class="tag">due today</span></td>
+          </tr>
+          <tr class="repo" data-k="design">
+            <td><span class="name"><span class="dot ok"></span><b>design-system</b></span></td>
+            <td class="branch">release/2.4</td>
+            <td class="state"><span class="a">1&#8593; unpushed</span></td>
+            <td class="muted">2/6</td>
+          </tr>
+          <tr class="repo" data-k="infra">
+            <td><span class="name"><span class="dot dirty"></span><b>infra-terraform</b></span></td>
+            <td class="branch">main</td>
+            <td class="state" data-base="1 uncommitted">1 uncommitted</td>
+            <td class="muted">stale 12d</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="search" id="search">
+        <div class="search-in">
+          <span class="q" id="q"></span><span class="caret"></span>
+          <span class="mode">files</span>
+        </div>
+        <div class="hits" id="hits">
+          <div class="hit top" data-i="0"><span class="path">frontend/src/lib/<em>C</em>ommit<em>B</em>ox.<em>sv</em>elte</span><span class="repo">fleet</span></div>
+          <div class="hit" data-i="1"><span class="path">internal/git/<em>c</em>ommit<em>b</em>ox_helper.go</span><span class="repo">fleet</span></div>
+          <div class="hit" data-i="2"><span class="path">packages/ui/<em>C</em>heck<em>B</em>ox.<em>sv</em>g</span><span class="repo">design-system</span></div>
+        </div>
+      </div>
+
+      <div class="conflict" id="conflict">
+        <div class="cf-head">
+          <span class="cf-title">Merge in progress <span class="sub" id="cf-sub">- 1 file conflicts</span></span>
+          <span class="cf-actions">
+            <span class="cbtn" id="cf-abort">Abort</span>
+            <span class="cbtn primary" id="cf-cont">Continue</span>
+          </span>
+        </div>
+        <div class="cf-file" id="cf-file">
+          <span class="dot crit"></span><span class="mono">config/routes.yaml</span>
+          <span class="sides"><span class="side" id="side-mine">Keep mine</span><span class="side">Keep incoming</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cap"><span id="cap"></span></div>
+  <div class="prog"><i id="bar"></i></div>
+</div>
+
+<script>
+(function () {
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var $ = function (s) { return document.querySelector(s); };
+  var rows = {};
+  document.querySelectorAll("tr.repo").forEach(function (r) { rows[r.dataset.k] = r; });
+  var timers = [];
+  function after(ms, fn) { timers.push(setTimeout(fn, ms)); }
+  function clearAll() { timers.forEach(clearTimeout); timers = []; }
+
+  function setDot(k, cls) { var d = rows[k].querySelector(".dot"); d.className = "dot " + cls; }
+  function setCap(html) { var c = $("#cap"); c.classList.remove("on"); after(180, function () { c.innerHTML = html; c.classList.add("on"); }); }
+
+  var TOTAL = 16500;
+
+  function reset() {
+    clearAll();
+    // status board baseline
+    setDot("api", "dirty"); setDot("fleet", "ok"); setDot("billing", "crit"); setDot("design", "ok"); setDot("infra", "dirty");
+    document.querySelectorAll("tr.repo").forEach(function (r) { r.classList.remove("dim", "sel"); });
+    $("#t-fetch").classList.remove("hot"); $("#t-search").classList.remove("hot");
+    $("#search").classList.remove("on"); $("#q").textContent = "";
+    document.querySelectorAll(".hit").forEach(function (h) { h.classList.remove("show"); });
+    $("#conflict").classList.remove("on", "done"); $("#side-mine").classList.remove("pick");
+    $("#cf-file").classList.remove("resolved"); $("#cf-cont").classList.remove("press"); $("#side-mine").classList.remove("press");
+    $("#cf-sub").textContent = "- 1 file conflicts"; $("#cf-cont").textContent = "Continue";
+    rows.api.querySelector(".state").innerHTML = rows.api.querySelector(".state").dataset.base;
+    rows.billing.querySelector(".state").innerHTML = rows.billing.querySelector(".state").dataset.base;
+    play();
+  }
+
+  function play() {
+    // scene 1 - status at a glance
+    setCap("Every repo you own, <b>at a glance</b>");
+
+    // scene 2 - fetch all (2.6s)
+    after(2600, function () {
+      setCap("Fetch &amp; pull them <b>in bulk</b>");
+      $("#t-fetch").classList.add("hot");
+      // spinners on repos with remote work
+      rows.api.querySelector(".state").innerHTML = "<span class='spin'></span> fetching";
+      rows.billing.querySelector(".state").innerHTML = "<span class='spin'></span> fetching";
+    });
+    after(4300, function () {
+      // resolved: behind cleared
+      rows.api.querySelector(".state").innerHTML = "3 uncommitted";
+      rows.billing.querySelector(".state").innerHTML = "CI failing";
+      $("#t-fetch").classList.remove("hot");
+    });
+
+    // scene 3 - fuzzy search (5.0s -> 9.2s)
+    after(5000, function () {
+      setCap("<b>Fuzzy</b> search across every repo");
+      $("#t-search").classList.add("hot");
+      $("#search").classList.add("on");
+    });
+    var q = "cbsv";
+    q.split("").forEach(function (ch, i) {
+      after(5450 + i * 260, function () { $("#q").textContent = q.slice(0, i + 1); });
+    });
+    [0, 1, 2].forEach(function (i) {
+      after(6600 + i * 240, function () { document.querySelector('.hit[data-i="' + i + '"]').classList.add("show"); });
+    });
+    after(9000, function () { $("#search").classList.remove("on"); $("#t-search").classList.remove("hot"); });
+
+    // scene 4 - resolve a conflict (9.6s -> 15.4s)
+    after(9600, function () {
+      setCap("Resolve conflicts <b>inline</b>");
+      setDot("api", "crit");
+      rows.api.classList.add("sel");
+      $("#conflict").classList.add("on");
+    });
+    after(11200, function () { $("#side-mine").classList.add("press"); });
+    after(11380, function () {
+      $("#side-mine").classList.remove("press");
+      $("#side-mine").classList.add("pick");
+      $("#cf-file").classList.add("resolved");
+      $("#cf-sub").textContent = "- resolved";
+      $("#conflict").classList.add("done");
+    });
+    after(12400, function () { $("#cf-cont").classList.add("press"); });
+    after(12600, function () { $("#cf-cont").classList.remove("press"); $("#cf-cont").textContent = "Continue ✓"; });
+    after(13200, function () {
+      $("#conflict").classList.remove("on");
+      setDot("api", "ok");
+      rows.api.querySelector(".state").innerHTML = "<span class='a'>clean</span>";
+      rows.api.classList.remove("sel");
+      setCap("<b>Merged.</b> No terminal, no context switch.");
+    });
+
+    // loop
+    if (!reduce) after(TOTAL, reset);
+  }
+
+  // progress bar tied to the loop
+  if (!reduce) {
+    var start = null;
+    function tick(t) {
+      if (start === null) start = t;
+      var p = ((t - start) % TOTAL) / TOTAL;
+      $("#bar").style.width = (p * 100).toFixed(1) + "%";
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    play();
+  } else {
+    // static, legible frame
+    setCap("Every repo you own, at a glance");
+    $("#cap").classList.add("on");
+  }
+})();
+</script>
+
+</body>
+</html>
