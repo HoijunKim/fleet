@@ -210,6 +210,14 @@ export function GiveAgentConsent() {
   return window['go']['main']['App']['GiveAgentConsent']();
 }
 
+export function ImportCommit(arg1) {
+  return window['go']['main']['App']['ImportCommit'](arg1);
+}
+
+export function ImportPreview() {
+  return window['go']['main']['App']['ImportPreview']();
+}
+
 export function LastCommitMessage(arg1) {
   return window['go']['main']['App']['LastCommitMessage'](arg1);
 }

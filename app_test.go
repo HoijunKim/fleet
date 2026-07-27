@@ -1583,3 +1583,182 @@ func TestRestoredRecordIsRePushed(t *testing.T) {
 		t.Error("a restored record must be re-pushed on the next sync")
 	}
 }
+
+func writeExportFile(t *testing.T, path string, projects map[string]store.Record, in intel.Data) {
+	t.Helper()
+	body := struct {
+		Projects map[string]store.Record `json:"projects"`
+		Intel    intel.Data              `json:"intel"`
+	}{projects, in}
+	data, err := json.MarshalIndent(body, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportCommitUpsertsWithoutDeleting(t *testing.T) {
+	a := newTestApp(t)
+	_ = a.store.Update("m-local", func(r *store.Record) { r.Manual = true; r.Name = "local only" })
+	_ = a.store.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "old" })
+
+	path := filepath.Join(t.TempDir(), "export.json")
+	writeExportFile(t, path, map[string]store.Record{
+		"m-1": {Manual: true, Name: "new", Notes: "imported", UpdatedAt: "2020-01-01T00:00:00Z"},
+		"m-2": {Manual: true, Name: "added", UpdatedAt: "2020-01-01T00:00:00Z"},
+	}, intel.Data{})
+
+	if err := a.importCommit(path); err != nil {
+		t.Fatalf("importCommit: %v", err)
+	}
+	if rec, _ := a.store.Get("m-1"); rec.Name != "new" || rec.Notes != "imported" {
+		t.Errorf("m-1 not overwritten: %+v", rec)
+	}
+	if rec, _ := a.store.Get("m-1"); rec.UpdatedAt <= "2020-01-01T00:00:00Z" {
+		t.Errorf("m-1 not re-stamped: %q", rec.UpdatedAt)
+	}
+	if _, ok := a.store.Get("m-2"); !ok {
+		t.Error("m-2 was not added")
+	}
+	if rec, ok := a.store.Get("m-local"); !ok || rec.Name != "local only" {
+		t.Error("import must not delete a local-only record")
+	}
+}
+
+func TestImportCommitBringsChatsAndBrief(t *testing.T) {
+	a := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "export.json")
+	writeExportFile(t, path, map[string]store.Record{}, intel.Data{
+		Brief: intel.Brief{Text: "imported brief"},
+		Chats: map[string]intel.Chat{"git:x": {Turns: []intel.Turn{{Role: "user", Text: "hi"}}}},
+	})
+	if err := a.importCommit(path); err != nil {
+		t.Fatalf("importCommit: %v", err)
+	}
+	if b := a.intel.Brief(); b.Text != "imported brief" {
+		t.Errorf("brief not imported: %+v", b)
+	}
+	if turns := a.intel.Chat("git:x"); len(turns) != 1 || turns[0].Text != "hi" {
+		t.Errorf("chat not imported: %+v", turns)
+	}
+}
+
+func TestImportCommitEmptyBriefDoesNotWipeLocal(t *testing.T) {
+	a := newTestApp(t)
+	_ = a.intel.SetBrief(intel.Brief{Text: "my local brief"})
+	path := filepath.Join(t.TempDir(), "export.json")
+	writeExportFile(t, path, map[string]store.Record{}, intel.Data{})
+	if err := a.importCommit(path); err != nil {
+		t.Fatalf("importCommit: %v", err)
+	}
+	if b := a.intel.Brief(); b.Text != "my local brief" {
+		t.Errorf("an empty imported brief must not wipe the local one: %+v", b)
+	}
+}
+
+func TestImportCommitRefusesWhenStoreDegraded(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "projects.json")
+	if err := os.WriteFile(p, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := store.Open(p)
+	is, _ := intel.Open(filepath.Join(dir, "intel.json"))
+	a := &App{store: st, intel: is, dataDir: dir, syncTrigger: make(chan struct{}, 1)}
+
+	path := filepath.Join(dir, "export.json")
+	writeExportFile(t, path, map[string]store.Record{"m-1": {Manual: true, Name: "x"}}, intel.Data{})
+	if err := a.importCommit(path); err == nil {
+		t.Error("importCommit must refuse when the store is degraded")
+	}
+}
+
+func TestImportSummaryCountsAndMalformed(t *testing.T) {
+	a := newTestApp(t)
+	_ = a.store.Update("m-1", func(r *store.Record) { r.Manual = true; r.Name = "existing" })
+
+	path := filepath.Join(t.TempDir(), "export.json")
+	writeExportFile(t, path, map[string]store.Record{
+		"m-1": {Manual: true, Name: "a"},
+		"m-2": {Manual: true, Name: "b"},
+	}, intel.Data{
+		Brief: intel.Brief{Text: "b"},
+		Chats: map[string]intel.Chat{"git:x": {Turns: []intel.Turn{{Role: "user", Text: "q"}}}},
+	})
+	s := a.importSummary(path)
+	if s.Error != "" {
+		t.Fatalf("unexpected error: %s", s.Error)
+	}
+	if s.Projects != 2 || s.ProjectsOverwrite != 1 {
+		t.Errorf("project counts wrong: %+v", s)
+	}
+	if s.Chats != 1 || !s.Brief {
+		t.Errorf("intel counts wrong: %+v", s)
+	}
+
+	bad := filepath.Join(t.TempDir(), "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s := a.importSummary(bad); s.Error == "" {
+		t.Error("a malformed file must report an error")
+	}
+}
+
+func TestImportedRecordIsRePushed(t *testing.T) {
+	var pushed []cloud.Doc
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			var body struct {
+				Docs []cloud.Doc `json:"docs"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			pushed = append(pushed, body.Docs...)
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{}, "cursor": 0})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"docs": []any{}, "cursor": 0})
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	st, _ := store.Open(filepath.Join(dir, "projects.json"))
+	is, _ := intel.Open(filepath.Join(dir, "intel.json"))
+	eng := syncengine.New(cloud.New(srv.URL), filepath.Join(dir, "sync.json"),
+		syncengine.NewProject(st, func(string) string { return "" }, nil))
+	a := &App{store: st, intel: is, dataDir: dir, engine: eng, syncTrigger: make(chan struct{}, 1)}
+
+	path := filepath.Join(dir, "export.json")
+	writeExportFile(t, path, map[string]store.Record{
+		"m-1": {Manual: true, Name: "p", UpdatedAt: "2020-01-01T00:00:00Z"},
+	}, intel.Data{})
+	if err := a.importCommit(path); err != nil {
+		t.Fatalf("importCommit: %v", err)
+	}
+	if err := a.engine.SyncOnce("tok"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	found := false
+	for _, d := range pushed {
+		if d.DocID == "m-1" && !d.Deleted {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("an imported record must be re-pushed on the next sync")
+	}
+}
+
+func TestImportCommitBindingReturnsErrMsg(t *testing.T) {
+	a := newTestApp(t)
+	if msg := a.ImportCommit(filepath.Join(t.TempDir(), "nope.json")); msg == "" {
+		t.Error("ImportCommit on a missing file must return an error string")
+	}
+	path := filepath.Join(t.TempDir(), "ok.json")
+	writeExportFile(t, path, map[string]store.Record{"m-1": {Manual: true, Name: "x"}}, intel.Data{})
+	if msg := a.ImportCommit(path); msg != "" {
+		t.Errorf("a valid import must return \"\", got %q", msg)
+	}
+}

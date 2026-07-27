@@ -44,6 +44,9 @@ contain - the whole app as it stands on `master`.
   readiness check, graceful shutdown, request ids and panic recovery.
 - **Backup restore** - a record sync overwrote or deleted can be restored from
   its backup in Settings; the restore re-pushes and wins on every device.
+- **Import** - an exported data file can be imported back: projects and intel are
+  upserted (local-only records are never deleted) and re-pushed to win on every
+  device.
 
 ### Changed
 
