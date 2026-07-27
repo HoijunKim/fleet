@@ -73,11 +73,11 @@
     try {
       const err = await ContinueOperation(path);
       if (err) {
-        toastError((mode === "rebase" ? "Continue rebase: " : "Continue merge: ") + err);
+        toastError("Continue " + opLabel.toLowerCase() + ": " + err);
         await loadStatus();
         return;
       }
-      toastSuccess((mode === "rebase" ? "Rebase" : "Merge") + " completed " + name);
+      toastSuccess(opLabel + " completed " + name);
       msg = "";
       onChanged(path);
     } finally {
@@ -91,10 +91,10 @@
     try {
       const err = await AbortOperation(path);
       if (err) {
-        toastError((mode === "rebase" ? "Abort rebase: " : "Abort merge: ") + err);
+        toastError("Abort " + opLabel.toLowerCase() + ": " + err);
         return;
       }
-      toastSuccess((mode === "rebase" ? "Rebase" : "Merge") + " aborted " + name);
+      toastSuccess(opLabel + " aborted " + name);
       onChanged(path);
     } finally {
       busy = false;
@@ -107,6 +107,10 @@
   // per file comes from the binding so the ours/theirs swap is never re-derived.
   $: conflictByPath = new Map(conflicts.map((c) => [c.path, c]));
   $: hasConflict = conflicts.length > 0;
+  // Title-case the in-progress operation for the banner and toasts, so merge,
+  // rebase and cherry-pick all read naturally.
+  const OP_LABELS: Record<string, string> = { merge: "Merge", rebase: "Rebase", "cherry-pick": "Cherry-pick" };
+  $: opLabel = OP_LABELS[mode] || "Operation";
   $: hasStaged = staged.length > 0;
   $: count = dirtyFiles ? dirtyFiles.length : 0;
   $: clean = count === 0;
@@ -229,7 +233,7 @@
     <div class="op-banner" class:resolved={!hasConflict}>
       <div class="op-banner-head">
         <span class="op-title">
-          {mode === "rebase" ? "Rebase" : "Merge"} in progress
+          {opLabel} in progress
           {#if hasConflict}<span class="op-sub">— {conflicts.length} file{conflicts.length === 1 ? "" : "s"} conflict</span>{/if}
         </span>
         <div class="op-actions">

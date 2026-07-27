@@ -1802,3 +1802,36 @@ func TestSearchAllIgnoreCaseThreadsThrough(t *testing.T) {
 		t.Errorf("case-sensitive search should not match TODO from 'todo', got %+v", hits)
 	}
 }
+
+func TestCherryPickBindingCleanAndBadHash(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	gitRun(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitRun(t, dir, "config", "gc.auto", "0")
+	gitRun(t, dir, "config", "user.email", "t@t")
+	gitRun(t, dir, "config", "user.name", "T")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+	gitRun(t, dir, "checkout", "-b", "side")
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "side")
+	hash := ""
+	if out, err := (git.ExecRunner{}).Run(dir, "rev-parse", "HEAD"); err == nil {
+		hash = strings.TrimSpace(out)
+	}
+	gitRun(t, dir, "checkout", "master")
+
+	a := &App{runner: git.ExecRunner{}}
+	if msg := a.CherryPick(dir, hash); msg != "" {
+		t.Errorf("clean cherry-pick binding should return \"\", got %q", msg)
+	}
+	if msg := a.CherryPick(dir, "nonexistent-hash"); msg == "" {
+		t.Error("a bad hash must return an error string")
+	}
+}

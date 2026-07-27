@@ -65,7 +65,7 @@ func TestCommitAllStagesFirst(t *testing.T) {
 
 func TestLogParsesMultiple(t *testing.T) {
 	f := &opFake{out: map[string]string{
-		"log -n": "h1\x1fa\x1f2026-07-01T10:00:00+09:00\x1fmsg1\nh2\x1fb\x1f2026-06-30T10:00:00+09:00\x1fmsg2",
+		"log HEAD": "h1\x1fa\x1f2026-07-01T10:00:00+09:00\x1fmsg1\nh2\x1fb\x1f2026-06-30T10:00:00+09:00\x1fmsg2",
 	}}
 	commits, err := Log(f, "/x", 2)
 	if err != nil || len(commits) != 2 {
