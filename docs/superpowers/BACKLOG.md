@@ -24,6 +24,7 @@ an item leaves the "Remaining" list only when a tier ships it.
 | PolyForm Noncommercial license + in-app help overlay | 4n |
 | Fuzzy file-name search with best-first ranking | 4o |
 | Content search modes: fixed-string default + regex + whole-word | 4p |
+| Interactive rebase: reorder / drop / fixup recent local commits | 4q |
 | Open editor at a line (`OpenEditorAt`) | already shipped pre-4 |
 
 ---
@@ -35,7 +36,6 @@ an item leaves the "Remaining" list only when a tier ships it.
 | Item | Deferred by | Notes |
 | --- | --- | --- |
 | Interactive hunk staging | `specs/2026-07-16-tier3a-git-depth-design.md:84-87` | Biggest git item; a partial-stage UI over `git add -p`. |
-| Interactive rebase | same | Cherry-pick (4l) and reflog (4m) shipped; interactive rebase (reorder/squash/edit) is the remaining, hardest git item. |
 | Selective per-project sync; undo for account deletion | `specs/2026-07-16-tier2c-sync-account-design.md:74-77` | Sync-policy design decisions. |
 | Fleet MCP server exposing cross-repo/PM tools to the agent | `specs/2026-07-10-fleet-intel-agent-design.md:209-214` | Largest single item; a whole subsystem. |
 | Multi-repo briefing correlation; multi-root agent reads (v1 is `Roots[0]`) | same, and `specs/2026-07-13-fleet-cross-repo-agent-design.md:59-64` | |
