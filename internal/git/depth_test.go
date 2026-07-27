@@ -1,7 +1,9 @@
 package git
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -231,5 +233,49 @@ func TestCreateAndDeleteBranch(t *testing.T) {
 		if b == "wip" {
 			t.Error("DeleteBranchForce left the branch behind")
 		}
+	}
+}
+
+func TestReflogAndResetHard(t *testing.T) {
+	dir := newRepo(t)
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
+	// Two more commits on top of newRepo's initial one.
+	writeFile(t, dir, "one.txt", "1\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "add one")
+	lostHash := strings.TrimSpace(gitOK(t, dir, "rev-parse", "HEAD"))
+	writeFile(t, dir, "two.txt", "2\n")
+	gitOK(t, dir, "add", "-A")
+	gitOK(t, dir, "commit", "-m", "add two")
+
+	// Reflog lists HEAD movements, newest first.
+	entries, err := Reflog(ExecRunner{}, dir, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) < 3 {
+		t.Fatalf("expected several reflog entries, got %d", len(entries))
+	}
+	if entries[0].Ref != "HEAD@{0}" {
+		t.Errorf("newest entry ref = %q, want HEAD@{0}", entries[0].Ref)
+	}
+
+	// A bad reset drops "add two"; the file vanishes.
+	gitOK(t, dir, "reset", "--hard", "HEAD~1")
+	if _, err := os.Stat(filepath.Join(dir, "two.txt")); !os.IsNotExist(err) {
+		t.Fatal("precondition: two.txt should be gone after the reset")
+	}
+	if head := strings.TrimSpace(gitOK(t, dir, "rev-parse", "HEAD")); head != lostHash {
+		t.Fatalf("precondition: after reset HEAD should be the 'add one' commit %s, got %s", lostHash, head)
+	}
+
+	// HEAD@{1} is the pre-reset position ("add two"); ResetHard back to it
+	// restores the file the reset dropped - reflog as a safety net.
+	if err := ResetHard(ExecRunner{}, dir, "HEAD@{1}"); err != nil {
+		t.Fatalf("ResetHard: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "two.txt")); err != nil {
+		t.Errorf("ResetHard to the pre-reset reflog entry should restore two.txt: %v", err)
 	}
 }

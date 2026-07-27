@@ -6,6 +6,7 @@
   import { fadeScaleIn } from "./motion";
   import BranchMenu from "./BranchMenu.svelte";
   import CherryPickMenu from "./CherryPickMenu.svelte";
+  import ReflogMenu from "./ReflogMenu.svelte";
   import CommitBox from "./CommitBox.svelte";
   import DiffModal from "./DiffModal.svelte";
   import HistoryList from "./HistoryList.svelte";
@@ -345,6 +346,7 @@
                   <span class="dl-label">Branch</span>
                   <BranchMenu path={project.path} name={project.name} onChanged={repoChanged} />
                   <CherryPickMenu path={project.path} name={project.name} onChanged={repoChanged} />
+                  <ReflogMenu path={project.path} name={project.name} onChanged={repoChanged} />
                 </div>
                 {#if project.remote}
                   <div class="dl-row">

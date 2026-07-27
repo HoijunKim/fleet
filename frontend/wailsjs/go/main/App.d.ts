@@ -156,6 +156,8 @@ export function ReadRepoFile(arg1:string,arg2:string):Promise<string>;
 
 export function RebaseUpstream(arg1:string):Promise<string>;
 
+export function Reflog(arg1:string,arg2:number):Promise<Array<main.ReflogView>>;
+
 export function RemoveEdge(arg1:string):Promise<string>;
 
 export function RenameProject(arg1:string,arg2:string):Promise<string>;
@@ -175,6 +177,8 @@ export function RepoSymbols(arg1:string):Promise<main.SymbolsView>;
 export function ResolveConflict(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function RestoreBackup(arg1:string,arg2:string):Promise<string>;
+
+export function RestoreReflog(arg1:string,arg2:string):Promise<string>;
 
 export function RevealDataDir():Promise<string>;
 
