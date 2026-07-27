@@ -61,6 +61,10 @@ The AI brief, repo chat and agent features shell out to the `claude` CLI, which
 must be on `PATH` (it is the default AI provider). The OpenAI and Gemini
 providers are configured in Settings instead and need no CLI.
 
+The landing page in `site/` is plain HTML deployed by `.github/workflows/pages.yml`.
+Its favicon, touch icon and Open Graph card are generated from `build/appicon.png`
+by `python tools/make-site-icons.py` (Pillow only); re-run it if the app icon changes.
+
 ## Config
 
     roots = ["C:/Users/you/Projects"]
