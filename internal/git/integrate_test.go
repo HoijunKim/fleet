@@ -50,6 +50,8 @@ func setupDiverged(t *testing.T, conflict bool) string {
 
 	// Author A's repo with an initial commit.
 	gitOK(t, wA, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, wA, "config", "gc.auto", "0")
+	gitOK(t, wA, "config", "maintenance.auto", "false")
 	gitOK(t, wA, "config", "user.email", "a@test")
 	gitOK(t, wA, "config", "user.name", "A")
 	writeFile(t, wA, "shared.txt", "base line\n")
@@ -117,6 +119,8 @@ func TestWorktreeDiffIncludesTrackedAndUntracked(t *testing.T) {
 	}
 	dir := t.TempDir()
 	gitOK(t, dir, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, dir, "config", "gc.auto", "0")
+	gitOK(t, dir, "config", "maintenance.auto", "false")
 	gitOK(t, dir, "config", "user.email", "t@t")
 	gitOK(t, dir, "config", "user.name", "T")
 	writeFile(t, dir, "tracked.txt", "one\n")
@@ -155,6 +159,8 @@ func TestCloneCreatesWorkingCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	gitOK(t, seed, "-c", "init.defaultBranch=master", "init")
+	gitOK(t, seed, "config", "gc.auto", "0")
+	gitOK(t, seed, "config", "maintenance.auto", "false")
 	gitOK(t, seed, "config", "user.email", "s@t")
 	gitOK(t, seed, "config", "user.name", "S")
 	writeFile(t, seed, "README.md", "hello\n")
