@@ -23,6 +23,7 @@ import (
 	"github.com/hoijun/fleet/internal/config"
 	"github.com/hoijun/fleet/internal/deps"
 	"github.com/hoijun/fleet/internal/edges"
+	"github.com/hoijun/fleet/internal/fuzzy"
 	"github.com/hoijun/fleet/internal/gh"
 	"github.com/hoijun/fleet/internal/git"
 	"github.com/hoijun/fleet/internal/intel"
@@ -1671,44 +1672,48 @@ type FileHit struct {
 	File     string `json:"file"`
 }
 
-// SearchFiles finds tracked files across all discovered repos whose repo-
-// relative path contains query (case-insensitive), capped for a responsive UI.
+// SearchFiles fuzzy-matches tracked files across all discovered repos against
+// query (a case-insensitive subsequence, quick-open style) and returns them
+// ranked best-first, capped for a responsive UI. Unlike content search, file
+// search sorts globally by match score rather than round-robin: the best match
+// should surface regardless of which repo holds it.
 func (a *App) SearchFiles(query string) []FileHit {
 	out := []FileHit{}
-	q := strings.ToLower(strings.TrimSpace(query))
+	q := strings.TrimSpace(query)
 	if q == "" {
 		return out
 	}
 	cfg := a.cfgSnapshot()
 	repos := scan.Discover(cfg.Roots, cfg.ScanDepth, false)
-	// Same round-robin fairness as SearchAll so early repos don't starve later
-	// ones of the file-hit budget.
-	perRepo := make([][]FileHit, len(repos))
-	for i, r := range repos {
+	type scored struct {
+		hit   FileHit
+		score int
+	}
+	var all []scored
+	for _, r := range repos {
 		files, _ := git.ListFiles(a.runner, r.Path)
 		for _, f := range files {
-			if strings.Contains(strings.ToLower(f), q) {
-				perRepo[i] = append(perRepo[i], FileHit{Repo: r.Name, RepoPath: r.Path, File: f})
-				if len(perRepo[i]) >= searchPerRepoCap {
-					break
-				}
+			if s, ok := fuzzy.Match(q, f); ok {
+				all = append(all, scored{FileHit{Repo: r.Name, RepoPath: r.Path, File: f}, s})
 			}
 		}
 	}
-	for round := 0; len(out) < searchGlobalCap; round++ {
-		added := false
-		for i := range perRepo {
-			if round < len(perRepo[i]) {
-				out = append(out, perRepo[i][round])
-				added = true
-				if len(out) >= searchGlobalCap {
-					break
-				}
-			}
+	// Best score first; ties broken by shorter path then path ascending, so the
+	// order is stable and the tightest match wins.
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].score != all[j].score {
+			return all[i].score > all[j].score
 		}
-		if !added {
+		if len(all[i].hit.File) != len(all[j].hit.File) {
+			return len(all[i].hit.File) < len(all[j].hit.File)
+		}
+		return all[i].hit.File < all[j].hit.File
+	})
+	for i := range all {
+		if i >= searchGlobalCap {
 			break
 		}
+		out = append(out, all[i].hit)
 	}
 	return out
 }
