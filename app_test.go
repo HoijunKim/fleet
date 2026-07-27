@@ -1762,3 +1762,13 @@ func TestImportCommitBindingReturnsErrMsg(t *testing.T) {
 		t.Errorf("a valid import must return \"\", got %q", msg)
 	}
 }
+
+func TestDeleteBranchForceGuardsEmptyName(t *testing.T) {
+	a := newTestApp(t)
+	if msg := a.DeleteBranchForce("/repo", "  "); msg == "" {
+		t.Error("an empty branch name must be refused without shelling out")
+	}
+	if msg := a.DeleteBranchForce("/repo", "-D"); msg == "" {
+		t.Error("a name starting with '-' must be refused")
+	}
+}

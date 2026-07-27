@@ -303,6 +303,15 @@ func DeleteBranch(r Runner, dir, name string) error {
 	return err
 }
 
+// DeleteBranchForce deletes branch name with git's force delete (-D), removing
+// even an unmerged branch and losing its unmerged commits. It is separate from
+// DeleteBranch so the force path is explicit at every call site, never a flag
+// reachable by accident; the UI offers it only after the safe delete is refused.
+func DeleteBranchForce(r Runner, dir, name string) error {
+	_, err := r.Run(dir, "branch", "-D", name)
+	return err
+}
+
 // StageFile stages a single path; UnstageFile removes a path from the index,
 // leaving the working-tree change intact.
 func StageFile(r Runner, dir, file string) error {

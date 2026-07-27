@@ -47,6 +47,8 @@ contain - the whole app as it stands on `master`.
 - **Import** - an exported data file can be imported back: projects and intel are
   upserted (local-only records are never deleted) and re-pushed to win on every
   device.
+- **Force-delete a branch** - when git refuses to delete an unmerged branch, the
+  branch menu offers a force delete behind a confirm.
 
 ### Changed
 
