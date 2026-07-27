@@ -226,6 +226,10 @@ export function ImportPreview() {
   return window['go']['main']['App']['ImportPreview']();
 }
 
+export function InteractiveRebase(arg1, arg2, arg3) {
+  return window['go']['main']['App']['InteractiveRebase'](arg1, arg2, arg3);
+}
+
 export function LastCommitMessage(arg1) {
   return window['go']['main']['App']['LastCommitMessage'](arg1);
 }
@@ -300,6 +304,10 @@ export function Push(arg1) {
 
 export function ReadRepoFile(arg1, arg2) {
   return window['go']['main']['App']['ReadRepoFile'](arg1, arg2);
+}
+
+export function RebaseCommits(arg1, arg2) {
+  return window['go']['main']['App']['RebaseCommits'](arg1, arg2);
 }
 
 export function RebaseUpstream(arg1) {

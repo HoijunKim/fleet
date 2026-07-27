@@ -10,6 +10,13 @@ before its tag is pushed.
 
 ## [Unreleased]
 
+### Added
+
+- **Rewrite history (interactive rebase)** - reorder, drop, or fixup recent
+  local commits from the detail panel without opening an editor: fleet drives
+  `git rebase -i` as its own sequence editor. A conflict during replay is kept
+  and handed to the existing conflict panel.
+
 ## [0.1.0] - 2026-07-27
 
 First tagged release: the whole app as it stands, published for Windows, macOS

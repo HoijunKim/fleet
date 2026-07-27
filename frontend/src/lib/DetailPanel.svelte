@@ -7,6 +7,7 @@
   import BranchMenu from "./BranchMenu.svelte";
   import CherryPickMenu from "./CherryPickMenu.svelte";
   import ReflogMenu from "./ReflogMenu.svelte";
+  import RebaseMenu from "./RebaseMenu.svelte";
   import CommitBox from "./CommitBox.svelte";
   import DiffModal from "./DiffModal.svelte";
   import HistoryList from "./HistoryList.svelte";
@@ -347,6 +348,7 @@
                   <BranchMenu path={project.path} name={project.name} onChanged={repoChanged} />
                   <CherryPickMenu path={project.path} name={project.name} onChanged={repoChanged} />
                   <ReflogMenu path={project.path} name={project.name} onChanged={repoChanged} />
+                  <RebaseMenu path={project.path} name={project.name} onChanged={repoChanged} />
                 </div>
                 {#if project.remote}
                   <div class="dl-row">

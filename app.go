@@ -635,6 +635,45 @@ func (a *App) CherryPick(path, hash string) string {
 	return errMsg(git.CherryPick(a.runner, path, strings.TrimSpace(hash)))
 }
 
+// RebaseView is the candidate list for an interactive rebase: the recent
+// commits (newest first) plus the base to rebase them onto.
+type RebaseView struct {
+	Base    string       `json:"base"`
+	Commits []CommitView `json:"commits"`
+}
+
+// RebaseCommits returns the last n commits and the base (parent of the oldest),
+// for the interactive-rebase picker. Base is "" when the history is shorter than
+// n (rebasing from the root is refused - nothing to rebase onto).
+func (a *App) RebaseCommits(path string, n int) RebaseView {
+	commits := a.logCommits(git.LogRef(a.runner, path, "HEAD", n))
+	base := ""
+	// The commit just below the oldest listed one is the rebase base.
+	if out, err := a.runner.Run(path, "rev-parse", "HEAD~"+strconv.Itoa(len(commits))); err == nil {
+		base = strings.TrimSpace(out)
+	}
+	return RebaseView{Base: base, Commits: commits}
+}
+
+// InteractiveRebase applies the reordered/marked actions onto base. The actions
+// are in the desired final order; each is pick/fixup/drop. A conflict during
+// replay leaves the rebase in progress and the conflict panel takes over.
+func (a *App) InteractiveRebase(path, base string, actions []git.RebaseAction) string {
+	if strings.TrimSpace(base) == "" {
+		return "error: no base to rebase onto"
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	seqEditor := quoteArg(exe) + " --rebase-seq"
+	return errMsg(git.InteractiveRebase(path, strings.TrimSpace(base), seqEditor, actions))
+}
+
+// quoteArg double-quotes a path for use inside a GIT_SEQUENCE_EDITOR command so
+// a space in the executable path does not split it into two arguments.
+func quoteArg(s string) string { return `"` + s + `"` }
+
 // ReflogView is one HEAD movement for the recovery picker.
 type ReflogView struct {
 	Hash    string `json:"hash"`
