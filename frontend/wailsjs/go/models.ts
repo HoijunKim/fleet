@@ -354,6 +354,30 @@ export namespace main {
 	        this.frozen = source["frozen"];
 	    }
 	}
+	export class ImportSummary {
+	    path: string;
+	    projects: number;
+	    projectsOverwrite: number;
+	    chats: number;
+	    chatsOverwrite: number;
+	    brief: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.projects = source["projects"];
+	        this.projectsOverwrite = source["projectsOverwrite"];
+	        this.chats = source["chats"];
+	        this.chatsOverwrite = source["chatsOverwrite"];
+	        this.brief = source["brief"];
+	        this.error = source["error"];
+	    }
+	}
 	export class NotionDBView {
 	    id: string;
 	    title: string;

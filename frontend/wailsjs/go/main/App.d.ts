@@ -108,6 +108,10 @@ export function GitOperation(arg1:string):Promise<string>;
 
 export function GiveAgentConsent():Promise<string>;
 
+export function ImportCommit(arg1:string):Promise<string>;
+
+export function ImportPreview():Promise<main.ImportSummary>;
+
 export function LastCommitMessage(arg1:string):Promise<string>;
 
 export function ListEdges():Promise<Array<main.EdgeView>>;

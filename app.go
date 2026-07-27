@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1036,6 +1037,113 @@ func (a *App) writeExport(dest string) error {
 	}
 	return os.WriteFile(dest, data, 0o644)
 }
+
+// ImportSummary is the preview of an import file: what it holds and how much of
+// it would replace existing local records.
+type ImportSummary struct {
+	Path              string `json:"path"` // "" when the user cancelled
+	Projects          int    `json:"projects"`
+	ProjectsOverwrite int    `json:"projectsOverwrite"`
+	Chats             int    `json:"chats"`
+	ChatsOverwrite    int    `json:"chatsOverwrite"`
+	Brief             bool   `json:"brief"`
+	Error             string `json:"error"`
+}
+
+// importFile is the on-disk shape writeExport produces.
+type importFile struct {
+	Projects map[string]store.Record `json:"projects"`
+	Intel    intel.Data              `json:"intel"`
+}
+
+func parseImport(path string) (importFile, error) {
+	var f importFile
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return f, err
+	}
+	if err := json.Unmarshal(data, &f); err != nil {
+		return f, fmt.Errorf("not a valid fleet export: %w", err)
+	}
+	return f, nil
+}
+
+// importSummary parses path and counts what an import would do, without writing.
+func (a *App) importSummary(path string) ImportSummary {
+	f, err := parseImport(path)
+	if err != nil {
+		return ImportSummary{Path: path, Error: err.Error()}
+	}
+	s := ImportSummary{Path: path, Projects: len(f.Projects), Chats: len(f.Intel.Chats)}
+	s.Brief = f.Intel.Brief.Text != "" || f.Intel.Brief.UpdatedAt != ""
+	local := a.store.Snapshot()
+	for id := range f.Projects {
+		if _, ok := local[id]; ok {
+			s.ProjectsOverwrite++
+		}
+	}
+	localChats := a.intel.SnapshotChats()
+	for id := range f.Intel.Chats {
+		if _, ok := localChats[id]; ok {
+			s.ChatsOverwrite++
+		}
+	}
+	return s
+}
+
+// importCommit upserts an import file into the stores, re-stamping every record
+// so it re-pushes and wins LWW. It never deletes: local ids absent from the file
+// are untouched. It refuses up front if a store is degraded, so a half-import
+// cannot happen.
+func (a *App) importCommit(path string) error {
+	if err := a.store.Degraded(); err != nil {
+		return fmt.Errorf("cannot import into unreadable project data: %w", err)
+	}
+	if err := a.intel.Degraded(); err != nil {
+		return fmt.Errorf("cannot import into unreadable intel data: %w", err)
+	}
+	f, err := parseImport(path)
+	if err != nil {
+		return err
+	}
+	for id, rec := range f.Projects {
+		rec := rec
+		if err := a.store.Update(id, func(r *store.Record) { *r = rec }); err != nil {
+			return err
+		}
+	}
+	if f.Intel.Brief.Text != "" || f.Intel.Brief.UpdatedAt != "" {
+		if err := a.intel.SetBrief(f.Intel.Brief); err != nil {
+			return err
+		}
+	}
+	for id, ch := range f.Intel.Chats {
+		if err := a.intel.SetChat(id, ch.Turns); err != nil {
+			return err
+		}
+	}
+	a.triggerSync()
+	return nil
+}
+
+// ImportPreview opens a file dialog and returns what importing the chosen file
+// would do, without writing anything. A cancelled dialog returns {Path: ""}.
+func (a *App) ImportPreview() ImportSummary {
+	src, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:   "Import fleet data",
+		Filters: []wruntime.FileFilter{{DisplayName: "JSON", Pattern: "*.json"}},
+	})
+	if err != nil {
+		return ImportSummary{Error: err.Error()}
+	}
+	if strings.TrimSpace(src) == "" {
+		return ImportSummary{} // cancelled
+	}
+	return a.importSummary(src)
+}
+
+// ImportCommit imports the file at path (from a prior ImportPreview).
+func (a *App) ImportCommit(path string) string { return errMsg(a.importCommit(path)) }
 
 // AddTask appends a task to a project.
 func (a *App) AddTask(projectID, title, due string) string {
