@@ -123,3 +123,19 @@ Local dev/e2e: `docker compose up -d postgres` then `go test ./...` with
 `DATABASE_URL_TEST=...` (runs the pgstore and `internal/server/e2e` suites
 against it); `docker compose up -d --build fleetd` runs the server via the
 repo's `docker-compose.yml`.
+
+## License
+
+Copyright (c) 2026 H.K. All rights reserved.
+
+fleet is **source-available**, not open source. It is licensed under the
+**PolyForm Noncommercial License 1.0.0** (see [LICENSE](LICENSE)): you may use,
+study, modify and share it for any **noncommercial** purpose - personal use,
+research, education, hobby projects, and nonprofit/government organizations.
+**Commercial use is not permitted** under this license.
+
+The copyright holder reserves all commercial rights. A commercial license may be
+offered separately in the future; contact the author for commercial use.
+
+Third-party dependencies keep their own (permissive / MPL-2.0) licenses and are
+unaffected by fleet's license.
