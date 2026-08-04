@@ -1,7 +1,12 @@
 <script lang="ts">
   import Logo from "./Logo.svelte";
+  import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 
   export let onClose: () => void;
+
+  function openURL(url: string) {
+    BrowserOpenURL(url);
+  }
 
   // Each section explains one surface of the app, in the order a new user meets
   // it. Kept as data so the markup stays a simple loop.
@@ -65,6 +70,13 @@
         </section>
       {/each}
     </div>
+    <div class="help-credit">
+      <span>fleet <span class="v">v0.1.0</span> &middot; Made by <b>H.K</b></span>
+      <span class="help-credit-links">
+        <button type="button" on:click={() => openURL("https://github.com/hoijun-kim/fleet")}>GitHub</button>
+        <button type="button" on:click={() => openURL("https://github.com/hoijun-kim/fleet/blob/master/LICENSE")}>PolyForm NC 1.0.0</button>
+      </span>
+    </div>
     <p class="help-foot">Press <span class="cmd-kbd">Esc</span> or click outside to close.</p>
   </div>
 </div>
@@ -97,5 +109,11 @@
   .help-section:last-child { border-bottom: none; }
   .help-section-title { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--accent, var(--text)); }
   .help-section-body { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
-  .help-foot { margin: 0; padding: 10px 18px 14px; font-size: 11.5px; color: var(--faint); }
+  .help-credit { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 18px 0; font-size: 12px; color: var(--muted); border-top: 1px solid var(--hairline, var(--border)); margin-top: 4px; }
+  .help-credit b { color: var(--text); }
+  .help-credit .v { color: var(--faint); font-variant-numeric: tabular-nums; }
+  .help-credit-links { display: flex; gap: 12px; }
+  .help-credit-links button { background: 0; border: 0; padding: 0; font: inherit; font-size: 12px; color: var(--accent, var(--text)); cursor: pointer; }
+  .help-credit-links button:hover { text-decoration: underline; }
+  .help-foot { margin: 0; padding: 8px 18px 14px; font-size: 11.5px; color: var(--faint); }
 </style>
