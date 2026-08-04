@@ -2,6 +2,11 @@
 
 **Every git repo you own, at a glance.**
 
+![release](https://img.shields.io/github/v/release/hoijun-kim/fleet?color=5b8cff)
+![downloads](https://img.shields.io/github/downloads/hoijun-kim/fleet/total?color=5b8cff)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5b8cff)
+![license](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-blue)
+
 fleet is a desktop dashboard for every git repository under your project roots.
 See which are dirty, behind, or stale - then fetch, commit, resolve conflicts,
 cherry-pick, search across all of them, and track tasks and deadlines, from one
