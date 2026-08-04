@@ -7,7 +7,7 @@ PublisherSupportUrl: https://github.com/hoijun-kim/fleet/issues
 PackageName: fleet
 PackageUrl: https://github.com/hoijun-kim/fleet
 License: PolyForm Noncommercial 1.0.0
-LicenseUrl: https://github.com/hoijun-kim/fleet/blob/main/LICENSE
+LicenseUrl: https://github.com/hoijun-kim/fleet/blob/master/LICENSE
 ShortDescription: See and manage every git repo under your project roots on one board.
 Description: >-
   fleet shows which repositories are dirty, behind or stale at a glance, then
