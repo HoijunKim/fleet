@@ -2,8 +2,8 @@
 
 **Every git repo you own, at a glance.**
 
-![release](https://img.shields.io/github/v/release/hoijun-kim/fleet?color=5b8cff)
-![downloads](https://img.shields.io/github/downloads/hoijun-kim/fleet/total?color=5b8cff)
+![release](https://img.shields.io/github/v/release/hoijunkim/fleet?color=5b8cff)
+![downloads](https://img.shields.io/github/downloads/hoijunkim/fleet/total?color=5b8cff)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-5b8cff)
 ![license](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-blue)
 
@@ -12,12 +12,12 @@ See which are dirty, behind, or stale - then fetch, commit, resolve conflicts,
 cherry-pick, search across all of them, and track tasks and deadlines, from one
 window. No terminal required.
 
-[![release](https://img.shields.io/github/v/release/hoijun-kim/fleet?color=5b8cff)](https://github.com/hoijun-kim/fleet/releases/latest)
-[![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-8b97a7)](https://github.com/hoijun-kim/fleet/releases/latest)
+[![release](https://img.shields.io/github/v/release/hoijunkim/fleet?color=5b8cff)](https://github.com/hoijunkim/fleet/releases/latest)
+[![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-8b97a7)](https://github.com/hoijunkim/fleet/releases/latest)
 [![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial-3fb950)](LICENSE)
 
-**[Download](https://github.com/hoijun-kim/fleet/releases/latest)** &nbsp;·&nbsp;
-**[Landing page](https://hoijun-kim.github.io/fleet/)** &nbsp;·&nbsp;
+**[Download](https://github.com/hoijunkim/fleet/releases/latest)** &nbsp;·&nbsp;
+**[Landing page](https://hoijunkim.github.io/fleet/)** &nbsp;·&nbsp;
 **[Changelog](CHANGELOG.md)**
 
 <!-- Add a 10-30s demo GIF here - it is the single highest-leverage asset for
