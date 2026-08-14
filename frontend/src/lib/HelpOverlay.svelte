@@ -73,8 +73,8 @@
     <div class="help-credit">
       <span>fleet <span class="v">v0.1.0</span> &middot; Made by <b>H.K</b></span>
       <span class="help-credit-links">
-        <button type="button" on:click={() => openURL("https://github.com/hoijun-kim/fleet")}>GitHub</button>
-        <button type="button" on:click={() => openURL("https://github.com/hoijun-kim/fleet/blob/master/LICENSE")}>PolyForm NC 1.0.0</button>
+        <button type="button" on:click={() => openURL("https://github.com/hoijunkim/fleet")}>GitHub</button>
+        <button type="button" on:click={() => openURL("https://github.com/hoijunkim/fleet/blob/master/LICENSE")}>PolyForm NC 1.0.0</button>
       </span>
     </div>
     <p class="help-foot">Press <span class="cmd-kbd">Esc</span> or click outside to close.</p>

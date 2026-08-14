@@ -1,13 +1,13 @@
-PackageIdentifier: hoijun-kim.fleet
+PackageIdentifier: hoijunkim.fleet
 PackageVersion: 0.1.0
 PackageLocale: en-US
 Publisher: H.K
-PublisherUrl: https://github.com/hoijun-kim
-PublisherSupportUrl: https://github.com/hoijun-kim/fleet/issues
+PublisherUrl: https://github.com/hoijunkim
+PublisherSupportUrl: https://github.com/hoijunkim/fleet/issues
 PackageName: fleet
-PackageUrl: https://github.com/hoijun-kim/fleet
+PackageUrl: https://github.com/hoijunkim/fleet
 License: PolyForm Noncommercial 1.0.0
-LicenseUrl: https://github.com/hoijun-kim/fleet/blob/master/LICENSE
+LicenseUrl: https://github.com/hoijunkim/fleet/blob/master/LICENSE
 ShortDescription: See and manage every git repo under your project roots on one board.
 Description: >-
   fleet shows which repositories are dirty, behind or stale at a glance, then
