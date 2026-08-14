@@ -10,22 +10,24 @@ before its tag is pushed.
 
 ## [Unreleased]
 
-### Added
+_Nothing yet._
 
-- **Rewrite history (interactive rebase)** - reorder, drop, or fixup recent
-  local commits from the detail panel without opening an editor: fleet drives
-  `git rebase -i` as its own sequence editor. A conflict during replay is kept
-  and handed to the existing conflict panel.
+## [0.1.1] - 2026-08-14
+
+The author's GitHub account was renamed from `hoijun-kim` to `hoijunkim`. The
+app is unchanged; everything that named the old account moved.
 
 ### Changed
 
-- **`fleetd` is env-tunable** - the HTTP timeouts (`FLEET_READ_HEADER_TIMEOUT`,
-  `FLEET_READ_TIMEOUT`, `FLEET_WRITE_TIMEOUT`, `FLEET_IDLE_TIMEOUT`), the
-  graceful-shutdown budget (`FLEET_SHUTDOWN_TIMEOUT`), the refresh-token GC
-  cadence (`FLEET_GC_INTERVAL`), and the Postgres pool (`FLEET_DB_MAX_CONNS`,
-  `FLEET_DB_MIN_CONNS`, `FLEET_DB_MAX_CONN_LIFETIME`, `FLEET_DB_MAX_CONN_IDLE_TIME`)
-  can now be set via environment variables. Unset reproduces the previous
-  compiled-in defaults; an invalid value is ignored with a warning.
+- The help overlay, the README and the landing page link to
+  `github.com/hoijunkim/fleet` and `hoijunkim.github.io/fleet`.
+- The winget package is `hoijunkim.fleet`.
+
+### Note
+
+Download URLs under `github.com/hoijun-kim/fleet` survive only while GitHub
+redirects the old account name, which stops if someone else claims it. Prefer
+the new ones.
 
 ## [0.1.0] - 2026-07-27
 
@@ -85,9 +87,20 @@ and Linux.
   first across all repos.
 - **Search modes** - content search now treats the query as literal text by
   default, with opt-in regex (.*) and whole-word (\b) toggles.
+- **Rewrite history (interactive rebase)** - reorder, drop, or fixup recent
+  local commits from the detail panel without opening an editor: fleet drives
+  `git rebase -i` as its own sequence editor. A conflict during replay is kept
+  and handed to the existing conflict panel.
 
 ### Changed
 
+- **`fleetd` is env-tunable** - the HTTP timeouts (`FLEET_READ_HEADER_TIMEOUT`,
+  `FLEET_READ_TIMEOUT`, `FLEET_WRITE_TIMEOUT`, `FLEET_IDLE_TIMEOUT`), the
+  graceful-shutdown budget (`FLEET_SHUTDOWN_TIMEOUT`), the refresh-token GC
+  cadence (`FLEET_GC_INTERVAL`), and the Postgres pool (`FLEET_DB_MAX_CONNS`,
+  `FLEET_DB_MIN_CONNS`, `FLEET_DB_MAX_CONN_LIFETIME`, `FLEET_DB_MAX_CONN_IDLE_TIME`)
+  can be set via environment variables. Unset reproduces the previous
+  compiled-in defaults; an invalid value is ignored with a warning.
 - fleet is now source-available under the PolyForm Noncommercial License 1.0.0
   (previously unlicensed): free for noncommercial use, commercial use not
   permitted. See `LICENSE`.
