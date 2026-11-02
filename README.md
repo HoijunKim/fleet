@@ -25,6 +25,8 @@ window. No terminal required.
      then uncomment: -->
 <!-- ![fleet in action](docs/demo.gif) -->
 
+![fleet](docs/screenshot.png)
+
 ## Why fleet
 
 Most git GUIs open one repository at a time. fleet is built for the whole
